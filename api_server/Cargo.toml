@@ -9,6 +9,10 @@ bytes = "1.7.1"
 http-body-util = "0.1.2"
 hyper = { version = "1.4.1", features = ["full"] }
 hyper-util = { version = "0.1.7", features = ["full"] }
+prost = "0.13.1"
 sha-1 = "0.10.1"
 tokio = { version = "1.39.2", features = ["full"] }
 web-socket = "0.7.0"
+
+[build-dependencies]
+prost-build = "0.13.1"
