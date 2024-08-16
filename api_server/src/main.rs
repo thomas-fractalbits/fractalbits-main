@@ -11,6 +11,8 @@ use hyper::{body::Body, Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 
+use api_server::rpc_to_nss;
+
 /// This is our service handler. It receives a Request, routes on its
 /// path, and returns a Future of a Response.
 async fn echo(
@@ -25,8 +27,11 @@ async fn echo(
         // Simply echo the body back to the client.
         (&Method::POST, "/echo") => Ok(Response::new(req.into_body().boxed())),
 
-        // Convert to uppercase before sending back to client using a stream.
-        (&Method::POST, "/echo/uppercase") => {
+        (&Method::POST, "/rpc") => {
+            Ok(Response::new(req.into_body().boxed()))
+        },
+
+        (&Method::POST, "/echo/rpc") => {
             let frame_stream = req.into_body().map_frame(|frame| {
                 let frame = if let Ok(data) = frame.into_data() {
                     data.iter()
@@ -38,6 +43,9 @@ async fn echo(
 
                 Frame::data(frame)
             });
+
+            // send msg to nss
+            rpc_to_nss("request from api_server").await.unwrap();
 
             Ok(Response::new(frame_stream.boxed()))
         }
