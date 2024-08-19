@@ -1,6 +1,5 @@
 mod utils;
 mod ws_client;
-
 use nss_ops::*;
 use prost::Message;
 use ws_client::RpcClient;
@@ -18,19 +17,16 @@ pub mod nss_ops {
 
 pub async fn nss_put_inode(key: String, value: String) -> PutInodeResponse {
     let mut request = PutInodeRequest::default();
+    request.method = Method::PutInode.into();
+    request.id = 100; // FIXME: set from RpcClient inside
     request.key = key;
     request.value = value;
     let mut request_bytes = Vec::<u8>::new();
     request.encode(&mut request_bytes).unwrap();
 
     let mut rpc_client = RpcClient::new("127.0.0.1", 9224).await.unwrap();
-    let response_str = rpc_client.send_request(&request_bytes).await.unwrap();
-    assert_eq!(request.key, response_str);
-
-    PutInodeResponse {
-        id: 1,
-        result: Some(put_inode_response::Result::Ok(())),
-    }
+    let resp_bytes = rpc_client.send_request(&request_bytes).await.unwrap();
+    Message::decode(resp_bytes.as_bytes()).unwrap()
 }
 
 pub async fn nss_get_inode(key: String) -> GetInodeResponse {
@@ -42,15 +38,6 @@ pub async fn nss_get_inode(key: String) -> GetInodeResponse {
     request.encode(&mut request_bytes).unwrap();
 
     let mut rpc_client = RpcClient::new("127.0.0.1", 9224).await.unwrap();
-    let resp_types = rpc_client.send_request(&request_bytes).await.unwrap();
-    let resp: GetInodeResponse = Message::decode(resp_types.as_bytes()).unwrap();
-    dbg!(&resp);
-    assert_eq!(resp.id, 1);
-    assert_eq!(
-        resp.result,
-        Some(get_inode_response::Result::Ok(
-            "fractalbits.com".to_string()
-        ))
-    );
-    resp
+    let resp_bytes = rpc_client.send_request(&request_bytes).await.unwrap();
+    Message::decode(resp_bytes.as_bytes()).unwrap()
 }

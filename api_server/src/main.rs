@@ -1,13 +1,13 @@
 #![deny(warnings)]
 
-use api_server::nss_get_inode;
+use api_server::{nss_get_inode, nss_ops, nss_put_inode};
 use bytes::Bytes;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
-use hyper::body::Frame;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{body::Body, Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use prost::Message;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 
@@ -17,43 +17,7 @@ async fn echo(
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<BoxBody<Bytes, hyper::Error>>, hyper::Error> {
     match (req.method(), req.uri().path()) {
-        // Serve some instructions at /
-        (&Method::GET, "/") => Ok(Response::new(full(
-            "Try POSTing data to /echo such as: `curl localhost:3000/echo -XPOST -d \"hello world\"`",
-        ))),
-
-        // Simply echo the body back to the client.
-        (&Method::POST, "/echo") => Ok(Response::new(req.into_body().boxed())),
-
-        (&Method::POST, "/rpc") => {
-            Ok(Response::new(req.into_body().boxed()))
-        },
-
-        (&Method::POST, "/echo/rpc") => {
-            let frame_stream = req.into_body().map_frame(|frame| {
-                let frame = if let Ok(data) = frame.into_data() {
-                    data.iter()
-                        .map(|byte| byte.to_ascii_uppercase())
-                        .collect::<Bytes>()
-                } else {
-                    Bytes::new()
-                };
-
-                Frame::data(frame)
-            });
-
-            let _ = nss_get_inode("fractalbits.com".into()).await;
-
-            Ok(Response::new(frame_stream.boxed()))
-        }
-
-        // Reverse the entire body before sending back to the client.
-        //
-        // Since we don't know the end yet, we can't simply stream
-        // the chunks as they arrive as we did with the above uppercase endpoint.
-        // So here we do `.await` on the future, waiting on concatenating the full body,
-        // then afterwards the content can be reversed. Only then can we return a `Response`.
-        (&Method::POST, "/echo/reversed") => {
+        (&Method::POST, "/put_obj") => {
             // To protect our server, reject requests with bodies larger than
             // 64kbs of data.
             let max = req.body().size_hint().upper().unwrap_or(u64::MAX);
@@ -63,10 +27,36 @@ async fn echo(
                 return Ok(resp);
             }
 
-            let whole_body = req.collect().await?.to_bytes();
+            let key = req.collect().await?.to_bytes();
+            let value = key.iter().rev().cloned().collect::<Vec<u8>>();
+            nss_put_inode(
+                std::str::from_utf8(&key).unwrap().to_string(),
+                std::str::from_utf8(&value).unwrap().to_string(),
+            )
+            .await;
+            Ok(Response::new(empty()))
+        }
 
-            let reversed_body = whole_body.iter().rev().cloned().collect::<Vec<u8>>();
-            Ok(Response::new(full(reversed_body)))
+        (&Method::POST, "/get_obj") => {
+            // To protect our server, reject requests with bodies larger than
+            // 64kbs of data.
+            let max = req.body().size_hint().upper().unwrap_or(u64::MAX);
+            if max > 1024 * 64 {
+                let mut resp = Response::new(full("Body too big"));
+                *resp.status_mut() = hyper::StatusCode::PAYLOAD_TOO_LARGE;
+                return Ok(resp);
+            }
+
+            let key = req.collect().await?.to_bytes();
+            let resp = nss_get_inode(std::str::from_utf8(&key).unwrap().to_string())
+                .await
+                .result;
+            if let Some(nss_ops::get_inode_response::Result::Ok(value)) = resp {
+                let value_body = value.encode_to_vec();
+                Ok(Response::new(full(value_body)))
+            } else {
+                todo!()
+            }
         }
 
         // Return the 404 Not Found for other routes.
