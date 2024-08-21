@@ -1,3 +1,4 @@
+use bytes::BytesMut;
 use nss_ops::*;
 use prost::Message;
 mod utils;
@@ -22,14 +23,13 @@ pub async fn nss_put_inode(rpc_client: &RpcClient, key: String, value: String) -
         key,
         value,
     };
-    let mut request_bytes = Vec::<u8>::new();
+    let mut request_bytes = BytesMut::with_capacity(request.encoded_len());
     request.encode(&mut request_bytes).unwrap();
 
     let resp_bytes = rpc_client
-        .send_request(request.id, &request_bytes)
-        .await
-        .unwrap();
-    Message::decode(resp_bytes.as_bytes()).unwrap()
+        .send_request(request.id, request_bytes.as_ref())
+        .await;
+    Message::decode(resp_bytes).unwrap()
 }
 
 pub async fn nss_get_inode(rpc_client: &RpcClient, key: String) -> GetInodeResponse {
@@ -38,12 +38,9 @@ pub async fn nss_get_inode(rpc_client: &RpcClient, key: String) -> GetInodeRespo
         id: rpc_client.gen_request_id(),
         key,
     };
-    let mut request_bytes = Vec::<u8>::new();
+    let mut request_bytes = BytesMut::with_capacity(request.encoded_len());
     request.encode(&mut request_bytes).unwrap();
 
-    let resp_bytes = rpc_client
-        .send_request(request.id, &request_bytes)
-        .await
-        .unwrap();
-    Message::decode(resp_bytes.as_bytes()).unwrap()
+    let resp_bytes = rpc_client.send_request(request.id, &request_bytes).await;
+    Message::decode(resp_bytes).unwrap()
 }

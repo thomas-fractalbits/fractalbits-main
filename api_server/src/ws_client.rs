@@ -1,5 +1,5 @@
 use crate::utils;
-use bytes::Buf;
+use bytes::{Buf, BytesMut};
 use std::collections::HashMap;
 use std::io::Result;
 use std::sync::atomic::AtomicU64;
@@ -13,7 +13,7 @@ use tokio::{
 use web_socket::*;
 
 pub struct RpcClient {
-    requests: Arc<RwLock<HashMap<u64, oneshot::Sender<Box<[u8]>>>>>,
+    requests: Arc<RwLock<HashMap<u64, oneshot::Sender<BytesMut>>>>,
     ws: Arc<RwLock<WebSocket<BufReader<TcpStream>>>>,
     next_id: AtomicU64,
 }
@@ -34,11 +34,11 @@ impl RpcClient {
                     match tokio::time::timeout(Duration::from_millis(10), ws.recv()).await {
                         Ok(Ok(Event::Data { ty, data })) => {
                             assert!(matches!(ty, DataType::Complete(MessageType::Text)));
-                            let mut buf = bytes::BytesMut::from_iter(data.iter());
+                            let mut buf = BytesMut::from_iter(data.iter());
                             let request_id = RpcClient::extract_request_id(&mut buf);
-                            let tx: oneshot::Sender<Box<[u8]>> =
+                            let tx: oneshot::Sender<BytesMut> =
                                 requests_clone.write().await.remove(&request_id).unwrap();
-                            _ = tx.send(data);
+                            _ = tx.send(buf);
                         }
                         _ => {
                             // ignore for now
@@ -55,16 +55,15 @@ impl RpcClient {
         })
     }
 
-    pub async fn send_request(&self, id: u64, msg: &[u8]) -> Result<String> {
+    pub async fn send_request(&self, id: u64, msg: &[u8]) -> impl Buf {
         let rx = {
-            self.ws.write().await.send(msg).await?;
+            self.ws.write().await.send(msg).await.unwrap();
             let (tx, rx) = oneshot::channel();
             self.requests.write().await.insert(id, tx);
             rx
         };
 
-        let response = rx.await.unwrap();
-        Ok(std::str::from_utf8(&*response).unwrap().to_string())
+        rx.await.unwrap()
     }
 
     pub fn gen_request_id(&self) -> u64 {
