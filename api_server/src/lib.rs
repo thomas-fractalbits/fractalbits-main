@@ -1,7 +1,6 @@
 use bytes::BytesMut;
 use nss_ops::*;
 use prost::Message;
-mod utils;
 mod ws_client;
 pub use ws_client::RpcClient;
 

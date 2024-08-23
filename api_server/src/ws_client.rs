@@ -1,62 +1,74 @@
-use crate::utils;
 use bytes::{Buf, BytesMut};
+use soketto::{
+    connection::Sender,
+    handshake::{Client, ServerResponse},
+};
 use std::collections::HashMap;
 use std::io::Result;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::io::BufReader;
 use tokio::{
     net::TcpStream,
     sync::{oneshot, RwLock},
 };
-use web_socket::*;
+use tokio_util::compat::{Compat, TokioAsyncReadCompatExt};
 
 pub struct RpcClient {
     requests: Arc<RwLock<HashMap<u64, oneshot::Sender<BytesMut>>>>,
-    ws: Arc<RwLock<WebSocket<BufReader<TcpStream>>>>,
+    sender: Arc<RwLock<Sender<Compat<TcpStream>>>>,
     next_id: AtomicU64,
 }
 
 impl RpcClient {
-    pub async fn new(url: &str, port: u32) -> Result<Self> {
-        let ws = Arc::new(RwLock::new(
-            utils::connect(&format!("{url}:{port}"), "/").await?,
-        ));
-        let requests = Arc::new(RwLock::new(HashMap::new()));
+    pub async fn new(url: &str) -> Result<Self> {
+        let socket = TcpStream::connect(url).await?;
+        let mut client = Client::new(socket.compat(), url, "/");
+        let (sender, mut receiver) = match client.handshake().await {
+            Ok(ServerResponse::Accepted { .. }) => client.into_builder().finish(),
+            Ok(ServerResponse::Redirect { .. }) => {
+                todo!()
+                // return Err(WebSocketTestError::Redirect);
+            }
+            #[allow(unused_variables)]
+            Ok(ServerResponse::Rejected { status_code }) => {
+                todo!()
+                // return Err(WebSocketTestError::RejectedWithStatusCode(status_code))
+            }
+            Err(_err) => {
+                todo!()
+                // return Err(WebSocketTestError::Soketto(err));
+            }
+        };
 
+        let requests = Arc::new(RwLock::new(HashMap::new()));
         {
-            let ws_clone = ws.clone();
             let requests_clone = requests.clone();
             tokio::spawn(async move {
                 loop {
-                    let mut ws = ws_clone.write().await;
-                    match tokio::time::timeout(Duration::from_millis(10), ws.recv()).await {
-                        Ok(Ok(Event::Data { ty, data })) => {
-                            assert!(matches!(ty, DataType::Complete(MessageType::Text)));
-                            let mut buf = BytesMut::from_iter(data.iter());
-                            let request_id = RpcClient::extract_request_id(&mut buf);
-                            let tx: oneshot::Sender<BytesMut> =
-                                requests_clone.write().await.remove(&request_id).unwrap();
-                            _ = tx.send(buf);
-                        }
-                        _ => {
-                            // ignore for now
-                        }
-                    }
+                    let mut message = Vec::new();
+                    receiver.receive_data(&mut message).await.unwrap();
+                    let mut buf = BytesMut::from_iter(message.iter());
+                    let request_id = RpcClient::extract_request_id(&mut buf);
+                    let tx: oneshot::Sender<BytesMut> =
+                        requests_clone.write().await.remove(&request_id).unwrap();
+                    _ = tx.send(buf);
                 }
             });
         }
 
         Ok(Self {
             requests,
-            ws,
+            sender: Arc::new(RwLock::new(sender)),
             next_id: AtomicU64::new(1),
         })
     }
 
     pub async fn send_request(&self, id: u64, msg: &[u8]) -> impl Buf {
-        self.ws.write().await.send(msg).await.unwrap();
+        {
+            let mut sender = self.sender.write().await;
+            sender.send_binary(msg).await.unwrap();
+            sender.flush().await.unwrap();
+        }
         let (tx, rx) = oneshot::channel();
         self.requests.write().await.insert(id, tx);
         rx.await.unwrap()

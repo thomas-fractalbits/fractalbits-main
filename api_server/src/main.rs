@@ -39,7 +39,7 @@ async fn put_obj(
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let rpc_client = RpcClient::new("127.0.0.1", 9224).await.unwrap();
+    let rpc_client = RpcClient::new("127.0.0.1:9224").await.unwrap();
     let shared_state = Arc::new(AppState { rpc_client });
 
     let app = Router::new()
