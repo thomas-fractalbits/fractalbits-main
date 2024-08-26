@@ -17,7 +17,7 @@ async fn get_obj(
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<String, (StatusCode, String)> {
-    let resp = api_server::nss_get_inode(&state.rpc_client, key)
+    let resp = api_server::nss_get_inode(&state.rpc_client, format!("/{key}"))
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
@@ -34,7 +34,7 @@ async fn put_obj(
     Path(key): Path<String>,
     value: String,
 ) -> Result<String, (StatusCode, String)> {
-    let resp = api_server::nss_put_inode(&state.rpc_client, key, value)
+    let resp = api_server::nss_put_inode(&state.rpc_client, format!("/{key}"), value)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
@@ -67,7 +67,7 @@ async fn main() {
     let shared_state = Arc::new(AppState { rpc_client });
 
     let app = Router::new()
-        .route("/:key", get(get_obj).post(put_obj))
+        .route("/*key", get(get_obj).post(put_obj))
         .layer(
             TraceLayer::new_for_http()
                 // Create our own span for the request and include the matched path. The matched
