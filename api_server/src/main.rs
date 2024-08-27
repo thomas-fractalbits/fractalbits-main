@@ -1,3 +1,6 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
+
 use api_server::RpcClient;
 use axum::{
     extract::{MatchedPath, Path, Request, State},
@@ -5,19 +8,27 @@ use axum::{
     routing::get,
     Router,
 };
-use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+const MAX_NSS_CONNECTION: usize = 19;
+
 struct AppState {
-    rpc_client: RpcClient,
+    rpc_clients: Vec<RpcClient>,
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> usize {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish() as usize
 }
 
 async fn get_obj(
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<String, (StatusCode, String)> {
-    let resp = api_server::nss_get_inode(&state.rpc_client, format!("/{key}"))
+    let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
+    let resp = api_server::nss_get_inode(&state.rpc_clients[hash], format!("/{key}"))
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
@@ -34,7 +45,8 @@ async fn put_obj(
     Path(key): Path<String>,
     value: String,
 ) -> Result<String, (StatusCode, String)> {
-    let resp = api_server::nss_put_inode(&state.rpc_client, format!("/{key}"), value)
+    let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
+    let resp = api_server::nss_put_inode(&state.rpc_clients[hash], format!("/{key}"), value)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
@@ -57,14 +69,18 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let rpc_client = match RpcClient::new("127.0.0.1:9224").await {
-        Ok(rpc_client) => rpc_client,
-        Err(e) => {
-            tracing::error!("failed to start rpc client: {e}");
-            return;
-        }
-    };
-    let shared_state = Arc::new(AppState { rpc_client });
+    let mut rpc_clients = Vec::with_capacity(MAX_NSS_CONNECTION);
+    for _i in 0..MAX_NSS_CONNECTION {
+        let rpc_client = match RpcClient::new("127.0.0.1:9224").await {
+            Ok(rpc_client) => rpc_client,
+            Err(e) => {
+                tracing::error!("failed to start rpc client: {e}");
+                return;
+            }
+        };
+        rpc_clients.push(rpc_client);
+    }
+    let shared_state = Arc::new(AppState { rpc_clients });
 
     let app = Router::new()
         .route("/*key", get(get_obj).post(put_obj))

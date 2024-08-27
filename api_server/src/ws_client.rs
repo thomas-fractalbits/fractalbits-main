@@ -102,15 +102,9 @@ impl RpcClient {
             tracing::info!("response received from task: request_id={request_id}");
             let tx: oneshot::Sender<Vec<u8>> = match requests.write().await.remove(&request_id) {
                 Some(tx) => tx,
-                None => {
-                    return Err(WebSocketError::InternalResponseError(format!(
-                        "unknown request_id: {request_id}"
-                    )))
-                }
+                None => continue, // we may have received the response already
             };
-            tx.send(message).map_err(|_| {
-                WebSocketError::InternalResponseError("receiver dropped".to_string())
-            })?;
+            let _ = tx.send(message); // request might be dropped
         }
     }
 
