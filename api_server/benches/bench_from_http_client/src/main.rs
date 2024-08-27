@@ -1,4 +1,4 @@
-use fake::Fake;
+use fake::{Fake, StringFaker};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -11,9 +11,13 @@ async fn main() {
 
     // Put key&value pairs
     let before = Instant::now();
+    // from https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+    const ASCII: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!-_.*'()";
+    let f = StringFaker::with(Vec::from(ASCII), 4..30);
     for i in 0..total {
-        let key = (4..30).fake::<String>();
-        let value = (4..30).fake::<String>();
+        let key: String = f.fake();
+        let value: String = f.fake();
+        // println!("inserting key={key}, value={value}");
         let _res = client
             .post(format!("{url}/{key}"))
             .body(format!("{value}"))
@@ -25,7 +29,12 @@ async fn main() {
             println!("inserted {i} kv pairs");
         }
     }
-    println!("Elapsed time: {:.2?}", before.elapsed());
+    let elapsed = before.elapsed();
+    println!(
+        "Elapsed time: {:.2?}, tps: {:.4?}",
+        elapsed,
+        (total as f64) / elapsed.as_secs_f64()
+    );
 
     let before = Instant::now();
     // Get values back
@@ -37,5 +46,10 @@ async fn main() {
         }
         i += 1;
     }
-    println!("Elapsed time: {:.2?}", before.elapsed());
+    let elapsed = before.elapsed();
+    println!(
+        "Elapsed time: {:.2?}, tps: {:.4?}",
+        elapsed,
+        (total as f64) / elapsed.as_secs_f64()
+    );
 }
