@@ -11,10 +11,9 @@ pub mod nss_ops {
 
 pub async fn nss_put_inode(
     rpc_client: &RpcClient,
-    mut key: String,
+    key: String,
     value: String,
 ) -> Result<PutInodeResponse, WebSocketError> {
-    key.push('\0');
     let request = PutInodeRequest {
         method: Method::PutInode.into(),
         id: rpc_client.gen_request_id(),
@@ -37,9 +36,8 @@ pub async fn nss_put_inode(
 
 pub async fn nss_get_inode(
     rpc_client: &RpcClient,
-    mut key: String,
+    key: String,
 ) -> Result<GetInodeResponse, WebSocketError> {
-    key.push('\0');
     let request = GetInodeRequest {
         method: Method::GetInode.into(),
         id: rpc_client.gen_request_id(),
