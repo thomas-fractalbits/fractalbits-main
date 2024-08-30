@@ -28,7 +28,9 @@ async fn get_obj(
     Path(key): Path<String>,
 ) -> Result<String, (StatusCode, String)> {
     let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
-    let resp = api_server::nss_get_inode(&state.rpc_clients[hash], format!("/{key}\0"))
+    let mut key = format!("/{key}");
+    key.push('\0');
+    let resp = api_server::nss_get_inode(&state.rpc_clients[hash], key)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
@@ -46,7 +48,9 @@ async fn put_obj(
     value: String,
 ) -> Result<String, (StatusCode, String)> {
     let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
-    let resp = api_server::nss_put_inode(&state.rpc_clients[hash], format!("/{key}\0"), value)
+    let mut key = format!("/{key}");
+    key.push('\0');
+    let resp = api_server::nss_put_inode(&state.rpc_clients[hash], key, value)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     match serde_json::to_string_pretty(&resp.result) {
