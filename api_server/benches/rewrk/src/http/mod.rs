@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::convert::TryFrom;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::anyhow;
 use futures_util::stream::FuturesUnordered;
@@ -19,6 +20,8 @@ use tokio::time::{sleep, timeout_at, Instant};
 use tower::util::ServiceExt;
 use tower::Service;
 use fake::{Fake, StringFaker};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use http::uri::Uri;
 
 use self::usage::Usage;
@@ -66,8 +69,15 @@ pub async fn start_tasks(
 
     let handles = FuturesUnordered::new();
 
-    for _ in 0..connections {
-        let handle = tokio::spawn(benchmark(deadline, bench_type, user_input.clone()));
+    // Generate fake keys
+    let seed_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    println!("Generating keys for {} connections, with seeds: [{}, {}]", connections, seed_ts, seed_ts + connections as u64 - 1);
+
+    for i in 0..connections {
+        let handle = tokio::spawn(benchmark(deadline, bench_type, user_input.clone(), seed_ts + i as u64));
 
         handles.push(handle);
     }
@@ -80,6 +90,7 @@ async fn benchmark(
     deadline: Instant,
     bench_type: BenchType,
     user_input: UserInput,
+    seed: u64,
 ) -> anyhow::Result<WorkerResult> {
     let benchmark_start = Instant::now();
     let connector = RewrkConnector::new(
@@ -108,15 +119,16 @@ async fn benchmark(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    // from https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
+    let ref mut rng = StdRng::seed_from_u64(seed);
+    // From https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
     const ASCII: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!-_.*'()";
-    let f = StringFaker::with(Vec::from(ASCII), 4..30);
+    let faker = StringFaker::with(Vec::from(ASCII), 4..30);
 
     // Benchmark loop.
     // Futures must not be awaited without timeout.
     loop {
         // Create request from **parsed** data.
-        let key = f.fake::<String>();
+        let key: String = faker.fake_with_rng(rng);
         let mut request = Request::new(Body::from(key.clone()));
         *request.method_mut() = user_input.method.clone();
 
