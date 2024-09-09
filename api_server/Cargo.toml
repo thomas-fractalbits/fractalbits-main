@@ -24,6 +24,7 @@ bytes = "1.7.1"
 thiserror = "1.0.63"
 tracing = "0.1.40"
 tower-http = { version = "0.5.2", features = ["trace"] }
+bytemuck = { version = "1.18.0", features = ["derive"] }
 
 [build-dependencies]
 prost-build = "0.13"
