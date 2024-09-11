@@ -80,14 +80,24 @@ impl RpcClient {
         requests: Arc<RwLock<HashMap<u32, oneshot::Sender<Bytes>>>>,
     ) -> Result<(), RpcError> {
         loop {
-            let mut buffer = [0; 1024];
-            let n = receiver.read(&mut buffer).await.unwrap();
-            if n == 0 {
-                // socket is closed
-                break Ok(());
+            let mut buffer = vec![0; 1024 * 10];
+            let received = match receiver.read(&mut buffer).await {
+                Ok(n) => {
+                    if n == 0 {
+                        tracing::warn!("socket is closed");
+                        break Ok(());
+                    }
+                    n
+                }
+                Err(e) => {
+                    tracing::warn!("receiving error from server: {e}");
+                    break Ok(());
+                }
+            };
+            if received <= MessageHeader::encode_len() {
+                tracing::warn!("received {received} bytes");
             }
-            assert!(n > MessageHeader::encode_len()); // TODO: stream framing
-            let mut bytes = Bytes::copy_from_slice(&buffer[0..n]);
+            let mut bytes = Bytes::copy_from_slice(&buffer[0..received]);
             let header = MessageHeader::decode(&mut bytes);
             let tx: oneshot::Sender<Bytes> = match requests.write().await.remove(&header.id) {
                 Some(tx) => tx,
