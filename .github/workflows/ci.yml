@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - name: Install Protoc
-      uses: arduino/setup-protoc@v3
+      uses: arduino/setup-protoc@v2
     - uses: actions/checkout@v4
     - uses: mlugg/setup-zig@v1
       with:
