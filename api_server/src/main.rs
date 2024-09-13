@@ -1,9 +1,10 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use api_server::rpc_client::RpcClient;
 use axum::{
-    extract::{MatchedPath, Path, Request, State},
+    extract::{ConnectInfo, MatchedPath, Path, Request, State},
     http::StatusCode,
     routing::get,
     Router,
@@ -24,10 +25,11 @@ fn calculate_hash<T: Hash>(t: &T) -> usize {
 }
 
 async fn get_obj(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<String, (StatusCode, String)> {
-    let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
+    let hash = calculate_hash(&addr) % MAX_NSS_CONNECTION;
     let mut key = format!("/{key}");
     key.push('\0');
     let resp = api_server::nss_get_inode(&state.rpc_clients[hash], key)
@@ -44,11 +46,12 @@ async fn get_obj(
 }
 
 async fn put_obj(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
     value: String,
 ) -> Result<String, (StatusCode, String)> {
-    let hash = calculate_hash(&key) % MAX_NSS_CONNECTION;
+    let hash = calculate_hash(&addr) % MAX_NSS_CONNECTION;
     let mut key = format!("/{key}");
     key.push('\0');
     let resp = api_server::nss_put_inode(&state.rpc_clients[hash], key, value)
@@ -64,7 +67,7 @@ async fn put_obj(
     }
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
     tracing_subscriber::registry()
         .with(
@@ -122,7 +125,12 @@ async fn main() {
     };
 
     tracing::info!("server started");
-    if let Err(e) = axum::serve(listener, app).await {
+    if let Err(e) = axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    {
         tracing::error!("serer stopped: {e}");
     }
 }
