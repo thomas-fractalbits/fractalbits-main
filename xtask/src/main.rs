@@ -119,6 +119,11 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
                 cd api_server;
                 cargo build --release;
             }?;
+            run_cmd! {
+                info "building benchmark tool `rewrk` ...";
+                cd ./api_server/benches/rewrk;
+                cargo build --release;
+            }?;
             run_cmd_service("restart")?;
             uri = "http://127.0.0.1:3000";
             bench_exe = "./target/release/rewrk";
