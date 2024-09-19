@@ -75,8 +75,7 @@ fn run_precheckin() -> CmdResult {
         info "Running art tests (fat) with log test_art_fat.log ...";
         ./zig-out/bin/test_art --tests fat --ops 1000000 &> test_art_fat.log;
         info "Cleaning up test logs ...";
-        rm -f test_art_random.log;
-        rm -f test_art_fat.log;
+        rm -f test_art_random.log test_art_fat.log;
         info "Precheckin is OK";
     }?;
     Ok(())
@@ -89,56 +88,28 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
 
     match server {
         "sample_web_server" => {
-            run_cmd! {
-                info "building sample_web_server ...";
-                cd play/io_uring/iofthetiger;
-                zig build --release=safe;
-            }?;
-            run_cmd! {
-                info "building benchmark tool `rewrk` ...";
-                cd ./api_server/benches/rewrk;
-                cargo build --release;
-            }?;
-            run_cmd! {
-                info "starting sample web server ...";
-                bash -c "nohup play/io_uring/iofthetiger/zig-out/bin/sample_web_server &> sample_web_server.log &";
-                info "sleep 5s for web server";
-                sleep 5;
-            }?;
+            build_sample_web_server()?;
+            build_rewrk()?;
+
+            start_sample_web_server()?;
             uri = "http://127.0.0.1:3000";
             bench_exe = "./target/release/rewrk";
             bench_opts = ["-t", "24", "-c", "500", "-m", "post"];
         }
         "api_server" => {
-            run_cmd! {
-                info "building nss server ...";
-                zig build --release=safe;
-            }?;
-            run_cmd! {
-                info "building api_server ...";
-                cd api_server;
-                cargo build --release;
-            }?;
-            run_cmd! {
-                info "building benchmark tool `rewrk` ...";
-                cd ./api_server/benches/rewrk;
-                cargo build --release;
-            }?;
+            build_nss_server()?;
+            build_api_server()?;
+            build_rewrk()?;
+
             run_cmd_service("restart")?;
             uri = "http://127.0.0.1:3000";
             bench_exe = "./target/release/rewrk";
             bench_opts = ["-t", "1", "-c", "8", "-m", "post"];
         }
         "nss_rpc" => {
-            run_cmd! {
-                info "building nss server ...";
-                zig build --release=safe;
-            }?;
-            run_cmd! {
-                info "building benchmark tool `rewrk_rpc` ...";
-                cd ./api_server/benches/rewrk_rpc;
-                cargo build --release;
-            }?;
+            build_nss_server()?;
+            build_rewrk_rpc()?;
+
             start_nss_service()?;
             uri = "127.0.0.1:9224";
             bench_exe = "./target/release/rewrk_rpc";
@@ -149,7 +120,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
 
     let perf_handle = if with_flame_graph {
         run_cmd! {
-            info "start perf in the background ...";
+            info "Start perf in the background ...";
             sudo bash -c "echo 0 > /proc/sys/kernel/kptr_restrict";
             sudo bash -c "echo -1 > /proc/sys/kernel/perf_event_paranoid";
         }?;
@@ -160,7 +131,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
     };
 
     run_cmd! {
-        info "starting benchmark ...";
+        info "Starting benchmark ...";
         $bench_exe $[bench_opts] -d 30s -h $uri --pct;
     }?;
 
@@ -168,11 +139,11 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
         handle.wait()?;
         let flamegraph_path = "/home/linuxbrew/.linuxbrew/Cellar/flamegraph/1.0_1/bin/";
         run_cmd! {
-            info "post-processing perf data ...";
+            info "Post-processing perf data ...";
             perf script > out.perf;
             ${flamegraph_path}/stackcollapse-perf.pl out.perf > out.folded;
             ${flamegraph_path}/flamegraph.pl out.folded > out_perf.svg;
-            info "flamegraph \"out_perf.svg\" is generated";
+            info "Flamegraph \"out_perf.svg\" is generated";
         }?;
     }
 
@@ -180,6 +151,45 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
     run_cmd_service("stop")?;
 
     Ok(())
+}
+
+fn build_sample_web_server() -> CmdResult {
+    run_cmd! {
+        info "Building sample_web_server ...";
+        cd play/io_uring/iofthetiger;
+        zig build --release=safe;
+    }
+}
+
+fn build_rewrk() -> CmdResult {
+    run_cmd! {
+        info "Building benchmark tool `rewrk` ...";
+        cd ./api_server/benches/rewrk;
+        cargo build --release;
+    }
+}
+
+fn build_rewrk_rpc() -> CmdResult {
+    run_cmd! {
+        info "Building benchmark tool `rewrk_rpc` ...";
+        cd ./api_server/benches/rewrk_rpc;
+        cargo build --release;
+    }
+}
+
+fn build_nss_server() -> CmdResult {
+    run_cmd! {
+        info "Building nss server ...";
+        zig build --release=safe;
+    }
+}
+
+fn build_api_server() -> CmdResult {
+    run_cmd! {
+        info "Building api_server ...";
+        cd api_server;
+        cargo build --release;
+    }
 }
 
 fn run_cmd_service(action: &str) -> CmdResult {
@@ -196,10 +206,19 @@ fn run_cmd_service(action: &str) -> CmdResult {
 
 fn stop_service() -> CmdResult {
     run_cmd! {
-        info "killing previous servers (if any) ...";
-        ignore killall nss_server;
-        ignore killall api_server;
-        ignore killall sample_web_server;
+        info "Killing previous servers (if any) ...";
+        ignore killall nss_server &>/dev/null;
+        ignore killall api_server &>/dev/null;
+        ignore killall sample_web_server &>/dev/null;
+    }
+}
+
+fn start_sample_web_server() -> CmdResult {
+    run_cmd! {
+        info "Starting sample web server ...";
+        bash -c "nohup play/io_uring/iofthetiger/zig-out/bin/sample_web_server &> sample_web_server.log &";
+        info "Sleep 5s for web server";
+        sleep 5;
     }
 }
 
@@ -208,9 +227,9 @@ fn start_service() -> CmdResult {
 
     let api_server_wait_secs = 5;
     run_cmd! {
-        info "starting api server ...";
+        info "Starting api server ...";
         bash -c "nohup ./target/release/api_server &> api_server.log &";
-        info "waiting ${api_server_wait_secs}s for server up";
+        info "Waiting ${api_server_wait_secs}s for server up";
         sleep $api_server_wait_secs;
     }?;
     let api_server_pid = match run_fun!(pidof api_server) {
@@ -231,9 +250,9 @@ fn start_service() -> CmdResult {
 fn start_nss_service() -> CmdResult {
     let nss_wait_secs = 10;
     run_cmd! {
-        info "starting nss server ...";
+        info "Starting nss server ...";
         bash -c "nohup ./zig-out/bin/nss_server &> nss_server.log &";
-        info "waiting ${nss_wait_secs}s for server up";
+        info "Waiting ${nss_wait_secs}s for server up";
         sleep $nss_wait_secs;
     }?;
     let nss_server_pid = run_fun!(pidof nss_server)?;
