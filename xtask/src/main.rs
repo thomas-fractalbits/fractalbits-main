@@ -68,16 +68,39 @@ fn run_precheckin() -> CmdResult {
     run_cmd! {
         info "Building ...";
         zig build;
+    }?;
+
+    run_cmd! {
         info "Running zig unit tests ...";
         zig build test --summary all;
-        info "Running art tests (random) with log test_art_random.log ...";
-        ./zig-out/bin/test_art --tests random --size 1000000 --ops 1000000 -d 20 &> test_art_random.log;
-        info "Running art tests (fat) with log test_art_fat.log ...";
-        ./zig-out/bin/test_art --tests fat --ops 1000000 &> test_art_fat.log;
+    }?;
+
+    let rand_log = "test_art_random_log";
+    run_cmd! {
+        info "Running art tests (random) with log $rand_log ...";
+        ./zig-out/bin/test_art --tests random --size 1000000 --ops 1000000 -d 20 &> $rand_log;
+    }
+    .map_err(|e| {
+        run_cmd!(tail $rand_log).unwrap();
+        e
+    })?;
+
+    let fat_log = "test_art_fat.log";
+    run_cmd! {
+        info "Running art tests (fat) with log $fat_log ...";
+        ./zig-out/bin/test_art --tests fat --ops 1000000 &> $fat_log;
+    }
+    .map_err(|e| {
+        run_cmd!(tail $fat_log).unwrap();
+        e
+    })?;
+
+    run_cmd! {
         info "Cleaning up test logs ...";
-        rm -f test_art_random.log test_art_fat.log;
+        rm -f $rand_log $fat_log;
         info "Precheckin is OK";
     }?;
+
     Ok(())
 }
 
