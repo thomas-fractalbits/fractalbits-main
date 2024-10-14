@@ -148,6 +148,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
         _ => unreachable!(),
     }
 
+    let duration_secs = 10;
     let perf_handle = if with_flame_graph {
         run_cmd! {
             info "Start perf in the background ...";
@@ -155,14 +156,14 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
             sudo bash -c "echo -1 > /proc/sys/kernel/perf_event_paranoid";
         }?;
         // Some(spawn!(perf record -F 99 --call-graph dwarf -p $api_server_pid -g -- sleep 30)?)
-        Some(spawn!(perf record -F 99 --call-graph dwarf -a -g -- sleep 30)?)
+        Some(spawn!(perf record -F 99 --call-graph dwarf -a -g -- sleep $duration_secs)?)
     } else {
         None
     };
 
     run_cmd! {
         info "Starting benchmark ...";
-        $bench_exe $[bench_opts] -d 30s -h $uri --pct;
+        $bench_exe $[bench_opts] -d ${duration_secs}s -h $uri --pct;
     }?;
 
     if let Some(mut handle) = perf_handle {
@@ -235,12 +236,23 @@ fn run_cmd_service(action: &str) -> CmdResult {
 }
 
 fn stop_services() -> CmdResult {
-    run_cmd! {
-        info "Killing previous servers (if any) ...";
-        ignore killall nss_server &>/dev/null;
-        ignore killall api_server &>/dev/null;
-        ignore killall sample_web_server &>/dev/null;
+    info!("Killing previous servers (if any) ...");
+    for service in ["nss_server", "api_server", "sample_web_server"] {
+        run_cmd!(ignore killall $service &>/dev/null)?;
+        match run_fun!(pidof $service) {
+            Ok(pid) => run_cmd! {
+                info "kill -9 for $service (pid=$pid) since using killall failed";
+                kill -9 $pid;
+                sleep 3;
+            }?,
+            _ => {}
+        }
+        // make sure the process is really being killed
+        if let Ok(pid) = run_fun!(pidof $service) {
+            cmd_die!("failed to stop $service: service is still running (pid=$pid)");
+        }
     }
+    Ok(())
 }
 
 fn start_sample_web_server() -> CmdResult {
