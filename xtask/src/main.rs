@@ -236,15 +236,19 @@ fn run_cmd_service(action: &str) -> CmdResult {
 }
 
 fn stop_services() -> CmdResult {
-    info!("Killing previous servers (if any) ...");
+    info!("Killing previous services (if any) ...");
     for service in ["nss_server", "api_server", "sample_web_server"] {
         run_cmd!(ignore killall $service &>/dev/null)?;
         match run_fun!(pidof $service) {
-            Ok(pid) => run_cmd! {
-                info "kill -9 for $service (pid=$pid) since using killall failed";
-                kill -9 $pid;
-                sleep 3;
-            }?,
+            Ok(pids) => {
+                for pid in pids.split_whitespace() {
+                    run_cmd! {
+                        info "kill -9 for $service (pid=$pid) since using killall failed";
+                        kill -9 $pid;
+                        sleep 3;
+                    }?;
+                }
+            }
             _ => {}
         }
         // make sure the process is really being killed
@@ -281,7 +285,7 @@ fn start_nss_service() -> CmdResult {
         sleep $nss_wait_secs;
     }?;
     let nss_server_pid = run_fun!(pidof nss_server)?;
-    info!("nss server(pid={nss_server_pid}) started");
+    info!("nss server (pid={nss_server_pid}) started");
     Ok(())
 }
 
@@ -305,6 +309,6 @@ fn start_api_service() -> CmdResult {
             return Err(e);
         }
     };
-    info!("api server(pid={api_server_pid}) started");
+    info!("api server (pid={api_server_pid}) started");
     Ok(())
 }
