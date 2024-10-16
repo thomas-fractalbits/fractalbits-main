@@ -38,8 +38,7 @@ pub async fn start_tasks(
         .unwrap()
         .as_secs();
     println!(
-        "Generating keys for {} connections, with seeds: [{}, {}]",
-        connections,
+        "Generating keys for {connections} connections, io_depth={io_depth}, with seeds: [{}, {}]",
         seed_ts,
         seed_ts + connections as u64 - 1
     );
