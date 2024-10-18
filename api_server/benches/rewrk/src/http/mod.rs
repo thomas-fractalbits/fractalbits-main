@@ -257,6 +257,7 @@ impl RewrkConnector {
         }
 
         let stream = TcpStream::connect(self.addr).await?;
+        stream.set_nodelay(true)?;
         let stream = self.usage.wrap_stream(stream);
 
         let send_request = match self.scheme {
