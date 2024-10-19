@@ -78,7 +78,7 @@ fn run_precheckin() -> CmdResult {
     let rand_log = "test_art_random.log";
     run_cmd! {
         info "Running art tests (random) with log $rand_log ...";
-        ./zig-out/bin/test_art --tests random --size 200000 --ops 200000 -d 20 &> $rand_log;
+        ./zig-out/bin/test_art --tests random --size 400000 --ops 400000 -d 20 &> $rand_log;
     }
     .map_err(|e| {
         run_cmd!(tail $rand_log).unwrap();
@@ -148,7 +148,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
         _ => unreachable!(),
     }
 
-    let duration_secs = 20;
+    let duration_secs = 30;
     let perf_handle = if with_flame_graph {
         run_cmd! {
             info "Start perf in the background ...";
