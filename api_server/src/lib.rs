@@ -42,7 +42,36 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{body::Body, http::Request, routing::get, Router};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
 
-    #[test]
-    fn test_extract_bucket_name() {}
+    fn app() -> Router {
+        Router::new().route("/*key", get(handler))
+    }
+
+    async fn handler(ExtractBucketName(bucket): ExtractBucketName) -> String {
+        bucket
+    }
+
+    #[tokio::test]
+    async fn test_extract_bucket_name() {
+        let bucket_name = "my-bucket";
+        assert_eq!(send_request_get_body(bucket_name).await, bucket_name);
+    }
+
+    async fn send_request_get_body(bucket_name: &str) -> String {
+        let body = app()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("http://{bucket_name}.localhost/obj1?query1"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .into_body();
+        let bytes = body.collect().await.unwrap().to_bytes();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    }
 }

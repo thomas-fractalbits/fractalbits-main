@@ -75,6 +75,11 @@ fn run_precheckin() -> CmdResult {
         zig build test --summary all;
     }?;
 
+    run_cmd! {
+        info "Running cargo unit tests ...";
+        cargo test;
+    }?;
+
     let rand_log = "test_art_random.log";
     run_cmd! {
         info "Running art tests (random) with log $rand_log ...";
