@@ -2,6 +2,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use api_server::ExtractBucketName;
 use axum::{
     extract::{ConnectInfo, MatchedPath, Path, Request, State},
     http::StatusCode,
@@ -25,8 +26,9 @@ fn calculate_hash<T: Hash>(t: &T) -> usize {
 }
 
 async fn get_obj(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ExtractBucketName(_bucket): ExtractBucketName,
     Path(key): Path<String>,
 ) -> Result<String, (StatusCode, String)> {
     let hash = calculate_hash(&addr) % MAX_NSS_CONNECTION;
@@ -46,8 +48,9 @@ async fn get_obj(
 }
 
 async fn put_obj(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ExtractBucketName(_bucket): ExtractBucketName,
     Path(key): Path<String>,
     value: String,
 ) -> Result<String, (StatusCode, String)> {
@@ -113,7 +116,8 @@ async fn main() {
                 // logging of errors so disable that
                 .on_failure(()),
         )
-        .with_state(shared_state);
+        .with_state(shared_state)
+        .into_make_service_with_connect_info::<SocketAddr>();
 
     let addr = "0.0.0.0:3000";
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -125,13 +129,7 @@ async fn main() {
     };
 
     tracing::info!("server started");
-    if let Err(e) = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .tcp_nodelay(true)
-    .await
-    {
-        tracing::error!("serer stopped: {e}");
+    if let Err(e) = axum::serve(listener, app).tcp_nodelay(true).await {
+        tracing::error!("server stopped: {e}");
     }
 }
