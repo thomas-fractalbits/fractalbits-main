@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use api_server::{
-    router::{get_handler, put_handler, MAX_NSS_CONNECTION},
+    handler::{get_handler, put_handler, MAX_NSS_CONNECTION},
     AppState,
 };
 use axum::{
