@@ -5,11 +5,7 @@ use api_server::{
     handler::{get_handler, put_handler, MAX_NSS_CONNECTION},
     AppState,
 };
-use axum::{
-    extract::{MatchedPath, Request},
-    routing::get,
-    Router,
-};
+use axum::{extract::Request, routing};
 use nss_rpc_client::rpc_client::RpcClient;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -38,23 +34,16 @@ async fn main() {
     }
     let shared_state = Arc::new(AppState { rpc_clients });
 
-    let app = Router::new()
-        .route("/*key", get(get_handler).put(put_handler))
+    let app = routing::get(get_handler)
+        .put(put_handler)
         .layer(
             TraceLayer::new_for_http()
-                // Create our own span for the request and include the matched path. The matched
-                // path is useful for figuring out which handler the request was routed to.
                 .make_span_with(|req: &Request| {
                     let method = req.method();
                     let uri = req.uri();
+                    let path = uri.path();
 
-                    // axum automatically adds this extension.
-                    let matched_path = req
-                        .extensions()
-                        .get::<MatchedPath>()
-                        .map(|matched_path| matched_path.as_str());
-
-                    tracing::debug_span!("request", %method, %uri, matched_path)
+                    tracing::debug_span!("request", %method, %uri, path)
                 })
                 // By default `TraceLayer` will log 5xx responses but we're doing our specific
                 // logging of errors so disable that
