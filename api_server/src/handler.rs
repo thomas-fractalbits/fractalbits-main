@@ -1,21 +1,24 @@
 mod delete;
-mod extract_bucket_name;
 mod get;
 mod list;
 mod put;
 
-use axum::response::{IntoResponse, Response};
-use nss_rpc_client::rpc_client::RpcClient;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
+
+use axum::{
+    extract::{ConnectInfo, Query, Request, State},
+    response::{IntoResponse, Response},
+};
 use strum::EnumString;
 
+use super::extract::bucket_name::BucketName;
 use super::AppState;
-use axum::extract::{ConnectInfo, Query, Request, State};
-use extract_bucket_name::BucketName;
+use nss_rpc_client::rpc_client::RpcClient;
+
 pub const MAX_NSS_CONNECTION: usize = 8;
 
 type QueryPairs<'a> = Query<Vec<(Cow<'a, str>, Cow<'a, str>)>>;
