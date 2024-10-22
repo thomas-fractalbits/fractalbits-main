@@ -1,4 +1,9 @@
-use axum::http::StatusCode;
+use axum::{
+    extract::{Query, Request},
+    http::StatusCode,
+    response::{IntoResponse, Result},
+    RequestExt,
+};
 use nss_rpc_client::rpc_client::RpcClient;
 use serde::Deserialize;
 
@@ -26,17 +31,12 @@ pub struct GetObjectOptions {
 pub async fn get_object(
     rpc_client: &RpcClient,
     key: String,
-    _opts: GetObjectOptions,
-) -> Result<String, (StatusCode, String)> {
+    mut request: Request,
+) -> Result<String> {
+    let Query(_get_obj_opts): Query<GetObjectOptions> = request.extract_parts().await?;
     let resp = nss_rpc_client::nss_get_inode(rpc_client, key)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
-        .unwrap();
-    match serde_json::to_string_pretty(&resp.result) {
-        Ok(resp) => Ok(resp),
-        Err(e) => Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("internal server error: {e}"),
-        )),
-    }
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    serde_json::to_string_pretty(&resp.result)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into())
 }

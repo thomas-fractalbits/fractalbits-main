@@ -244,17 +244,14 @@ fn stop_services() -> CmdResult {
     info!("Killing previous services (if any) ...");
     for service in ["nss_server", "api_server", "sample_web_server"] {
         run_cmd!(ignore killall $service &>/dev/null)?;
-        match run_fun!(pidof $service) {
-            Ok(pids) => {
-                for pid in pids.split_whitespace() {
-                    run_cmd! {
-                        info "kill -9 for $service (pid=$pid) since using killall failed";
-                        kill -9 $pid;
-                        sleep 3;
-                    }?;
-                }
+        if let Ok(pids) = run_fun!(pidof $service) {
+            for pid in pids.split_whitespace() {
+                run_cmd! {
+                    info "kill -9 for $service (pid=$pid) since using killall failed";
+                    kill -9 $pid;
+                    sleep 3;
+                }?;
             }
-            _ => {}
         }
         // make sure the process is really being killed
         if let Ok(pid) = run_fun!(pidof $service) {

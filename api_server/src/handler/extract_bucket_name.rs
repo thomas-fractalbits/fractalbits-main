@@ -15,7 +15,10 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let Host(host) = parts.extract::<Host>().await.unwrap();
+        let Host(host) = parts
+            .extract::<Host>()
+            .await
+            .map_err(|_| (StatusCode::NOT_FOUND, "host information not found"))?;
         // Note current axum (0.7.7)'s host contains port information
         let authority: Authority = host.parse::<Authority>().unwrap();
         let mut found_dot = false;

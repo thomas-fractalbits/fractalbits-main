@@ -4,6 +4,7 @@ mod get;
 mod list;
 mod put;
 
+use axum::response::{IntoResponse, Response};
 use nss_rpc_client::rpc_client::RpcClient;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -13,13 +14,11 @@ use std::sync::Arc;
 use strum::EnumString;
 
 use super::AppState;
-use axum::{
-    extract::{ConnectInfo, Query, Request, State},
-    http::StatusCode,
-    RequestExt,
-};
+use axum::extract::{ConnectInfo, Query, Request, State};
 use extract_bucket_name::BucketName;
 pub const MAX_NSS_CONNECTION: usize = 8;
+
+type QueryPairs<'a> = Query<Vec<(Cow<'a, str>, Cow<'a, str>)>>;
 
 #[derive(Debug, EnumString, Copy, Clone, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
@@ -58,43 +57,39 @@ enum ApiCommand {
 
 pub async fn get_handler(
     State(state): State<Arc<AppState>>,
-    mut request: Request,
-) -> Result<String, (StatusCode, String)> {
-    let ConnectInfo(addr) = request.extract_parts().await.unwrap();
-    let BucketName(_bucket) = request.extract_parts().await.unwrap();
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    BucketName(_bucket): BucketName,
+    Query(queries): QueryPairs<'_>,
+    request: Request,
+) -> Response {
     let key = key_for_nss(request.uri().path());
-    let Query(query_map): Query<Vec<(Cow<'_, str>, Cow<'_, str>)>> =
-        request.extract_parts().await.unwrap();
-    let api_command = get_api_command(&query_map);
+    let api_command = get_api_command(&queries);
     let rpc_client = get_rpc_client(&state, addr);
 
     match api_command {
-        Some(api_command) => panic!("TODO: {api_command:?}"),
-        None => {
-            let Query(get_obj_opts) = request.extract_parts().await.unwrap();
-            get::get_object(rpc_client, key, get_obj_opts).await
-        }
+        Some(api_command) => panic!("TODO: {api_command}"),
+        None => get::get_object(rpc_client, key, request)
+            .await
+            .into_response(),
     }
 }
 
 pub async fn put_handler(
     State(state): State<Arc<AppState>>,
-    mut request: Request,
-) -> Result<String, (StatusCode, String)> {
-    let ConnectInfo(addr) = request.extract_parts().await.unwrap();
-    let BucketName(_bucket) = request.extract_parts().await.unwrap();
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    BucketName(_bucket): BucketName,
+    Query(queries): QueryPairs<'_>,
+    request: Request,
+) -> Response {
     let key = key_for_nss(request.uri().path());
-    let Query(query_map): Query<Vec<(Cow<'_, str>, Cow<'_, str>)>> =
-        request.extract_parts().await.unwrap();
-    let api_command = get_api_command(&query_map);
+    let api_command = get_api_command(&queries);
     let rpc_client = get_rpc_client(&state, addr);
 
     match api_command {
-        Some(api_command) => panic!("TODO: {api_command:?}"),
-        None => {
-            let value = request.extract().await.unwrap();
-            put::put_object(rpc_client, key, value).await
-        }
+        Some(api_command) => panic!("TODO: {api_command}"),
+        None => put::put_object(rpc_client, key, request)
+            .await
+            .into_response(),
     }
 }
 
