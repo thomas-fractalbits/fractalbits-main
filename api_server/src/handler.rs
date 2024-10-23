@@ -124,7 +124,7 @@ async fn get_handler(
     rpc_client: &RpcClient,
 ) -> Response {
     match api_command {
-        Some(ApiCommand::Session) => session::create_session(request).await.into_response(),
+        Some(ApiCommand::Session) => session::create_session(request).await,
         Some(api_command) => panic!("TODO: {api_command}"),
         None => get::get_object(request, key, rpc_client)
             .await

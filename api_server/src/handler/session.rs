@@ -1,19 +1,43 @@
-use axum::{extract::Request, response::Result};
+use crate::response::Xml;
+use axum::{
+    extract::Request,
+    response::{IntoResponse, Response},
+};
+use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub async fn create_session(_request: Request) -> Result<String> {
-    let start = SystemTime::now();
-    let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap().as_secs() + 300;
-    let body = format!(
-        r###"<?xml version="1.0" encoding="UTF-8"?>
-<CreateSessionOutput>
-   <Credentials>
-      <AccessKeyId>string</AccessKeyId>
-      <Expiration>{since_the_epoch}</Expiration>
-      <SecretAccessKey>string</SecretAccessKey>
-      <SessionToken>string</SessionToken>
-   </Credentials>
-</CreateSessionOutput>"###
-    );
-    Ok(body.into())
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct CreateSessionOutput {
+    #[serde(rename = "Credentials")]
+    credentials: Credentials,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct Credentials {
+    #[serde(rename = "AccessKeyId")]
+    access_key_id: String,
+    #[serde(rename = "Expiration")]
+    expiration: u64,
+    #[serde(rename = "SecretAccessKey")]
+    secret_access_key: String,
+    #[serde(rename = "SessionToken")]
+    session_token: String,
+}
+
+pub async fn create_session(_request: Request) -> Response {
+    const TIMEOUT_SECS: u64 = 300;
+    let expiration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + TIMEOUT_SECS;
+    let output = CreateSessionOutput {
+        credentials: Credentials {
+            access_key_id: "todo".into(),
+            expiration,
+            secret_access_key: "todo".into(),
+            session_token: "todo".into(),
+        },
+    };
+    Xml(output).into_response()
 }
