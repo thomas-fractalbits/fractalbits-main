@@ -2,6 +2,7 @@ mod delete;
 mod get;
 mod list;
 mod put;
+mod session;
 
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -50,6 +51,7 @@ enum ApiCommand {
     Restore,
     Retention,
     Select,
+    Session,
     Tagging,
     Torrent,
     Uploads,
@@ -70,6 +72,7 @@ pub async fn get_handler(
     let rpc_client = get_rpc_client(&state, addr);
 
     match api_command {
+        Some(ApiCommand::Session) => session::create_session(request).await.into_response(),
         Some(api_command) => panic!("TODO: {api_command}"),
         None => get::get_object(rpc_client, key, request)
             .await

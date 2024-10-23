@@ -8,9 +8,10 @@ use nss_rpc_client::rpc_client::RpcClient;
 
 pub async fn put_object(rpc_client: &RpcClient, key: String, request: Request) -> Result<String> {
     let value: String = request.extract().await?;
-    let resp = nss_rpc_client::nss_put_inode(rpc_client, key, value)
+    let _resp = nss_rpc_client::nss_put_inode(rpc_client, key, value)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
-    serde_json::to_string_pretty(&resp.result)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into())
+    // serde_json::to_string_pretty(&resp.result)
+    // .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into());
+    Ok("".into())
 }
