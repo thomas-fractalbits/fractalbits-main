@@ -6,7 +6,7 @@ use axum::{
 };
 use nss_rpc_client::rpc_client::RpcClient;
 
-pub async fn put_object(rpc_client: &RpcClient, key: String, request: Request) -> Result<String> {
+pub async fn put_object(request: Request, key: String, rpc_client: &RpcClient) -> Result<String> {
     let value: String = request.extract().await?;
     let _resp = nss_rpc_client::nss_put_inode(rpc_client, key, value)
         .await

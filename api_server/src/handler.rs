@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use axum::http::Method;
 use axum::{
     extract::{ConnectInfo, Query, Request, State},
     response::{IntoResponse, Response},
@@ -60,53 +61,22 @@ enum ApiCommand {
     Website,
 }
 
-pub async fn get_handler(
+pub async fn any_handler(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    BucketName(_bucket): BucketName,
+    BucketName(bucket_name): BucketName,
     Query(queries): QueryPairs<'_>,
     request: Request,
 ) -> Response {
-    let key = key_for_nss(request.uri().path());
+    tracing::debug!(%bucket_name);
     let api_command = get_api_command(&queries);
     let rpc_client = get_rpc_client(&state, addr);
-
-    match api_command {
-        Some(ApiCommand::Session) => session::create_session(request).await.into_response(),
-        Some(api_command) => panic!("TODO: {api_command}"),
-        None => get::get_object(rpc_client, key, request)
-            .await
-            .into_response(),
-    }
-}
-
-pub async fn put_handler(
-    State(state): State<Arc<AppState>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    BucketName(_bucket): BucketName,
-    Query(queries): QueryPairs<'_>,
-    request: Request,
-) -> Response {
     let key = key_for_nss(request.uri().path());
-    let api_command = get_api_command(&queries);
-    let rpc_client = get_rpc_client(&state, addr);
-
-    match api_command {
-        Some(api_command) => panic!("TODO: {api_command}"),
-        None => put::put_object(rpc_client, key, request)
-            .await
-            .into_response(),
+    match request.method() {
+        &Method::GET => get_handler(request, api_command, key, rpc_client).await,
+        &Method::PUT => put_handler(request, api_command, key, rpc_client).await,
+        method => panic!("TODO: method {method}"),
     }
-}
-
-fn get_rpc_client(app_state: &AppState, addr: SocketAddr) -> &RpcClient {
-    fn calculate_hash<T: Hash>(t: &T) -> usize {
-        let mut s = DefaultHasher::new();
-        t.hash(&mut s);
-        s.finish() as usize
-    }
-    let hash = calculate_hash(&addr) % MAX_NSS_CONNECTION;
-    &app_state.rpc_clients[hash]
 }
 
 fn get_api_command<T>(query_params: &[(T, T)]) -> Option<ApiCommand>
@@ -128,6 +98,16 @@ where
     }
 }
 
+fn get_rpc_client(app_state: &AppState, addr: SocketAddr) -> &RpcClient {
+    fn calculate_hash<T: Hash>(t: &T) -> usize {
+        let mut s = DefaultHasher::new();
+        t.hash(&mut s);
+        s.finish() as usize
+    }
+    let hash = calculate_hash(&addr) % MAX_NSS_CONNECTION;
+    &app_state.rpc_clients[hash]
+}
+
 fn key_for_nss(key: &str) -> String {
     if key == "/" {
         return key.into();
@@ -135,6 +115,35 @@ fn key_for_nss(key: &str) -> String {
     let mut key = key.to_owned();
     key.push('\0');
     key
+}
+
+async fn get_handler(
+    request: Request,
+    api_command: Option<ApiCommand>,
+    key: String,
+    rpc_client: &RpcClient,
+) -> Response {
+    match api_command {
+        Some(ApiCommand::Session) => session::create_session(request).await.into_response(),
+        Some(api_command) => panic!("TODO: {api_command}"),
+        None => get::get_object(request, key, rpc_client)
+            .await
+            .into_response(),
+    }
+}
+
+async fn put_handler(
+    request: Request,
+    api_command: Option<ApiCommand>,
+    key: String,
+    rpc_client: &RpcClient,
+) -> Response {
+    match api_command {
+        Some(api_command) => panic!("TODO: {api_command}"),
+        None => put::put_object(request, key, rpc_client)
+            .await
+            .into_response(),
+    }
 }
 
 #[cfg(test)]

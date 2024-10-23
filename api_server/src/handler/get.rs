@@ -29,9 +29,9 @@ pub struct GetObjectOptions {
 }
 
 pub async fn get_object(
-    rpc_client: &RpcClient,
-    key: String,
     mut request: Request,
+    key: String,
+    rpc_client: &RpcClient,
 ) -> Result<String> {
     let Query(_get_obj_opts): Query<GetObjectOptions> = request.extract_parts().await?;
     let resp = nss_rpc_client::nss_get_inode(rpc_client, key)

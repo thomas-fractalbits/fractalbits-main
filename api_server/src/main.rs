@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use api_server::{
-    handler::{get_handler, put_handler, MAX_NSS_CONNECTION},
+    handler::{any_handler, MAX_NSS_CONNECTION},
     AppState,
 };
 use axum::{extract::Request, routing};
@@ -34,8 +34,7 @@ async fn main() {
     }
     let shared_state = Arc::new(AppState { rpc_clients });
 
-    let app = routing::get(get_handler)
-        .put(put_handler)
+    let app = routing::any(any_handler)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {
