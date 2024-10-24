@@ -23,8 +23,6 @@ use nss_rpc_client::rpc_client::RpcClient;
 
 pub const MAX_NSS_CONNECTION: usize = 8;
 
-type QueryPairs<'a> = Query<Vec<(Cow<'a, str>, Cow<'a, str>)>>;
-
 #[derive(Debug, EnumString, Copy, Clone, strum::Display)]
 #[strum(serialize_all = "kebab-case")]
 enum ApiCommand {
@@ -65,7 +63,7 @@ pub async fn any_handler(
     State(state): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     BucketName(bucket_name): BucketName,
-    Query(queries): QueryPairs<'_>,
+    Query(queries): Query<Vec<(Cow<'_, str>, Cow<'_, str>)>>,
     request: Request,
 ) -> Response {
     tracing::debug!(%bucket_name);
