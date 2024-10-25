@@ -9,22 +9,17 @@ use serde::Deserialize;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct GetObjectOptions {
     #[serde(rename(deserialize = "partNumber"))]
     part_number: Option<u64>,
     #[serde(rename(deserialize = "versionId"))]
     version_id: Option<String>,
-    #[serde(rename(deserialize = "response-cache-control"))]
     response_cache_control: Option<String>,
-    #[serde(rename(deserialize = "response-content-disposition"))]
     response_content_disposition: Option<String>,
-    #[serde(rename(deserialize = "response-content-encoding"))]
     response_content_encoding: Option<String>,
-    #[serde(rename(deserialize = "response-content-language"))]
     response_content_language: Option<String>,
-    #[serde(rename(deserialize = "response-content-type"))]
     response_content_type: Option<String>,
-    #[serde(rename(deserialize = "response-expires"))]
     response_expires: Option<String>,
 }
 

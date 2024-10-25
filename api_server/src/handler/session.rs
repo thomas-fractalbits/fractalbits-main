@@ -7,20 +7,17 @@ use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
 struct CreateSessionOutput {
-    #[serde(rename = "Credentials")]
     credentials: Credentials,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
 struct Credentials {
-    #[serde(rename = "AccessKeyId")]
     access_key_id: String,
-    #[serde(rename = "Expiration")]
     expiration: u64,
-    #[serde(rename = "SecretAccessKey")]
     secret_access_key: String,
-    #[serde(rename = "SessionToken")]
     session_token: String,
 }
 
