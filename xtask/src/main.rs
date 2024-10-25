@@ -71,6 +71,11 @@ fn run_precheckin() -> CmdResult {
     }?;
 
     run_cmd! {
+        info "ulimit -n 1000000";
+        ulimit -n 1000000;
+    }?;
+
+    run_cmd! {
         info "Running zig unit tests ...";
         zig build test --summary all;
     }?;
