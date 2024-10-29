@@ -33,9 +33,6 @@ pub struct WorkerResult {
     /// The vec of latencies per request stored.
     pub request_times: Vec<Duration>,
 
-    /// The amount of data read from each worker.
-    pub buffer_sizes: Vec<usize>,
-
     /// Error counting map.
     pub error_map: HashMap<String, usize>,
 }
@@ -47,7 +44,6 @@ impl WorkerResult {
         Self {
             total_times: vec![],
             request_times: vec![],
-            buffer_sizes: vec![],
             error_map: HashMap::new(),
         }
     }
@@ -56,7 +52,6 @@ impl WorkerResult {
     pub fn combine(mut self, other: Self) -> Self {
         self.request_times.extend(other.request_times);
         self.total_times.extend(other.total_times);
-        self.buffer_sizes.extend(other.buffer_sizes);
 
         // Insert/add new errors to current error map.
         for (message, count) in other.error_map {
@@ -64,7 +59,7 @@ impl WorkerResult {
                 Some(c) => *c += count,
                 None => {
                     self.error_map.insert(message, count);
-                },
+                }
             }
         }
 
@@ -74,16 +69,6 @@ impl WorkerResult {
     /// Simple helper returning the amount of requests overall.
     pub fn total_requests(&self) -> usize {
         self.request_times.len()
-    }
-
-    /// Calculates the total transfer in bytes.
-    pub fn total_transfer(&self) -> usize {
-        self.buffer_sizes.iter().sum()
-    }
-
-    /// Calculates the total transfer in bytes.
-    pub fn avg_transfer(&self) -> f64 {
-        self.total_transfer() as f64 / self.avg_total_time().as_secs_f64()
     }
 
     /// Calculates the requests per second average.
@@ -220,21 +205,6 @@ impl WorkerResult {
         )
     }
 
-    pub fn display_transfer(&mut self) {
-        let total = self.total_transfer() as f64;
-        let rate = self.avg_transfer();
-
-        let display_total = format_data(total as f64);
-        let display_rate = format_data(rate);
-
-        println!("  Transfer:");
-        println!(
-            "    Total: {:^7} Transfer Rate: {:^7}",
-            display_total.as_str().bright_cyan(),
-            format!("{}/Sec", display_rate).as_str().bright_cyan()
-        )
-    }
-
     pub fn display_percentile_table(&mut self) {
         self.sort_request_times();
 
@@ -321,9 +291,6 @@ impl WorkerResult {
         let min = self.min_request_latency().as_secs_f64() * modified;
         let std_deviation = self.std_deviation_request_latency() * modified;
 
-        let total = self.total_transfer() as f64;
-        let rate = self.avg_transfer();
-
         let total_requests = self.total_requests();
         let avg_request_per_sec = self.avg_request_per_sec();
 
@@ -332,9 +299,6 @@ impl WorkerResult {
             "latency_max": max,
             "latency_min": min,
             "latency_std_deviation": std_deviation,
-
-            "transfer_total": total,
-            "transfer_rate": rate,
 
             "requests_total": total_requests,
             "requests_avg": avg_request_per_sec,

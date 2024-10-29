@@ -36,6 +36,9 @@ pub struct BenchmarkSettings {
 
     /// The number of concurrent requests for one connection
     pub io_depth: usize,
+
+    /// The input data file
+    pub input: String,
 }
 
 /// Builds the runtime with the given settings and blocks on the main future.
@@ -72,14 +75,14 @@ pub fn start_benchmark(settings: BenchmarkSettings) {
 ///
 /// The results are then merged into a single set of averages across workers.
 async fn run(settings: BenchmarkSettings) -> Result<()> {
-    let predict_size = settings.duration.as_secs() * 10_000;
+    // let predict_size = settings.duration.as_secs() * 10_000;
 
     let handles = rpc::start_tasks(
         settings.duration,
         settings.connections,
         settings.host.trim().to_string(),
-        predict_size as usize,
         settings.io_depth,
+        settings.input.clone(),
     )
     .await;
 
@@ -90,10 +93,15 @@ async fn run(settings: BenchmarkSettings) -> Result<()> {
 
     if !settings.display_json {
         println!(
-            "Benchmarking {} connections @ {} for {}",
+            "Benchmarking {} connections @ {} for maximum {} {}",
             string(settings.connections).cyan(),
             settings.host,
             humanize(settings.duration),
+            if !settings.input.is_empty() {
+                format!("with input file {}", settings.input)
+            } else {
+                "".into()
+            },
         );
     }
 

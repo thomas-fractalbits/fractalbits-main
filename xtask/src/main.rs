@@ -152,7 +152,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
             start_nss_service()?;
             uri = "127.0.0.1:9224";
             bench_exe = "./target/release/rewrk_rpc";
-            bench_opts = ["-t", "24", "-c", "500", "-D", "1"];
+            bench_opts = ["-t", "24", "-c", "500", "-i", "test.data"];
         }
         _ => unreachable!(),
     }

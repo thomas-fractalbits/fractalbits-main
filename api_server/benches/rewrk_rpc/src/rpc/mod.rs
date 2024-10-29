@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -20,36 +22,62 @@ mod user_input;
 
 pub type Handle = JoinHandle<anyhow::Result<WorkerResult>>;
 
+enum GenKeys {
+    Seed(u64),
+    FromInputFile(VecDeque<String>),
+}
+
+fn read_keys(filename: &str, num_tasks: usize) -> Vec<VecDeque<String>> {
+    let file = File::open(filename).unwrap();
+    let mut res = vec![VecDeque::new(); num_tasks];
+    let mut i = 0;
+    for line in BufReader::new(file).lines() {
+        if let Ok(line) = line {
+            res[i].push_back(line);
+            i = (i + 1) % num_tasks;
+        }
+    }
+    res
+}
+
 pub async fn start_tasks(
     time_for: Duration,
     connections: usize,
     uri_string: String,
-    _predicted_size: usize,
     io_depth: usize,
+    input: String,
 ) -> anyhow::Result<FuturesUnordered<Handle>> {
     let deadline = Instant::now() + time_for;
-    let user_input = uri_string;
 
     let handles = FuturesUnordered::new();
 
     // Generate fake keys
-    let seed_ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    println!(
-        "Generating keys for {connections} connections, io_depth={io_depth}, with seeds: [{}, {}]",
-        seed_ts,
-        seed_ts + connections as u64 - 1
-    );
+    let mut gen_keys = if !input.is_empty() {
+        println!("Fetching keys from {input} for {connections} connections, io_depth={io_depth}");
+        read_keys(&input, connections)
+            .into_iter()
+            .map(GenKeys::FromInputFile)
+            .collect::<Vec<_>>()
+    } else {
+        let seed_ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        println!(
+            "Generating keys for {connections} connections, io_depth={io_depth}, with seeds: [{}, {}]",
+            seed_ts,
+            seed_ts + connections as u64 - 1
+        );
+        (seed_ts..seed_ts + connections as u64)
+            .map(GenKeys::Seed)
+            .collect::<Vec<_>>()
+    };
 
-    for i in 0..connections {
-        let handle = tokio::spawn(benchmark(
-            deadline,
-            user_input.clone(),
-            seed_ts + i as u64,
-            io_depth,
-        ));
+    for _i in 0..connections {
+        let keys = gen_keys.pop().unwrap();
+        let connector = RewrkConnector::new(deadline, uri_string.clone());
+        let rpc_client = connector.connect().await.unwrap();
+        let handle = tokio::spawn(benchmark(deadline, rpc_client, keys, io_depth));
 
         handles.push(handle);
     }
@@ -60,18 +88,18 @@ pub async fn start_tasks(
 // Futures must not be awaited without timeout.
 async fn benchmark(
     deadline: Instant,
-    user_input: String,
-    seed: u64,
+    rpc_client: RpcClient,
+    mut keys: GenKeys,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
     let benchmark_start = Instant::now();
-    let connector = RewrkConnector::new(deadline, user_input);
-    let rpc_client = connector.connect().await.unwrap();
-
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let ref mut rng = StdRng::seed_from_u64(seed);
+    let mut rng = None;
+    if let GenKeys::Seed(seed) = keys {
+        rng = Some(StdRng::seed_from_u64(seed));
+    }
     // From https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
     const ASCII: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!-_.*'()";
     let faker = StringFaker::with(Vec::from(ASCII), 4..30);
@@ -86,10 +114,26 @@ async fn benchmark(
         let mut futures = Vec::new();
         for _ in 0..io_depth {
             // Create request from **parsed** data.
-            let key: String = format!("/{}\0", faker.fake_with_rng::<String, _>(rng));
+            let mut key: String = match &mut keys {
+                GenKeys::Seed(_) => {
+                    format!(
+                        "/{}",
+                        faker.fake_with_rng::<String, _>(rng.as_mut().unwrap())
+                    )
+                }
+                GenKeys::FromInputFile(keys) => match keys.pop_front() {
+                    Some(key) => key,
+                    None => break,
+                },
+            };
+            key.push('\0');
+
             let value = key.clone();
             let future = async { nss_rpc_client::nss_put_inode(&rpc_client, key, value).await };
             futures.push(future);
+        }
+        if futures.is_empty() {
+            break;
         }
         let request_start = Instant::now();
 
@@ -119,7 +163,6 @@ async fn benchmark(
     Ok(WorkerResult {
         total_times: vec![benchmark_start.elapsed()],
         request_times,
-        buffer_sizes: vec![connector.get_received_bytes()],
         error_map,
     })
 }
@@ -128,6 +171,7 @@ struct RewrkConnector {
     #[allow(unused)]
     deadline: Instant,
     host: String,
+    #[allow(unused)]
     usage: Usage,
 }
 
@@ -146,6 +190,7 @@ impl RewrkConnector {
         Ok(RpcClient::new(&self.host).await.unwrap())
     }
 
+    #[allow(dead_code)]
     fn get_received_bytes(&self) -> usize {
         self.usage.get_received_bytes()
     }

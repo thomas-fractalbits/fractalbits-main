@@ -45,7 +45,7 @@ fn main() {
     };
 
     let json: bool = args.is_present("json");
-    let duration: &str = args.value_of("duration").unwrap_or("1s");
+    let duration: &str = args.value_of("duration").unwrap_or("60s");
     let duration = match parse_duration(duration) {
         Ok(dur) => dur,
         Err(e) => {
@@ -53,7 +53,6 @@ fn main() {
             return;
         }
     };
-
     let pct: bool = args.is_present("pct");
 
     let rounds: usize = args
@@ -70,6 +69,8 @@ fn main() {
         .parse::<usize>()
         .unwrap_or(1);
 
+    let input = args.value_of("input").unwrap_or("test.data").into();
+
     let settings = bench::BenchmarkSettings {
         threads,
         connections: conns,
@@ -79,6 +80,7 @@ fn main() {
         display_json: json,
         rounds,
         io_depth,
+        input,
     };
 
     bench::start_benchmark(settings);
@@ -166,7 +168,7 @@ fn parse_args() -> ArgMatches<'static> {
                 .long("duration")
                 .help("Set the duration of the benchmark.")
                 .takes_value(true)
-                .required(true),
+                .required(false),
         )
         .arg(
             Arg::with_name("pct")
@@ -195,6 +197,14 @@ fn parse_args() -> ArgMatches<'static> {
                 .long("io_depth")
                 .short("D")
                 .help("IO depth (number of concurrent rpc requests for one connection)")
+                .takes_value(true)
+                .required(false),
+        )
+        .arg(
+            Arg::with_name("input")
+                .short("i")
+                .long("input data file")
+                .help("Get input data from file")
                 .takes_value(true)
                 .required(false),
         )
