@@ -161,7 +161,7 @@ fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdR
             start_nss_service()?;
             uri = "127.0.0.1:9224";
             bench_exe = "./target/release/rewrk_rpc";
-            bench_opts = ["-t", "24", "-c", "500", "-w", workload.as_str()];
+            bench_opts = ["-t", "24", "-c", "500", "-w", &workload];
         }
         _ => unreachable!(),
     }

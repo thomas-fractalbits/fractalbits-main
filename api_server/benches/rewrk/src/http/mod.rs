@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::time::Duration;
 use std::convert::TryFrom;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::anyhow;
 use futures_util::stream::FuturesUnordered;
@@ -19,9 +20,6 @@ use tokio::time::error::Elapsed;
 use tokio::time::{sleep, timeout_at, Instant};
 use tower::util::ServiceExt;
 use tower::Service;
-use fake::{Fake, StringFaker};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 use http::uri::Uri;
 
 use self::usage::Usage;
@@ -53,6 +51,19 @@ impl BenchType {
     }
 }
 
+fn read_keys(filename: &str, num_tasks: usize) -> Vec<VecDeque<String>> {
+    let file = File::open(filename).unwrap();
+    let mut res = vec![VecDeque::new(); num_tasks];
+    let mut i = 0;
+    for line in BufReader::new(file).lines() {
+        if let Ok(line) = line {
+            res[i].push_back(line);
+            i = (i + 1) % num_tasks;
+        }
+    }
+    res
+}
+
 pub async fn start_tasks(
     time_for: Duration,
     connections: usize,
@@ -70,14 +81,14 @@ pub async fn start_tasks(
     let handles = FuturesUnordered::new();
 
     // Generate fake keys
-    let seed_ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    println!("Generating keys for {} connections, with seeds: [{}, {}]", connections, seed_ts, seed_ts + connections as u64 - 1);
+    println!("Fetching keys from test.data for {connections} connections, io_depth=1");
+    let mut gen_keys = read_keys("test.data", connections)
+        .into_iter()
+        .collect::<Vec<_>>();
 
-    for i in 0..connections {
-        let handle = tokio::spawn(benchmark(deadline, bench_type, user_input.clone(), seed_ts + i as u64));
+    for _i in 0..connections {
+        let keys = gen_keys.pop().unwrap();
+        let handle = tokio::spawn(benchmark_write(deadline, bench_type, user_input.clone(), keys));
 
         handles.push(handle);
     }
@@ -86,11 +97,11 @@ pub async fn start_tasks(
 }
 
 // Futures must not be awaited without timeout.
-async fn benchmark(
+async fn benchmark_write(
     deadline: Instant,
     bench_type: BenchType,
     user_input: UserInput,
-    seed: u64,
+    mut keys: VecDeque<String>,
 ) -> anyhow::Result<WorkerResult> {
     let benchmark_start = Instant::now();
     let connector = RewrkConnector::new(
@@ -119,16 +130,15 @@ async fn benchmark(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let ref mut rng = StdRng::seed_from_u64(seed);
-    // From https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html
-    const ASCII: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!-_.*'()";
-    let faker = StringFaker::with(Vec::from(ASCII), 4..30);
-
     // Benchmark loop.
     // Futures must not be awaited without timeout.
     loop {
         // Create request from **parsed** data.
-        let key: String = faker.fake_with_rng(rng);
+        let key: String = match keys.pop_front() {
+            Some(key) => key,
+            None => break,
+        };
+
         let mut request = Request::new(Body::from(key.clone()));
         *request.method_mut() = user_input.method.clone();
 
