@@ -39,6 +39,9 @@ pub struct BenchmarkSettings {
 
     /// The input data file
     pub input: String,
+
+    /// Choose pre-defined workload
+    pub workload: String,
 }
 
 /// Builds the runtime with the given settings and blocks on the main future.
@@ -83,6 +86,7 @@ async fn run(settings: BenchmarkSettings) -> Result<()> {
         settings.host.trim().to_string(),
         settings.io_depth,
         settings.input.clone(),
+        settings.workload.clone(),
     )
     .await;
 
@@ -93,10 +97,11 @@ async fn run(settings: BenchmarkSettings) -> Result<()> {
 
     if !settings.display_json {
         println!(
-            "Benchmarking {} connections @ {} for maximum {} {}",
+            "Benchmarking {} connections @ {} for maximum {} workload={} {}",
             string(settings.connections).cyan(),
             settings.host,
             humanize(settings.duration),
+            settings.workload,
             if !settings.input.is_empty() {
                 format!("with input file {}", settings.input)
             } else {

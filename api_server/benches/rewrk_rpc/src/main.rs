@@ -71,6 +71,8 @@ fn main() {
 
     let input = args.value_of("input").unwrap_or("test.data").into();
 
+    let workload = args.value_of("workload").unwrap_or("write").into();
+
     let settings = bench::BenchmarkSettings {
         threads,
         connections: conns,
@@ -81,6 +83,7 @@ fn main() {
         rounds,
         io_depth,
         input,
+        workload,
     };
 
     bench::start_benchmark(settings);
@@ -205,6 +208,14 @@ fn parse_args() -> ArgMatches<'static> {
                 .short("i")
                 .long("input data file")
                 .help("Get input data from file")
+                .takes_value(true)
+                .required(false),
+        )
+        .arg(
+            Arg::with_name("workload")
+                .short("w")
+                .long("workload")
+                .help("Workload (read/write/mixed)")
                 .takes_value(true)
                 .required(false),
         )

@@ -7,18 +7,26 @@ enum Cmd {
     #[structopt(about = "Run benchmark for sample_web_server/api_server/nss_rpc")]
     Bench {
         #[structopt(
+            short = "w",
+            long = "workload",
+            long_help = "Run with pre-defined workload (read/write)",
+            default_value = "write"
+        )]
+        workload: String,
+
+        #[structopt(
             short = "f",
             long = "with_flame_graph",
             long_help = "Run with perf tool and generate flamegraph"
         )]
         with_flame_graph: bool,
 
-        #[structopt(parse(from_str), long_help = "sample_web_server/api_server/nss_rpc")]
+        #[structopt(long_help = "sample_web_server/api_server/nss_rpc")]
         server: String,
     },
     #[structopt(about = "Service stop/start/restart")]
     Service {
-        #[structopt(parse(from_str), long_help = "stop/start/restart")]
+        #[structopt(long_help = "stop/start/restart")]
         action: String,
     },
     #[structopt(about = "Run precheckin tests")]
@@ -30,12 +38,13 @@ fn main() -> CmdResult {
     match Cmd::from_args() {
         Cmd::Precheckin => run_precheckin()?,
         Cmd::Bench {
+            workload,
             with_flame_graph,
             server,
         } => match server.as_str() {
             "sample_web_server" | "api_server" | "nss_rpc" => {
                 prepare_bench()?;
-                run_cmd_bench(with_flame_graph, &server)?;
+                run_cmd_bench(workload, with_flame_graph, &server)?;
             }
             _ => print_help_and_exit(),
         },
@@ -120,7 +129,7 @@ fn run_precheckin() -> CmdResult {
     Ok(())
 }
 
-fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
+fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdResult {
     let uri;
     let bench_exe;
     let bench_opts;
@@ -152,7 +161,7 @@ fn run_cmd_bench(with_flame_graph: bool, server: &str) -> CmdResult {
             start_nss_service()?;
             uri = "127.0.0.1:9224";
             bench_exe = "./target/release/rewrk_rpc";
-            bench_opts = ["-t", "24", "-c", "500", "-i", "test.data"];
+            bench_opts = ["-t", "24", "-c", "500", "-w", workload.as_str()];
         }
         _ => unreachable!(),
     }
