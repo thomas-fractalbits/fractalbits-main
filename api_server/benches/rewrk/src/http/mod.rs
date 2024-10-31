@@ -76,19 +76,19 @@ pub async fn start_tasks(
 ) -> anyhow::Result<FuturesUnordered<Handle>> {
     let deadline = Instant::now() + time_for;
     let user_input =
-        UserInput::new(bench_type, uri_string, method, headers, body).await?;
+        UserInput::new(bench_type, uri_string, method.clone(), headers, body).await?;
 
     let handles = FuturesUnordered::new();
 
     // Generate fake keys
-    println!("Fetching keys from test.data for {connections} connections, io_depth=1");
+    println!("Fetching keys from test.data for {connections} connections, io_depth=1, http_method={method}");
     let mut gen_keys = read_keys("test.data", connections)
         .into_iter()
         .collect::<Vec<_>>();
 
     for _i in 0..connections {
         let keys = gen_keys.pop().unwrap();
-        let handle = tokio::spawn(benchmark_write(deadline, bench_type, user_input.clone(), keys));
+        let handle = tokio::spawn(benchmark(deadline, bench_type, user_input.clone(), keys));
 
         handles.push(handle);
     }
@@ -97,7 +97,7 @@ pub async fn start_tasks(
 }
 
 // Futures must not be awaited without timeout.
-async fn benchmark_write(
+async fn benchmark(
     deadline: Instant,
     bench_type: BenchType,
     user_input: UserInput,
@@ -139,12 +139,15 @@ async fn benchmark_write(
             None => break,
         };
 
-        let mut request = Request::new(Body::from(key.clone()));
+        let mut request = Request::new(match user_input.method {
+            Method::GET => Body::empty(),
+            Method::PUT => Body::from(key.clone()),
+                _ => unimplemented!()
+        });
         *request.method_mut() = user_input.method.clone();
 
-        let uri_string = format!("http://localhost:3000/{key}");
+        let uri_string = format!("http://mybucket.localhost:3000/{key}");
         *request.uri_mut() = Uri::try_from(&uri_string)?;
-        // *request.uri_mut() = user_input.uri.clone();
 
         *request.headers_mut() = request_headers.clone();
 

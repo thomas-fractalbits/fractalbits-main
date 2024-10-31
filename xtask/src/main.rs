@@ -130,10 +130,14 @@ fn run_precheckin() -> CmdResult {
 }
 
 fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdResult {
+    let http_method = match workload.as_str() {
+        "write" => "put",
+        "read" => "get",
+        _ => unimplemented!(),
+    };
     let uri;
     let bench_exe;
     let bench_opts;
-
     match server {
         "sample_web_server" => {
             build_sample_web_server()?;
@@ -142,7 +146,7 @@ fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdR
             start_sample_web_server()?;
             uri = "http://127.0.0.1:3000";
             bench_exe = "./target/release/rewrk";
-            bench_opts = ["-t", "24", "-c", "500", "-m", "put"];
+            bench_opts = ["-t", "24", "-c", "500", "-m", http_method];
         }
         "api_server" => {
             build_nss_server()?;
@@ -152,7 +156,7 @@ fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdR
             run_cmd_service("restart")?;
             uri = "http://mybucket.localhost:3000";
             bench_exe = "./target/release/rewrk";
-            bench_opts = ["-t", "24", "-c", "500", "-m", "put"];
+            bench_opts = ["-t", "24", "-c", "500", "-m", http_method];
         }
         "nss_rpc" => {
             build_nss_server()?;
