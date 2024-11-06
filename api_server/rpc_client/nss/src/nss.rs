@@ -26,7 +26,7 @@ pub async fn nss_put_inode(
         .map_err(RpcError::EncodeError)?;
 
     let resp_bytes = rpc_client
-        .send_request(request_header.id, request_bytes.freeze())
+        .send_request(request_header.id, &vec![request_bytes.freeze()])
         .await?;
     let resp: PutInodeResponse = Message::decode(resp_bytes).map_err(RpcError::DecodeError)?;
     Ok(resp)
@@ -50,7 +50,7 @@ pub async fn nss_get_inode(
         .map_err(RpcError::EncodeError)?;
 
     let resp_bytes = rpc_client
-        .send_request(request_header.id, request_bytes.freeze())
+        .send_request(request_header.id, &vec![request_bytes.freeze()])
         .await?;
     let resp: GetInodeResponse = Message::decode(resp_bytes).map_err(RpcError::DecodeError)?;
     Ok(resp)

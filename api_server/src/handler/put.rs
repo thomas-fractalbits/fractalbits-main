@@ -2,16 +2,17 @@ use axum::{
     extract::Request,
     http::StatusCode,
     response::{IntoResponse, Result},
-    RequestExt,
 };
+use http_body_util::BodyExt;
 use nss_rpc_client::rpc_client::RpcClient;
 
 pub async fn put_object(request: Request, key: String, rpc_client: &RpcClient) -> Result<()> {
-    let value: String = request.extract().await?;
-
     // Write data at first
+    // TODO: async stream
+    let _content = request.into_body().collect().await.unwrap().to_bytes();
 
-    let _resp = nss_rpc_client::nss::nss_put_inode(rpc_client, key, value)
+    let blob_id = "blob_id".into();
+    let _resp = nss_rpc_client::nss::nss_put_inode(rpc_client, key, blob_id)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
     // serde_json::to_string_pretty(&resp.result)

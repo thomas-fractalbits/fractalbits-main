@@ -108,11 +108,13 @@ impl RpcClient {
         Ok(())
     }
 
-    pub async fn send_request(&self, id: u32, msg: Bytes) -> Result<Bytes, RpcError> {
-        self.sender
-            .send(msg.clone())
-            .await
-            .map_err(|e| RpcError::InternalRequestError(e.to_string()))?;
+    pub async fn send_request(&self, id: u32, msgs: &[Bytes]) -> Result<Bytes, RpcError> {
+        for msg in msgs {
+            self.sender
+                .send(msg.clone())
+                .await
+                .map_err(|e| RpcError::InternalRequestError(e.to_string()))?;
+        }
         tracing::debug!("request sent from handler: request_id={id}");
 
         let (tx, rx) = oneshot::channel();

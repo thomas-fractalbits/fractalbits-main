@@ -62,7 +62,7 @@ impl Default for Command {
     }
 }
 
-// Safety: Command is defined as protobuf enum type (i32), and 0 as Invalid. There is also no padding
+// Safety: Command is defined as protobuf enum type (u32), and 0 as Invalid. There is also no padding
 // as verified from the zig side. With header checksum validation, we can also be sure no invalid
 // enum value being interpreted.
 unsafe impl Pod for Command {}

@@ -20,6 +20,4 @@ storage_server_rpc_client = { path = "rpc_client/storage_server" }
 tower = "0.5.1"
 strum = { version = "0.26.3", features = ["derive"] }
 quick-xml = { version = "0.36.2", features = ["serialize"] }
-
-[dev-dependencies]
 http-body-util = "0.1.2"
