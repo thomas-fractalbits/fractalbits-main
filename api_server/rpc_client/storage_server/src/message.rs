@@ -23,9 +23,6 @@ pub struct MessageHeader {
     /// cluster (for example, staging vs production).
     cluster: u128,
 
-    bucket_id: u128,
-    blob_id: u128,
-
     /// The size of the Header structure (always), plus any associated body.
     pub size: u64,
 
@@ -42,10 +39,16 @@ pub struct MessageHeader {
     /// The version of the protocol implementation that originated this message.
     protocol: u16,
 
-    reserved0: [u8; 32],
+    /// Bucket Id
+    bucket_id: [u8; 16],
+
+    /// Blob Id
+    blob_id: [u8; 16],
+
+    reserved0: [u8; 22],
     reserved1: [u8; 32],
     reserved2: [u8; 32],
-    reserved3: [u8; 22],
+    reserved3: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

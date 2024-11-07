@@ -16,3 +16,6 @@ tokio-stream = "0.1.16"
 default = ["storage_server"]
 storage_server = []
 nss = []
+
+[dev-dependencies]
+test-log = "0.2.16"

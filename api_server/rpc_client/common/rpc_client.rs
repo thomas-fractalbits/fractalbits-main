@@ -109,11 +109,10 @@ impl RpcClient {
     }
 
     pub async fn send_request(&self, id: u32, msgs: &[Bytes]) -> Result<Bytes, RpcError> {
+        tracing::debug!("sending {} msgs", msgs.len());
+        let mut permit = self.sender.reserve_many(msgs.len()).await.unwrap();
         for msg in msgs {
-            self.sender
-                .send(msg.clone())
-                .await
-                .map_err(|e| RpcError::InternalRequestError(e.to_string()))?;
+            permit.next().unwrap().send(msg.clone());
         }
         tracing::debug!("request sent from handler: request_id={id}");
 
