@@ -29,7 +29,7 @@ pub async fn nss_put_blob(
 pub async fn nss_get_blob(
     rpc_client: &RpcClient,
     _key: String,
-    _content: &mut [u8],
+    content: &mut Bytes,
 ) -> Result<usize, RpcError> {
     let mut request_header = MessageHeader::default();
     request_header.id = rpc_client.gen_request_id();
@@ -42,5 +42,7 @@ pub async fn nss_get_blob(
     let resp = rpc_client
         .send_request(request_header.id, &vec![request_bytes.freeze()])
         .await?;
-    Ok(resp.header.result as usize)
+    let size = resp.header.result;
+    *content = resp.body;
+    Ok(size as usize)
 }
