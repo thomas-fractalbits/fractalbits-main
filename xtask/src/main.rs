@@ -145,7 +145,7 @@ fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdR
             bench_opts = ["-t", "24", "-c", "500", "-m", http_method];
         }
         "api_server" => {
-            build_nss_server()?;
+            build_bss_nss_server()?;
             build_api_server()?;
             build_rewrk()?;
 
@@ -155,7 +155,7 @@ fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdR
             bench_opts = ["-t", "24", "-c", "500", "-m", http_method];
         }
         "nss_rpc" => {
-            build_nss_server()?;
+            build_bss_nss_server()?;
             build_rewrk_rpc()?;
 
             start_nss_service()?;
@@ -228,7 +228,7 @@ fn build_rewrk_rpc() -> CmdResult {
     }
 }
 
-fn build_nss_server() -> CmdResult {
+fn build_bss_nss_server() -> CmdResult {
     run_cmd! {
         info "Building nss server ...";
         zig build --release=safe;
@@ -257,7 +257,12 @@ fn run_cmd_service(action: &str) -> CmdResult {
 
 fn stop_services() -> CmdResult {
     info!("Killing previous services (if any) ...");
-    for service in ["nss_server", "api_server", "sample_web_server"] {
+    for service in [
+        "bss_server",
+        "nss_server",
+        "api_server",
+        "sample_web_server",
+    ] {
         run_cmd!(ignore killall $service &>/dev/null)?;
         if let Ok(pids) = run_fun!(pidof $service) {
             for pid in pids.split_whitespace() {
@@ -287,8 +292,25 @@ fn start_sample_web_server() -> CmdResult {
 }
 
 fn start_services() -> CmdResult {
+    build_bss_nss_server()?;
+    build_api_server()?;
+    start_bss_service()?;
     start_nss_service()?;
     start_api_service()?;
+    Ok(())
+}
+
+fn start_bss_service() -> CmdResult {
+    let service_log = "bss_server.log";
+    let bss_wait_secs = 10;
+    run_cmd! {
+        info "Starting bss server with log $service_log ...";
+        bash -c "nohup ./zig-out/bin/bss_server &> $service_log &";
+        info "Waiting ${bss_wait_secs}s for server up";
+        sleep $bss_wait_secs;
+    }?;
+    let bss_server_pid = run_fun!(pidof bss_server)?;
+    info!("bss server (pid={bss_server_pid}) started");
     Ok(())
 }
 
