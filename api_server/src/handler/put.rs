@@ -12,14 +12,22 @@ pub async fn put_object(
     request: Request,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    _rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: &RpcClientBss,
 ) -> Result<()> {
     // Write data at first
     // TODO: async stream
-    let _content = request.into_body().collect().await.unwrap().to_bytes();
-    let blob_id = Uuid::now_v7().as_bytes().into();
+    let content = request.into_body().collect().await.unwrap().to_bytes();
+    let content_len = content.len();
+    let blob_id = Uuid::now_v7();
 
-    let _resp = rpc_client_nss::rpc::nss_put_inode(rpc_client_nss, key, blob_id)
+    let usize = rpc_client_bss
+        .put_blob(blob_id.clone(), content)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    assert_eq!(content_len + 256, usize);
+
+    let _resp = rpc_client_nss
+        .put_inode(key, blob_id.as_bytes().into())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
     // serde_json::to_string_pretty(&resp.result)

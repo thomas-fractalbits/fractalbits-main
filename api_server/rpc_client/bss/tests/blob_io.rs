@@ -9,18 +9,20 @@ async fn test_basic_blob_io() {
     let url = "127.0.0.1:9225";
     tracing::debug!(%url);
     // Skip testing if blob storage server is not up
-    if let Ok(rpc_client) = RpcClient::new(url).await {
+    if let Ok(rpc_client) = RpcClientBss::new(url).await {
         let header_len = message::MessageHeader::encode_len();
         let blob_id = Uuid::now_v7();
         let content = Bytes::from("42");
         let mut readback_content = Bytes::new();
         let content_len = content.len();
-        let size = rpc::bss_put_blob(&rpc_client, blob_id.clone(), content.clone())
+        let size = rpc_client
+            .put_blob(blob_id.clone(), content.clone())
             .await
             .unwrap();
         assert_eq!(header_len + content_len, size);
 
-        let size = rpc::bss_get_blob(&rpc_client, blob_id, &mut readback_content)
+        let size = rpc_client
+            .get_blob(blob_id, &mut readback_content)
             .await
             .unwrap();
         assert_eq!(header_len + content_len, size);

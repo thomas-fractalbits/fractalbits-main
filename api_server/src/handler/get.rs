@@ -4,9 +4,11 @@ use axum::{
     response::{self, IntoResponse},
     RequestExt,
 };
+use bytes::Bytes;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::{rpc::get_inode_response, RpcClientNss};
 use serde::Deserialize;
+use uuid::Uuid;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -28,16 +30,27 @@ pub async fn get_object(
     mut request: Request,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    _rpc_client_bss: &RpcClientBss,
-) -> response::Result<Vec<u8>> {
+    rpc_client_bss: &RpcClientBss,
+) -> response::Result<Bytes> {
     let Query(_get_obj_opts): Query<GetObjectOptions> = request.extract_parts().await?;
-    let resp = rpc_client_nss::rpc::nss_get_inode(rpc_client_nss, key)
+    let resp = rpc_client_nss
+        .get_inode(key)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
-    match resp.result.unwrap() {
-        get_inode_response::Result::Ok(res) => Ok(res),
-        get_inode_response::Result::Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e)
-            .into_response()
-            .into()),
-    }
+
+    let blob_id = match resp.result.unwrap() {
+        get_inode_response::Result::Ok(res) => Uuid::try_from(res).unwrap(),
+        get_inode_response::Result::Err(e) => {
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, e)
+                .into_response()
+                .into())
+        }
+    };
+
+    let mut content = Bytes::new();
+    let _size = rpc_client_bss
+        .get_blob(blob_id, &mut content)
+        .await
+        .unwrap();
+    Ok(content)
 }
