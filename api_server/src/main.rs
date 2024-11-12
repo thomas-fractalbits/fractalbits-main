@@ -17,14 +17,7 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let app_state = match AppState::new("127.0.0.1:9224").await {
-        Ok(state) => state,
-        Err(e) => {
-            tracing::error!("Failed to start rpc clients: {e}");
-            return;
-        }
-    };
-
+    let app_state = AppState::new("127.0.0.1:9224", "127.0.0.1:9225").await;
     let app = routing::any(any_handler)
         .layer(
             TraceLayer::new_for_http()

@@ -10,7 +10,7 @@ include!(concat!(env!("OUT_DIR"), "/nss_ops.rs"));
 pub async fn nss_put_inode(
     rpc_client: &RpcClient,
     key: String,
-    value: String,
+    value: Vec<u8>,
 ) -> Result<PutInodeResponse, RpcError> {
     let request_body = PutInodeRequest { key, value };
 

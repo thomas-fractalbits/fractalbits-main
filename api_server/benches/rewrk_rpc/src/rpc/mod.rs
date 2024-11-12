@@ -10,7 +10,7 @@ use futures::future::join_all;
 use futures_util::stream::FuturesUnordered;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use rpc_client_nss::RpcClient;
+use rpc_client_nss::RpcClientNss;
 use tokio::task::JoinHandle;
 use tokio::time::{timeout_at, Instant};
 
@@ -94,7 +94,7 @@ pub async fn start_tasks(
 // Futures must not be awaited without timeout.
 async fn benchmark_read(
     deadline: Instant,
-    rpc_client: RpcClient,
+    rpc_client: RpcClientNss,
     mut keys: GenKeys,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -175,7 +175,7 @@ async fn benchmark_read(
 // Futures must not be awaited without timeout.
 async fn benchmark_write(
     deadline: Instant,
-    rpc_client: RpcClient,
+    rpc_client: RpcClientNss,
     mut keys: GenKeys,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -215,7 +215,7 @@ async fn benchmark_write(
             };
             key.push('\0');
 
-            let value = key.clone();
+            let value = key.clone().as_bytes().into();
             let future =
                 async { rpc_client_nss::rpc::nss_put_inode(&rpc_client, key, value).await };
             futures.push(future);
@@ -273,8 +273,8 @@ impl RewrkConnector {
         }
     }
 
-    async fn connect(&self) -> anyhow::Result<RpcClient> {
-        Ok(RpcClient::new(&self.host).await.unwrap())
+    async fn connect(&self) -> anyhow::Result<RpcClientNss> {
+        Ok(RpcClientNss::new(&self.host).await.unwrap())
     }
 
     #[allow(dead_code)]

@@ -1,15 +1,15 @@
 use crate::{
     message::{Command, MessageHeader},
-    RpcClient, RpcError,
+    RpcClientBss, RpcErrorBss,
 };
 use bytes::{Bytes, BytesMut};
 use uuid::Uuid;
 
 pub async fn bss_put_blob(
-    rpc_client: &RpcClient,
+    rpc_client: &RpcClientBss,
     blob_id: Uuid,
     content: Bytes,
-) -> Result<usize, RpcError> {
+) -> Result<usize, RpcErrorBss> {
     let mut request_header = MessageHeader::default();
     request_header.id = rpc_client.gen_request_id();
     request_header.blob_id = blob_id.into_bytes();
@@ -25,10 +25,10 @@ pub async fn bss_put_blob(
 }
 
 pub async fn bss_get_blob(
-    rpc_client: &RpcClient,
+    rpc_client: &RpcClientBss,
     blob_id: Uuid,
     content: &mut Bytes,
-) -> Result<usize, RpcError> {
+) -> Result<usize, RpcErrorBss> {
     let mut request_header = MessageHeader::default();
     request_header.id = rpc_client.gen_request_id();
     request_header.blob_id = blob_id.into_bytes();

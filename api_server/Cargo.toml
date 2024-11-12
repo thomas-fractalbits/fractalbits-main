@@ -21,3 +21,4 @@ tower = "0.5.1"
 strum = { version = "0.26.3", features = ["derive"] }
 quick-xml = { version = "0.36.2", features = ["serialize"] }
 http-body-util = "0.1.2"
+uuid = { version = "1.11.0", features = ["v7"] }

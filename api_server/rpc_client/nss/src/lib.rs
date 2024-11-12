@@ -3,4 +3,5 @@ pub mod message;
 pub mod rpc;
 
 mod rpc_client;
-pub use rpc_client::{RpcClient, RpcError};
+pub use rpc_client::RpcClient as RpcClientNss;
+pub use rpc_client::RpcError as RpcErrorNss;
