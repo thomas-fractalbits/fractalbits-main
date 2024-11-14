@@ -38,7 +38,7 @@ pub struct MessageHeader {
     pub id: u32,
 
     /// The protocol command (method) for this message.
-    /// i32 size, defined as protobuf enum type
+    /// u32 size, defined as enum type
     pub command: Command,
 
     /// The version of the protocol implementation that originated this message.
@@ -74,7 +74,7 @@ impl Default for Command {
     }
 }
 
-// Safety: Command is defined as protobuf enum type (u32), and 0 as Invalid. There is also no padding
+// Safety: Command is defined as enum type (u32), and 0 as Invalid. There is also no padding
 // as verified from the zig side. With header checksum validation, we can also be sure no invalid
 // enum value being interpreted.
 unsafe impl Pod for Command {}
