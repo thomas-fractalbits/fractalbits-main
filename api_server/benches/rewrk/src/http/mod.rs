@@ -141,7 +141,7 @@ async fn benchmark(
 
         let mut request = Request::new(match user_input.method {
             Method::GET => Body::empty(),
-            Method::PUT => Body::from(key.clone()),
+            Method::PUT => Body::from(vec![0; 4096 - 256]),
                 _ => unimplemented!()
         });
         *request.method_mut() = user_input.method.clone();
