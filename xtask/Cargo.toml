@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 cmd_lib = "1.9.5"
 structopt = "0.3.26"
+uuid = { version = "1.11.0", features = ["v7"] }

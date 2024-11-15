@@ -2,6 +2,7 @@ mod build;
 mod cmd_bench;
 mod cmd_precheckin;
 mod cmd_service;
+mod cmd_tool;
 
 use cmd_lib::*;
 use structopt::StructOpt;
@@ -29,19 +30,27 @@ enum Cmd {
         #[structopt(long_help = "api_server/nss_rpc/bss_rpc")]
         server: String,
     },
+
+    #[structopt(about = "Run precheckin tests")]
+    Precheckin,
+
     #[structopt(about = "Service stop/start/restart")]
     Service {
         #[structopt(long_help = "stop/start/restart")]
         action: String,
     },
-    #[structopt(about = "Run precheckin tests")]
-    Precheckin,
+
+    #[structopt(about = "Run tool related commands (gen_uuids only for now)")]
+    Tool {
+        #[structopt(long_help = "gen_uuids")]
+        kind: String,
+    },
 }
 
 #[cmd_lib::main]
 fn main() -> CmdResult {
     match Cmd::from_args() {
-        Cmd::Precheckin => cmd_precheckin::run_precheckin()?,
+        Cmd::Precheckin => cmd_precheckin::run_cmd_precheckin()?,
         Cmd::Bench {
             workload,
             with_flame_graph,
@@ -57,6 +66,7 @@ fn main() -> CmdResult {
             "stop" | "start" | "restart" => cmd_service::run_cmd_service(&action)?,
             _ => print_help_and_exit(),
         },
+        Cmd::Tool { kind } => cmd_tool::run_cmd_tool(kind)?,
     }
     Ok(())
 }

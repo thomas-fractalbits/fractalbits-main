@@ -1,6 +1,6 @@
 use cmd_lib::*;
 
-pub fn run_precheckin() -> CmdResult {
+pub fn run_cmd_precheckin() -> CmdResult {
     run_cmd! {
         info "Building ...";
         zig build;
