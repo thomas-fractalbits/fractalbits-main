@@ -187,15 +187,13 @@ async fn benchmark_bss_write(
         let mut futures = Vec::new();
         for _ in 0..io_depth {
             let content = Bytes::from(vec![0; 4096 - 256]);
-            let uuid = uuids.pop_front();
-            if uuid.is_none() {
-                break;
-            }
+            let uuid = match uuids.pop_front() {
+                Some(uuid) => uuid,
+                None => break,
+            };
             let future = async {
-                let blob_id = match uuid {
-                    Some(uuid) => Uuid::parse_str(&uuid).unwrap(),
-                    None => unreachable!(),
-                };
+                let uuid = uuid;
+                let blob_id = Uuid::parse_str(&uuid).unwrap();
                 rpc_client.put_blob(blob_id, content).await
             };
             futures.push(future);
@@ -255,15 +253,13 @@ async fn benchmark_bss_read(
 
         let mut futures = Vec::new();
         for _ in 0..io_depth {
-            let uuid = uuids.pop_front();
-            if uuid.is_none() {
-                break;
-            }
+            let uuid = match uuids.pop_front() {
+                Some(uuid) => uuid,
+                None => break,
+            };
             let future = async {
-                let blob_id = match uuid {
-                    Some(uuid) => Uuid::parse_str(&uuid).unwrap(),
-                    None => unreachable!(),
-                };
+                let uuid = uuid;
+                let blob_id = Uuid::parse_str(&uuid).unwrap();
                 let mut content = Bytes::new();
                 rpc_client.get_blob(blob_id, &mut content).await
             };
