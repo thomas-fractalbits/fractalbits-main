@@ -41,9 +41,18 @@ enum Cmd {
     },
 
     #[structopt(about = "Run tool related commands (gen_uuids only for now)")]
-    Tool {
-        #[structopt(long_help = "gen_uuids")]
-        kind: String,
+    Tool(ToolKind),
+}
+
+#[derive(StructOpt)]
+enum ToolKind {
+    #[structopt(name = "gen_uuids")]
+    GenUuids {
+        #[structopt(short = "n", long_help = "Number of uuids", default_value = "1000000")]
+        num: u32,
+
+        #[structopt(short = "f", long_help = "File output", default_value = "uuids.data")]
+        file: String,
     },
 }
 
@@ -69,7 +78,7 @@ fn main() -> CmdResult {
             "stop" | "start" | "restart" => cmd_service::run_cmd_service(&action)?,
             _ => print_help_and_exit(),
         },
-        Cmd::Tool { kind } => cmd_tool::run_cmd_tool(kind)?,
+        Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
     }
     Ok(())
 }

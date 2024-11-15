@@ -31,7 +31,7 @@ pub fn stop_services() -> CmdResult {
         if let Ok(pids) = run_fun!(pidof $service) {
             for pid in pids.split_whitespace() {
                 run_cmd! {
-                    info "kill -9 for $service (pid=$pid) since using killall failed";
+                    info "Kill -9 for $service (pid=$pid) since using killall failed";
                     kill -9 $pid;
                     sleep 3;
                 }?;
@@ -40,7 +40,7 @@ pub fn stop_services() -> CmdResult {
 
         // make sure the process is really being killed
         if let Ok(pid) = run_fun!(pidof $service) {
-            cmd_die!("failed to stop $service: service is still running (pid=$pid)");
+            cmd_die!("Failed to stop $service: service is still running (pid=$pid)");
         }
     }
     Ok(())
@@ -112,9 +112,9 @@ pub fn start_api_service() -> CmdResult {
 
 fn check_pids(pids: &str) -> CmdResult {
     if pids.split_whitespace().count() > 1 {
-        error!("multiple processes were found: {pids}, stopping services ...");
+        error!("Multiple processes were found: {pids}, stopping services ...");
         stop_services()?;
-        cmd_die!("multiple processes were found: {pids}");
+        cmd_die!("Multiple processes were found: {pids}");
     }
     Ok(())
 }
