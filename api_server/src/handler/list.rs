@@ -1,5 +1,6 @@
 use axum::{
     extract::{Query, Request},
+    http::StatusCode,
     response, RequestExt,
 };
 use rpc_client_nss::RpcClientNss;
@@ -9,7 +10,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ListObjectsV2Options {
-    list_type: String,
+    list_type: Option<String>,
     continuation_token: Option<String>,
     delimiter: Option<String>,
     encoding_type: Option<String>,
@@ -24,7 +25,8 @@ pub async fn list_objects_v2(
     _rpc_client_nss: &RpcClientNss,
 ) -> response::Result<()> {
     let Query(opts): Query<ListObjectsV2Options> = request.extract_parts().await?;
-    assert_eq!("2", opts.list_type);
-    dbg!(opts);
+    if opts.list_type != Some("2".into()) {
+        return Err((StatusCode::BAD_REQUEST, "list-type wrong").into());
+    }
     todo!()
 }

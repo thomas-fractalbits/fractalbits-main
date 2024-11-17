@@ -73,7 +73,7 @@ async fn get_handler(
             (StatusCode::BAD_REQUEST, format!("TODO: {api_command}")).into_response()
         }
         None => {
-            if key.is_empty() {
+            if key == "/" {
                 if api_signature.list_type.is_some() {
                     list::list_objects_v2(request, rpc_client_nss)
                         .await
