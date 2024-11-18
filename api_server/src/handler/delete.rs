@@ -1,8 +1,5 @@
-use serde::Deserialize;
+mod delete_object;
+mod delete_objects;
 
-#[allow(dead_code)]
-#[derive(Debug, Deserialize)]
-pub struct DeleteObjectOptions {
-    #[serde(rename(deserialize = "versionId"))]
-    version_id: Option<String>,
-}
+pub use delete_object::delete_object;
+pub use delete_objects::delete_objects;

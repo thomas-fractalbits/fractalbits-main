@@ -57,6 +57,10 @@ pub async fn any_handler(
             )
             .await
         }
+        &Method::DELETE => delete_handler(request, key, rpc_client_nss, rpc_client_bss).await,
+        &Method::POST => {
+            post_handler(request, api_command, key, rpc_client_nss, rpc_client_bss).await
+        }
         method => (StatusCode::BAD_REQUEST, format!("TODO: method {method}")).into_response(),
     }
 }
@@ -129,5 +133,37 @@ async fn put_handler(
         None => put::put_object(request, key, rpc_client_nss, rpc_client_bss)
             .await
             .into_response(),
+    }
+}
+
+async fn delete_handler(
+    request: Request,
+    key: String,
+    rpc_client_nss: &RpcClientNss,
+    rpc_client_bss: &RpcClientBss,
+) -> Response {
+    if key == "/" {
+        StatusCode::BAD_REQUEST.into_response()
+    } else {
+        delete::delete_object(request, key, rpc_client_nss, rpc_client_bss)
+            .await
+            .into_response()
+    }
+}
+
+async fn post_handler(
+    request: Request,
+    api_command: Option<ApiCommand>,
+    key: String,
+    rpc_client_nss: &RpcClientNss,
+    rpc_client_bss: &RpcClientBss,
+) -> Response {
+    match (api_command, key.as_str()) {
+        (Some(ApiCommand::Delete), "/") => {
+            delete::delete_objects(request, rpc_client_nss, rpc_client_bss)
+                .await
+                .into_response()
+        }
+        (_, _) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
