@@ -14,6 +14,7 @@ use strum::EnumString;
 pub enum ApiCommand {
     Accelerate,
     Acl,
+    Attributes,
     Analytics,
     Cors,
     Delete,
