@@ -36,4 +36,18 @@ impl RpcClient {
         *body = resp.body;
         Ok(size as usize)
     }
+
+    pub async fn delete_blob(&self, blob_id: Uuid) -> Result<(), RpcError> {
+        let mut header = MessageHeader::default();
+        header.id = self.gen_request_id();
+        header.blob_id = blob_id.into_bytes();
+        header.command = Command::DeleteBlob;
+        header.size = MessageHeader::encode_len() as u64;
+
+        let msg_frame = MessageFrame::new(header, Bytes::new());
+        let _resp = self
+            .send_request(header.id, Message::Frame(msg_frame))
+            .await?;
+        Ok(())
+    }
 }

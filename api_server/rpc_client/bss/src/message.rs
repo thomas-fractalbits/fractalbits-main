@@ -66,6 +66,7 @@ pub enum Command {
     Invalid = 0,
     PutBlob = 1,
     GetBlob = 2,
+    DeleteBlob = 3,
 }
 
 #[allow(clippy::derivable_impls)]
