@@ -9,7 +9,7 @@ mod session;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use super::extract::{api_command::ApiCommandFromQuery, bucket_name::BucketName, key::Key};
+use super::extract::{api_command::ApiCommandFromQuery, bucket_name::BucketNameFromHost, key::Key};
 use super::AppState;
 use crate::extract::api_command::ApiCommand;
 use crate::extract::api_signature::ApiSignature;
@@ -25,12 +25,18 @@ use rpc_client_nss::RpcClientNss;
 pub async fn any_handler(
     State(app): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    BucketName(bucket_name): BucketName,
+    BucketNameFromHost(bucket_name_from_host): BucketNameFromHost,
     ApiCommandFromQuery(api_cmd): ApiCommandFromQuery,
     Key(key): Key,
     api_sig: ApiSignature,
     request: Request,
 ) -> Response {
+    let (bucket_name, key) = match bucket_name_from_host {
+        // Virtual-hosted-style request
+        Some(bucket_name) => (bucket_name, key),
+        // Path-style request
+        None => get_bucket_and_key_from_path(key),
+    };
     tracing::debug!(%bucket_name);
     let rpc_client_nss = app.get_rpc_client_nss(addr);
     let rpc_client_bss = app.get_rpc_client_bss(addr);
@@ -74,6 +80,24 @@ pub async fn any_handler(
         }
         method => (StatusCode::BAD_REQUEST, format!("TODO: method {method}")).into_response(),
     }
+}
+
+// Get bucket and key for path-style requests
+fn get_bucket_and_key_from_path(path: String) -> (String, String) {
+    let mut bucket = String::new();
+    let mut key = String::new();
+    let mut bucket_part = true;
+    path.chars().skip_while(|c| c == &'/').for_each(|c| {
+        if c == '/' {
+            bucket_part = false;
+        }
+        if bucket_part {
+            bucket.push(c);
+        } else {
+            key.push(c);
+        }
+    });
+    (bucket, key)
 }
 
 async fn head_handler(request: Request, key: String, rpc_client_nss: &RpcClientNss) -> Response {
