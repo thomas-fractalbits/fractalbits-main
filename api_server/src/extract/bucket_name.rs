@@ -25,7 +25,7 @@ where
             .map_err(|_| (StatusCode::NOT_FOUND, "host information not found"))?;
         let authority: Authority = host.parse::<Authority>().unwrap();
         let bucket_name = authority.host().strip_suffix(root_domain);
-        Ok(BucketNameFromHost(bucket_name.map(|s| s.to_owned())))
+        Ok(Self(bucket_name.map(|s| s.to_owned())))
     }
 }
 

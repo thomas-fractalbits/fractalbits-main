@@ -9,7 +9,9 @@ mod session;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use super::extract::{api_command::ApiCommandFromQuery, bucket_name::BucketNameFromHost, key::Key};
+use super::extract::{
+    api_command::ApiCommandFromQuery, bucket_name::BucketNameFromHost, key::KeyFromPath,
+};
 use super::AppState;
 use crate::extract::api_command::ApiCommand;
 use crate::extract::api_signature::ApiSignature;
@@ -27,15 +29,15 @@ pub async fn any_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     BucketNameFromHost(bucket_name_from_host): BucketNameFromHost,
     ApiCommandFromQuery(api_cmd): ApiCommandFromQuery,
-    Key(key): Key,
+    KeyFromPath(key_from_path): KeyFromPath,
     api_sig: ApiSignature,
     request: Request,
 ) -> Response {
     let (bucket_name, key) = match bucket_name_from_host {
         // Virtual-hosted-style request
-        Some(bucket_name) => (bucket_name, key),
+        Some(bucket_name) => (bucket_name, key_from_path),
         // Path-style request
-        None => get_bucket_and_key_from_path(key),
+        None => get_bucket_and_key_from_path(key_from_path),
     };
     tracing::debug!(%bucket_name);
     let rpc_client_nss = app.get_rpc_client_nss(addr);
