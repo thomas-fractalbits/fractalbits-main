@@ -37,7 +37,7 @@ pub async fn put_object(
     let object_layout = ObjectLayout {
         blob_id,
         timestamp,
-        size: size as u64,
+        size: content_len as u64,
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new()).unwrap();
     let _resp = rpc_client_nss

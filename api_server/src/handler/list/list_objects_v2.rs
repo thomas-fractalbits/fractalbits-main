@@ -81,11 +81,15 @@ pub async fn list_objects_v2(
 ) -> response::Result<Response> {
     let Query(opts): Query<ListObjectsV2Options> = request.extract_parts().await?;
     tracing::debug!("list_objects_v2 {opts:?}");
+
+    // Sanity checks
     if opts.list_type != Some("2".into()) {
         return Err((StatusCode::BAD_REQUEST, "list-type wrong").into());
     }
-    if opts.encoding_type != Some("url".into()) {
-        return Err((StatusCode::BAD_REQUEST, "invalid encoding-type").into());
+    if let Some(encoding_type) = opts.encoding_type {
+        if encoding_type != "url" {
+            return Err((StatusCode::BAD_REQUEST, "invalid encoding-type").into());
+        }
     }
 
     let max_keys = opts.max_keys.unwrap_or(1000);
