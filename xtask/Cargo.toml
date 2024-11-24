@@ -8,4 +8,5 @@ cmd_lib = "1.9.5"
 num_cpus = "1.16.0"
 rayon = "1.10.0"
 structopt = "0.3.26"
+strum = { version = "0.26.3", features = ["derive"] }
 uuid = { version = "1.11.0", features = ["v7"] }

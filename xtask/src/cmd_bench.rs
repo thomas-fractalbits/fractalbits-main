@@ -1,5 +1,6 @@
 use super::build::*;
 use super::cmd_service::*;
+use super::ServiceAction;
 use cmd_lib::*;
 
 pub fn prepare_bench() -> CmdResult {
@@ -20,7 +21,7 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
         _ => unimplemented!(),
     };
     // format for write test
-    build_bss_nss_server()?;
+    build_bss_nss_server(BuildMode::Release)?;
     if workload.as_str() == "write" {
         run_cmd! {
             info "Formatting ...";
@@ -34,9 +35,9 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
     let mut keys_limit = 10_000_000.to_string();
     match server {
         "api_server" => {
-            build_api_server("release")?;
+            build_api_server(BuildMode::Release)?;
             build_rewrk()?;
-            run_cmd_service("restart")?;
+            run_cmd_service(BuildMode::Release, ServiceAction::Restart, "all")?;
             uri = "http://mybucket.localhost:3000";
             bench_exe = "./target/release/rewrk";
             keys_limit = 1_500_000.to_string(); // api server is slower
@@ -119,7 +120,7 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
     }
 
     // stop service after benchmark to save cpu power
-    run_cmd_service("stop")?;
+    run_cmd_service(BuildMode::Release, ServiceAction::Stop, "all")?;
 
     Ok(())
 }

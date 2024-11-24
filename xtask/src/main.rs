@@ -4,8 +4,10 @@ mod cmd_precheckin;
 mod cmd_service;
 mod cmd_tool;
 
+use build::BuildMode;
 use cmd_lib::*;
 use structopt::StructOpt;
+use strum::EnumString;
 
 #[derive(StructOpt)]
 #[structopt(name = "xtask", about = "Misc project related tasks")]
@@ -37,11 +39,21 @@ enum Cmd {
     #[structopt(about = "Service stop/start/restart")]
     Service {
         #[structopt(long_help = "stop/start/restart")]
-        action: String,
+        action: ServiceAction,
+        #[structopt(long_help = "api_server/nss/bss/all", default_value = "all")]
+        service: String,
     },
 
     #[structopt(about = "Run tool related commands (gen_uuids only for now)")]
     Tool(ToolKind),
+}
+
+#[derive(StructOpt, EnumString)]
+#[strum(serialize_all = "snake_case")]
+enum ServiceAction {
+    Stop,
+    Start,
+    Restart,
 }
 
 #[derive(StructOpt)]
@@ -69,16 +81,23 @@ fn main() -> CmdResult {
                 cmd_bench::prepare_bench()?;
                 cmd_bench::run_cmd_bench(workload, with_flame_graph, &server).inspect_err(
                     |_| {
-                        cmd_service::run_cmd_service("stop").unwrap();
+                        cmd_service::run_cmd_service(
+                            BuildMode::Release,
+                            ServiceAction::Stop,
+                            "all",
+                        )
+                        .unwrap();
                     },
                 )?;
             }
             _ => print_help_and_exit(),
         },
-        Cmd::Service { action } => match action.as_str() {
-            "stop" | "start" | "restart" => cmd_service::run_cmd_service(&action)?,
-            _ => print_help_and_exit(),
-        },
+        Cmd::Service { action, service } => {
+            // In case they have never been built before
+            build::build_bss_nss_server(BuildMode::Debug)?;
+            build::build_api_server(BuildMode::Debug)?;
+            cmd_service::run_cmd_service(BuildMode::Debug, action, &service)?
+        }
         Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
     }
     Ok(())

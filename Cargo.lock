@@ -2561,6 +2561,7 @@ dependencies = [
  "num_cpus",
  "rayon",
  "structopt",
+ "strum",
  "uuid",
 ]
 

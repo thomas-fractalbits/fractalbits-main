@@ -1,6 +1,9 @@
 use cmd_lib::*;
 
-const ZIG_BUILD_OPTS: &str = "--release=safe"; // or "" for debugging
+pub enum BuildMode {
+    Debug,
+    Release,
+}
 
 pub fn build_rewrk() -> CmdResult {
     run_cmd! {
@@ -18,18 +21,25 @@ pub fn build_rewrk_rpc() -> CmdResult {
     }
 }
 
-pub fn build_bss_nss_server() -> CmdResult {
+pub fn build_bss_nss_server(mode: BuildMode) -> CmdResult {
+    let opts = match mode {
+        BuildMode::Debug => "",
+        BuildMode::Release => "--release=safe",
+    };
     run_cmd! {
         info "Building bss and nss server ...";
-        zig build $ZIG_BUILD_OPTS;
+        zig build $opts;
     }
 }
 
-pub fn build_api_server(target: &str) -> CmdResult {
-    let mode = if target == "release" { "--release" } else { "" };
+pub fn build_api_server(mode: BuildMode) -> CmdResult {
+    let opts = match mode {
+        BuildMode::Debug => "",
+        BuildMode::Release => "--release",
+    };
     run_cmd! {
         info "Building api_server ...";
         cd api_server;
-        cargo build $mode;
+        cargo build $opts;
     }
 }
