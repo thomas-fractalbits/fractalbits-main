@@ -2,6 +2,8 @@ use super::build::BuildMode;
 use super::{ServiceAction, ServiceName};
 use cmd_lib::*;
 
+const ROOT_BLOB_ID: &str = "947ef2be-44b2-4ac2-969b-2574eb85662b";
+
 pub fn run_cmd_service(
     build_mode: BuildMode,
     action: ServiceAction,
@@ -77,7 +79,7 @@ pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
 pub fn start_nss_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
-    if !run_cmd!(ls ./data | grep -q -E ".*-.*-.*-.*").is_ok() {
+    if run_cmd!(test -f ./data/$ROOT_BLOB_ID).is_err() {
         run_cmd! {
             info "Could not find any blobs, formatting at first ...";
             mkdir -p data;
@@ -116,10 +118,16 @@ fn create_systemd_unit_file(service: ServiceName, build_mode: BuildMode) -> CmdR
     let pwd = run_fun!(pwd)?;
     let build = build_mode.as_ref();
     let service_name = service.as_ref();
+    let mut env_settings = "";
     let exec_start = match service {
         ServiceName::Bss => format!("{pwd}/zig-out/bin/bss_server"),
         ServiceName::Nss => format!("{pwd}/zig-out/bin/nss_server"),
-        ServiceName::ApiServer => format!("{pwd}/target/{build}/api_server"),
+        ServiceName::ApiServer => {
+            if let BuildMode::Debug = build_mode {
+                env_settings = "\nEnvironment=\"RUST_LOG=debug\"";
+            }
+            format!("{pwd}/target/{build}/api_server")
+        }
         ServiceName::All => unreachable!(),
     };
     let systemd_unit_content = format!(
@@ -129,7 +137,7 @@ Description={service_name} Service
 
 [Service]
 LimitNOFILE=65536
-WorkingDirectory={pwd}
+WorkingDirectory={pwd}{env_settings}
 ExecStart={exec_start}
 
 [Install]

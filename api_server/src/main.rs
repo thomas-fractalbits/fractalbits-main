@@ -14,7 +14,7 @@ async fn main() {
                 format!("{}=warn,tower_http=warn", env!("CARGO_CRATE_NAME")).into()
             }),
         )
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
     let app_state = AppState::new("127.0.0.1:9224".into(), "127.0.0.1:9225".into()).await;
