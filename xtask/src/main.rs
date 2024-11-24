@@ -7,7 +7,7 @@ mod cmd_tool;
 use build::BuildMode;
 use cmd_lib::*;
 use structopt::StructOpt;
-use strum::EnumString;
+use strum::{AsRefStr, EnumString};
 
 #[derive(StructOpt)]
 #[structopt(name = "xtask", about = "Misc project related tasks")]
@@ -20,7 +20,7 @@ enum Cmd {
             long_help = "Run with pre-defined workload (read/write)",
             default_value = "write"
         )]
-        workload: String,
+        workload: BenchWorkload,
 
         #[structopt(
             short = "f",
@@ -30,7 +30,7 @@ enum Cmd {
         with_flame_graph: bool,
 
         #[structopt(long_help = "api_server/nss_rpc/bss_rpc")]
-        server: String,
+        service: BenchService,
     },
 
     #[structopt(about = "Run precheckin tests")]
@@ -41,11 +41,26 @@ enum Cmd {
         #[structopt(long_help = "stop/start/restart")]
         action: ServiceAction,
         #[structopt(long_help = "api_server/nss/bss/all", default_value = "all")]
-        service: String,
+        service: ServiceName,
     },
 
     #[structopt(about = "Run tool related commands (gen_uuids only for now)")]
     Tool(ToolKind),
+}
+
+#[derive(AsRefStr, EnumString)]
+#[strum(serialize_all = "snake_case")]
+enum BenchWorkload {
+    Read,
+    Write,
+}
+
+#[derive(EnumString)]
+#[strum(serialize_all = "snake_case")]
+enum BenchService {
+    ApiServer,
+    NssRpc,
+    BssRpc,
 }
 
 #[derive(EnumString)]
@@ -54,6 +69,15 @@ enum ServiceAction {
     Stop,
     Start,
     Restart,
+}
+
+#[derive(AsRefStr, EnumString, Copy, Clone)]
+#[strum(serialize_all = "snake_case")]
+enum ServiceName {
+    ApiServer,
+    Bss,
+    Nss,
+    All,
 }
 
 #[derive(StructOpt)]
@@ -73,38 +97,27 @@ fn main() -> CmdResult {
     match Cmd::from_args() {
         Cmd::Precheckin => cmd_precheckin::run_cmd_precheckin()?,
         Cmd::Bench {
+            service,
             workload,
             with_flame_graph,
-            server,
-        } => match server.as_str() {
-            "api_server" | "nss_rpc" | "bss_rpc" => {
-                cmd_bench::prepare_bench()?;
-                cmd_bench::run_cmd_bench(workload, with_flame_graph, &server).inspect_err(
-                    |_| {
-                        cmd_service::run_cmd_service(
-                            BuildMode::Release,
-                            ServiceAction::Stop,
-                            "all",
-                        )
-                        .unwrap();
-                    },
-                )?;
-            }
-            _ => print_help_and_exit(),
-        },
+        } => {
+            cmd_bench::prepare_bench()?;
+            cmd_bench::run_cmd_bench(service, workload, with_flame_graph).inspect_err(|_| {
+                cmd_service::run_cmd_service(
+                    BuildMode::Release,
+                    ServiceAction::Stop,
+                    ServiceName::All,
+                )
+                .unwrap();
+            })?;
+        }
         Cmd::Service { action, service } => {
             // In case they have never been built before
             build::build_bss_nss_server(BuildMode::Debug)?;
             build::build_api_server(BuildMode::Debug)?;
-            cmd_service::run_cmd_service(BuildMode::Debug, action, &service)?
+            cmd_service::run_cmd_service(BuildMode::Debug, action, service)?
         }
         Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
     }
     Ok(())
-}
-
-fn print_help_and_exit() {
-    Cmd::clap().print_help().unwrap();
-    println!();
-    std::process::exit(1);
 }

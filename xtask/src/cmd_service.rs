@@ -1,8 +1,12 @@
 use super::build::BuildMode;
-use super::ServiceAction;
+use super::{ServiceAction, ServiceName};
 use cmd_lib::*;
 
-pub fn run_cmd_service(build_mode: BuildMode, action: ServiceAction, service: &str) -> CmdResult {
+pub fn run_cmd_service(
+    build_mode: BuildMode,
+    action: ServiceAction,
+    service: ServiceName,
+) -> CmdResult {
     match action {
         ServiceAction::Stop => stop_services(service),
         ServiceAction::Start => start_services(build_mode, service),
@@ -13,14 +17,17 @@ pub fn run_cmd_service(build_mode: BuildMode, action: ServiceAction, service: &s
     }
 }
 
-pub fn stop_services(service: &str) -> CmdResult {
+pub fn stop_services(service: ServiceName) -> CmdResult {
     info!("Killing previous services (if any) ...");
     run_cmd!(sync)?;
 
-    let services = if service == "all" {
-        vec!["bss_server", "nss_server", "api_server"]
-    } else {
-        vec![service]
+    let services: Vec<String> = match service {
+        ServiceName::All => vec![
+            "bss_server".into(),
+            "nss_server".into(),
+            "api_server".into(),
+        ],
+        single_service => vec![single_service.as_ref().to_owned()],
     };
 
     for service in services {
@@ -52,17 +59,16 @@ pub fn stop_services(service: &str) -> CmdResult {
     Ok(())
 }
 
-pub fn start_services(build_mode: BuildMode, service: &str) -> CmdResult {
-    if service == "bss" || service == "all" {
-        start_bss_service()?;
-    }
-
-    if service == "nss" || service == "all" {
-        start_nss_service()?;
-    }
-
-    if service == "api_server" || service == "all" {
-        start_api_server(build_mode)?;
+pub fn start_services(build_mode: BuildMode, service: ServiceName) -> CmdResult {
+    match service {
+        ServiceName::Bss => start_bss_service()?,
+        ServiceName::Nss => start_nss_service()?,
+        ServiceName::ApiServer => start_api_server(build_mode)?,
+        ServiceName::All => {
+            start_bss_service()?;
+            start_nss_service()?;
+            start_api_server(build_mode)?;
+        }
     }
     Ok(())
 }
@@ -77,7 +83,7 @@ pub fn start_bss_service() -> CmdResult {
         sleep $bss_wait_secs;
     }?;
     let bss_server_pid = run_fun!(pidof bss_server)?;
-    check_pids("bss", &bss_server_pid)?;
+    check_pids(ServiceName::Bss, &bss_server_pid)?;
     info!("bss server (pid={bss_server_pid}) started");
     Ok(())
 }
@@ -92,7 +98,7 @@ pub fn start_nss_service() -> CmdResult {
         sleep $nss_wait_secs;
     }?;
     let nss_server_pid = run_fun!(pidof nss_server)?;
-    check_pids("nss", &nss_server_pid)?;
+    check_pids(ServiceName::Nss, &nss_server_pid)?;
     info!("nss server (pid={nss_server_pid}) started");
     Ok(())
 }
@@ -121,12 +127,12 @@ pub fn start_api_server(mode: BuildMode) -> CmdResult {
             return Err(e);
         }
     };
-    check_pids("api_server", &api_server_pid)?;
+    check_pids(ServiceName::ApiServer, &api_server_pid)?;
     info!("api server (pid={api_server_pid}) started");
     Ok(())
 }
 
-fn check_pids(service: &str, pids: &str) -> CmdResult {
+fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
     if pids.split_whitespace().count() > 1 {
         error!("Multiple processes were found: {pids}, stopping services ...");
         stop_services(service)?;

@@ -1,6 +1,6 @@
 use super::build::*;
 use super::cmd_service::*;
-use super::ServiceAction;
+use super::{BenchService, BenchWorkload, ServiceAction, ServiceName};
 use cmd_lib::*;
 
 pub fn prepare_bench() -> CmdResult {
@@ -14,15 +14,18 @@ pub fn prepare_bench() -> CmdResult {
     Ok(())
 }
 
-pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> CmdResult {
-    let http_method = match workload.as_str() {
-        "write" => "put",
-        "read" => "get",
-        _ => unimplemented!(),
+pub fn run_cmd_bench(
+    service: BenchService,
+    workload: BenchWorkload,
+    with_flame_graph: bool,
+) -> CmdResult {
+    let http_method = match workload {
+        BenchWorkload::Write => "put",
+        BenchWorkload::Read => "get",
     };
     // format for write test
     build_bss_nss_server(BuildMode::Release)?;
-    if workload.as_str() == "write" {
+    if let BenchWorkload::Write = workload {
         run_cmd! {
             info "Formatting ...";
             ./zig-out/bin/mkfs;
@@ -31,13 +34,14 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
 
     let uri;
     let bench_exe;
+    let workload = workload.as_ref();
     let mut bench_opts = Vec::new();
     let mut keys_limit = 10_000_000.to_string();
-    match server {
-        "api_server" => {
+    match service {
+        BenchService::ApiServer => {
             build_api_server(BuildMode::Release)?;
             build_rewrk()?;
-            run_cmd_service(BuildMode::Release, ServiceAction::Restart, "all")?;
+            run_cmd_service(BuildMode::Release, ServiceAction::Restart, ServiceName::All)?;
             uri = "http://mybucket.localhost:3000";
             bench_exe = "./target/release/rewrk";
             keys_limit = 1_500_000.to_string(); // api server is slower
@@ -52,7 +56,7 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
                 &keys_limit,
             ]);
         }
-        "nss_rpc" => {
+        BenchService::NssRpc => {
             build_rewrk_rpc()?;
             start_nss_service()?;
             uri = "127.0.0.1:9224";
@@ -63,12 +67,12 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
                 "-c",
                 "500",
                 "-w",
-                &workload,
+                workload,
                 "-k",
                 &keys_limit,
             ]);
         }
-        "bss_rpc" => {
+        BenchService::BssRpc => {
             build_rewrk_rpc()?;
             start_bss_service()?;
             uri = "127.0.0.1:9225";
@@ -79,14 +83,13 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
                 "-c",
                 "500",
                 "-w",
-                &workload,
+                workload,
                 "-p",
                 "bss",
                 "-k",
                 &keys_limit,
             ]);
         }
-        _ => unreachable!(),
     }
 
     let duration_secs = 30;
@@ -120,7 +123,7 @@ pub fn run_cmd_bench(workload: String, with_flame_graph: bool, server: &str) -> 
     }
 
     // stop service after benchmark to save cpu power
-    run_cmd_service(BuildMode::Release, ServiceAction::Stop, "all")?;
+    run_cmd_service(BuildMode::Release, ServiceAction::Stop, ServiceName::All)?;
 
     Ok(())
 }
