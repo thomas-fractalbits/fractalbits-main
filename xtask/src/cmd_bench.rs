@@ -24,20 +24,13 @@ pub fn run_cmd_bench(
         BenchWorkload::Read => "get",
     };
     let build_mode = BuildMode::Release;
-    // format for write test
-    build_bss_nss_server(build_mode)?;
-    if let BenchWorkload::Write = workload {
-        run_cmd! {
-            info "Formatting ...";
-            ./zig-out/bin/mkfs;
-        }?;
-    }
-
     let uri;
     let bench_exe;
     let workload = workload.as_ref();
     let mut bench_opts = Vec::new();
     let mut keys_limit = 10_000_000.to_string();
+
+    build_bss_nss_server(build_mode)?;
     match service {
         BenchService::ApiServer => {
             build_api_server(build_mode)?;
