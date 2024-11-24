@@ -12,7 +12,7 @@ async fn test_basic_blob_io() {
     // Skip testing if blob storage server is not up
     if let Ok(rpc_client) = RpcClientBss::new(url).await {
         for _ in 0..1024 {
-            let header_len = message::MessageHeader::encode_len();
+            let header_len = message::MessageHeader::SIZE;
             let blob_id = Uuid::now_v7();
             let content = Bytes::from((1..256).fake::<String>());
             let mut readback_content = Bytes::new();
