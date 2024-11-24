@@ -17,7 +17,7 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let app_state = AppState::new("127.0.0.1:9224", "127.0.0.1:9225").await;
+    let app_state = AppState::new("127.0.0.1:9224".into(), "127.0.0.1:9225".into()).await;
     let app = routing::any(any_handler)
         .layer(
             TraceLayer::new_for_http()

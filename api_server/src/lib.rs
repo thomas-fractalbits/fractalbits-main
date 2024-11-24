@@ -3,24 +3,28 @@ pub mod handler;
 mod object_layout;
 mod response_xml;
 
-use rpc_client_bss::RpcClientBss;
+use rpc_client_bss::{RpcClientBss, RpcErrorBss};
 use rpc_client_nss::RpcClientNss;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
+use tokio::sync::mpsc::{self, Receiver, Sender};
+
+pub type BlobId = uuid::Uuid;
 
 pub struct AppState {
     pub rpc_clients_nss: Vec<RpcClientNss>,
     pub rpc_clients_bss: Vec<RpcClientBss>,
+    pub blob_deletion: Sender<BlobId>,
 }
 
 impl AppState {
     const MAX_NSS_CONNECTION: usize = 8;
     const MAX_BSS_CONNECTION: usize = 8;
 
-    pub async fn new(nss_ip: &str, bss_ip: &str) -> Self {
+    pub async fn new(nss_ip: String, bss_ip: String) -> Self {
         let mut rpc_clients_nss = Vec::with_capacity(Self::MAX_NSS_CONNECTION);
         for _i in 0..AppState::MAX_NSS_CONNECTION {
-            let rpc_client_nss = RpcClientNss::new(nss_ip)
+            let rpc_client_nss = RpcClientNss::new(&nss_ip)
                 .await
                 .expect("rpc client nss failure");
             rpc_clients_nss.push(rpc_client_nss);
@@ -28,15 +32,23 @@ impl AppState {
 
         let mut rpc_clients_bss = Vec::with_capacity(Self::MAX_BSS_CONNECTION);
         for _i in 0..AppState::MAX_BSS_CONNECTION {
-            let rpc_client_bss = RpcClientBss::new(bss_ip)
+            let rpc_client_bss = RpcClientBss::new(&bss_ip)
                 .await
                 .expect("rpc client bss failure");
             rpc_clients_bss.push(rpc_client_bss);
         }
 
+        let (tx, rx) = mpsc::channel(1024 * 1024);
+        tokio::spawn(async move {
+            if let Err(e) = Self::blob_deletion_task(&bss_ip, rx).await {
+                tracing::error!("FATAL: blob deletion task error: {e}");
+            }
+        });
+
         Self {
             rpc_clients_nss,
             rpc_clients_bss,
+            blob_deletion: tx,
         }
     }
 
@@ -58,5 +70,19 @@ impl AppState {
         }
         let hash = calculate_hash(&addr) % Self::MAX_BSS_CONNECTION;
         &self.rpc_clients_bss[hash]
+    }
+
+    pub async fn blob_deletion_task(
+        bss_ip: &str,
+        mut input: Receiver<BlobId>,
+    ) -> Result<(), RpcErrorBss> {
+        let rpc_client_bss = RpcClientBss::new(bss_ip).await?;
+        while let Some(blob_id) = input.recv().await {
+            rpc_client_bss
+                .delete_blob(blob_id)
+                .await
+                .inspect_err(|e| tracing::error!("delete {} failed: {}", blob_id, e))?;
+        }
+        Ok(())
     }
 }

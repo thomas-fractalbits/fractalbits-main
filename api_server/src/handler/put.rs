@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::object_layout::ObjectLayout;
+use crate::{object_layout::ObjectLayout, BlobId};
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -10,6 +10,7 @@ use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
+use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
 pub async fn put_object(
@@ -17,6 +18,7 @@ pub async fn put_object(
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
+    blob_deletion: Sender<BlobId>,
 ) -> Result<()> {
     // Write data at first
     // TODO: async stream
@@ -56,10 +58,10 @@ pub async fn put_object(
     };
     if !old_object_bytes.is_empty() {
         let old_object = rkyv::from_bytes::<ObjectLayout, Error>(&old_object_bytes).unwrap();
-        rpc_client_bss
-            .delete_blob(old_object.blob_id)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+        let blob_id = old_object.blob_id;
+        if let Err(e) = blob_deletion.send(blob_id).await {
+            tracing::warn!("Failed to send blob {blob_id} for background deletion: {e}");
+        }
     }
 
     Ok(())

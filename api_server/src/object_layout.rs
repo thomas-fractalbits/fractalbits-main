@@ -1,11 +1,11 @@
+use crate::BlobId;
 use rkyv::{Archive, Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Archive, Deserialize, Serialize)]
 pub struct ObjectLayout {
     pub timestamp: u64,
     pub size: u64,
-    pub blob_id: Uuid,
+    pub blob_id: BlobId,
     // TODO: pub state: mpu related states, tombstone state, etc
 }
 

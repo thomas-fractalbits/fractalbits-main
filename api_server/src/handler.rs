@@ -15,6 +15,7 @@ use super::extract::{
 use super::AppState;
 use crate::extract::api_command::ApiCommand;
 use crate::extract::api_signature::ApiSignature;
+use crate::BlobId;
 use axum::http::status::StatusCode;
 use axum::http::Method;
 use axum::{
@@ -23,6 +24,7 @@ use axum::{
 };
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
+use tokio::sync::mpsc::Sender;
 
 pub async fn any_handler(
     State(app): State<Arc<AppState>>,
@@ -63,6 +65,7 @@ pub async fn any_handler(
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
+                app.blob_deletion.clone(),
             )
             .await
         }
@@ -155,6 +158,7 @@ async fn put_handler(
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
+    blob_deletion: Sender<BlobId>,
 ) -> Response {
     match (api_cmd, api_sig.part_number, api_sig.upload_id) {
         (Some(api_cmd), _, _) => {
@@ -171,7 +175,7 @@ async fn put_handler(
         .await
         .into_response(),
         (None, None, None) if key != "/" => {
-            put::put_object(request, key, rpc_client_nss, rpc_client_bss)
+            put::put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion)
                 .await
                 .into_response()
         }
