@@ -111,10 +111,10 @@ pub async fn list_objects_v2(
     };
 
     for inode in inodes {
-        let object = rkyv::from_bytes::<ObjectLayout, Error>(&inode.inode).unwrap();
-        dbg!(&inode.key);
-        dbg!(object.timestamp);
-        dbg!(object.size);
+        let _object = rkyv::from_bytes::<ObjectLayout, Error>(&inode.inode).unwrap();
+        // dbg!(&inode.key);
+        // dbg!(object.timestamp);
+        // dbg!(object.size);
     }
 
     Ok(Xml(ListBucketResult::default()).into_response())

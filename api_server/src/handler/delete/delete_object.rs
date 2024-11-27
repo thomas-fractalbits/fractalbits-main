@@ -30,6 +30,6 @@ pub async fn delete_object(
     };
 
     let object = rkyv::from_bytes::<ObjectLayout, Error>(&object_bytes).unwrap();
-    rpc_client_bss.delete_blob(object.blob_id).await.unwrap();
+    rpc_client_bss.delete_blob(object.blob_id()).await.unwrap();
     Ok(())
 }

@@ -52,7 +52,7 @@ pub async fn get_object(
     let object = rkyv::from_bytes::<ObjectLayout, Error>(&object_bytes).unwrap();
     let mut content = Bytes::new();
     let _size = rpc_client_bss
-        .get_blob(object.blob_id, &mut content)
+        .get_blob(object.blob_id(), &mut content)
         .await
         .unwrap();
     Ok(content)

@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{object_layout::ObjectLayout, BlobId};
+use crate::{object_layout::*, BlobId};
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -36,10 +36,14 @@ pub async fn put_object(
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
+    let etag = String::new();
     let object_layout = ObjectLayout {
-        blob_id,
         timestamp,
-        size: content_len as u64,
+        state: ObjectState::Normal(ObjectData {
+            size: size as u64,
+            blob_id,
+            etag,
+        }),
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new()).unwrap();
     let resp = rpc_client_nss
@@ -58,7 +62,7 @@ pub async fn put_object(
     };
     if !old_object_bytes.is_empty() {
         let old_object = rkyv::from_bytes::<ObjectLayout, Error>(&old_object_bytes).unwrap();
-        let blob_id = old_object.blob_id;
+        let blob_id = old_object.blob_id();
         if let Err(e) = blob_deletion.send(blob_id).await {
             tracing::warn!("Failed to send blob {blob_id} for background deletion: {e}");
         }

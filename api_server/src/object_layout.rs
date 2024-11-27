@@ -4,13 +4,39 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[derive(Archive, Deserialize, Serialize)]
 pub struct ObjectLayout {
     pub timestamp: u64,
-    pub size: u64,
-    pub blob_id: BlobId,
-    // TODO: pub state: mpu related states, tombstone state, etc
+    pub state: ObjectState,
 }
 
 impl ObjectLayout {
-    const _SIZE_OK: () = assert!(size_of::<Self>() == 32);
-    const _ALIGNMENT_OK: () = assert!(align_of::<Self>() == 8);
-    pub const ALIGNMENT: usize = align_of::<Self>();
+    pub fn blob_id(&self) -> BlobId {
+        match self.state {
+            ObjectState::Normal(ref data) => data.blob_id.clone(),
+            ObjectState::Mpu(_) => todo!(),
+        }
+    }
+}
+
+#[derive(Archive, Deserialize, Serialize)]
+pub enum ObjectState {
+    Normal(ObjectData),
+    Mpu(MpuState),
+}
+
+#[derive(Archive, Deserialize, Serialize)]
+pub enum MpuState {
+    Uploading,
+    Aborted,
+    Completed {
+        size: u64,
+        etag: String,
+        part_number: u16,
+    },
+}
+
+/// Data stored in normal object or mpu parts
+#[derive(Archive, Deserialize, Serialize)]
+pub struct ObjectData {
+    pub size: u64,
+    pub etag: String,
+    pub blob_id: BlobId,
 }
