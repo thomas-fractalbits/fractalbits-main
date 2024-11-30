@@ -31,7 +31,7 @@ pub fn build_bss_nss_server(mode: BuildMode) -> CmdResult {
     };
     run_cmd! {
         info "Building bss and nss server ...";
-        zig build $opts;
+        zig build $opts 2>&1;
         info "Building bss and nss server done";
     }
 }

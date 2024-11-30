@@ -3,12 +3,12 @@ use cmd_lib::*;
 pub fn run_cmd_precheckin() -> CmdResult {
     run_cmd! {
         info "Building ...";
-        zig build;
+        zig build 2>&1;
     }?;
 
     run_cmd! {
         info "Running zig unit tests ...";
-        zig build test --summary all;
+        zig build test --summary all 2>&1;
     }?;
 
     run_cmd! {
