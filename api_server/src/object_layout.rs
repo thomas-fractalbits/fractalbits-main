@@ -10,7 +10,7 @@ pub struct ObjectLayout {
 impl ObjectLayout {
     pub fn blob_id(&self) -> BlobId {
         match self.state {
-            ObjectState::Normal(ref data) => data.blob_id.clone(),
+            ObjectState::Normal(ref data) => data.blob_id,
             ObjectState::Mpu(_) => todo!(),
         }
     }

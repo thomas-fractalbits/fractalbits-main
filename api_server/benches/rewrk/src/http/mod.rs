@@ -1,14 +1,15 @@
 use std::collections::{HashMap, VecDeque};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::time::Duration;
-use std::convert::TryFrom;
 
 use anyhow::anyhow;
 use futures_util::stream::FuturesUnordered;
 use futures_util::TryFutureExt;
 use http::header::{self, HeaderMap};
+use http::uri::Uri;
 use http::{Method, Request};
 use hyper::body::Bytes;
 use hyper::client::conn::{self, SendRequest};
@@ -20,7 +21,6 @@ use tokio::time::error::Elapsed;
 use tokio::time::{sleep, timeout_at, Instant};
 use tower::util::ServiceExt;
 use tower::Service;
-use http::uri::Uri;
 
 use self::usage::Usage;
 use self::user_input::{Scheme, UserInput};
@@ -51,7 +51,11 @@ impl BenchType {
     }
 }
 
-fn read_keys(filename: &str, num_tasks: usize, keys_limit: usize) -> Vec<VecDeque<String>> {
+fn read_keys(
+    filename: &str,
+    num_tasks: usize,
+    keys_limit: usize,
+) -> Vec<VecDeque<String>> {
     let file = File::open(filename).unwrap();
     let mut res = vec![VecDeque::new(); num_tasks];
     let mut i = 0;
@@ -95,7 +99,8 @@ pub async fn start_tasks(
 
     for _i in 0..connections {
         let keys = gen_keys.pop().unwrap();
-        let handle = tokio::spawn(benchmark(deadline, bench_type, user_input.clone(), keys));
+        let handle =
+            tokio::spawn(benchmark(deadline, bench_type, user_input.clone(), keys));
 
         handles.push(handle);
     }
@@ -143,7 +148,7 @@ async fn benchmark(
         let mut request = Request::new(match user_input.method {
             Method::GET => Body::empty(),
             Method::PUT => Body::from(vec![0; 4096 - 256]),
-                _ => unimplemented!()
+            _ => unimplemented!(),
         });
         *request.method_mut() = user_input.method.clone();
 
