@@ -81,7 +81,7 @@ pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
 pub fn start_nss_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
-    if run_cmd!(test -f ./data/$ROOT_BLOB_ID).is_err() {
+    if run_cmd!(test -f ./data/current/$ROOT_BLOB_ID).is_err() {
         run_cmd! {
             info "Could not find root blob ($ROOT_BLOB_ID), formatting at first ...";
             bash -c "mkdir -p data/{current,pending}";
