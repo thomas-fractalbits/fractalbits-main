@@ -75,6 +75,7 @@ pub fn run_cmd_bench(
             start_bss_service(build_mode)?;
             uri = "127.0.0.1:9225";
             bench_exe = "./target/release/rewrk_rpc";
+            keys_limit = 2_000_000.to_string();
             bench_opts.extend_from_slice(&[
                 "-t",
                 "24",
