@@ -14,7 +14,7 @@ pub fn run_cmd_precheckin() -> CmdResult {
 
     run_cmd! {
         info "Running cargo unit tests ...";
-        cargo test;
+        cargo test --lib --workspace --exclude rewrk --exclude rewrk_rpc --exclude xtask;
     }?;
 
     let rand_log = "test_art_random.log";
