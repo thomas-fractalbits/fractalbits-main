@@ -20,6 +20,7 @@ pub fn run_cmd_precheckin() -> CmdResult {
     let rand_log = "test_art_random.log";
     run_cmd! {
         info "Running art tests (random) with log $rand_log ...";
+        ./zig-out/bin/mkfs;
         ./zig-out/bin/test_art --tests random --size 400000 --ops 1000000 -d 20 &> $rand_log;
     }
     .map_err(|e| {
@@ -30,6 +31,7 @@ pub fn run_cmd_precheckin() -> CmdResult {
     let fat_log = "test_art_fat.log";
     run_cmd! {
         info "Running art tests (fat) with log $fat_log ...";
+        ./zig-out/bin/mkfs;
         ./zig-out/bin/test_art --tests fat --ops 1000000 &> $fat_log;
     }
     .map_err(|e| {
@@ -40,6 +42,7 @@ pub fn run_cmd_precheckin() -> CmdResult {
     let async_art_log = "test_async_art.log";
     run_cmd! {
         info "Running async art tests with log $async_art_log ...";
+        ./zig-out/bin/mkfs;
         ./zig-out/bin/test_async_art --fresh -p 20 &> $async_art_log;
         ./zig-out/bin/test_async_art -p 20 &>> $async_art_log;
         ./zig-out/bin/test_async_art -p 20 &>> $async_art_log;
