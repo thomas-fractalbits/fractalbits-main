@@ -43,7 +43,7 @@ pub fn run_cmd_precheckin() -> CmdResult {
     run_cmd! {
         info "Running async art tests with log $async_art_log ...";
         ./zig-out/bin/mkfs;
-        ./zig-out/bin/test_async_art --fresh -p 20 &> $async_art_log;
+        ./zig-out/bin/test_async_art -p 20 &> $async_art_log;
         ./zig-out/bin/test_async_art -p 20 &>> $async_art_log;
         ./zig-out/bin/test_async_art -p 20 &>> $async_art_log;
     }
