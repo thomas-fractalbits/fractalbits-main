@@ -1,4 +1,4 @@
-use axum::{extract::Request, response};
+use axum::{extract::Request, http::StatusCode, response};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
@@ -44,15 +44,11 @@ pub async fn upload_part(
     rpc_client_bss: &RpcClientBss,
     blob_deletion: Sender<BlobId>,
 ) -> response::Result<()> {
+    if part_number < 1 || part_number > 10_000 {
+        return Err((StatusCode::BAD_REQUEST, "invalid part number").into());
+    }
     // TODO: check upload_id
-    let key = get_upload_part_key(key, part_number);
-    put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion).await
-}
 
-fn get_upload_part_key(mut key: String, part_number: u64) -> String {
-    assert_eq!(Some('\0'), key.pop());
-    key.push('%');
-    key.push_str(&part_number.to_string());
-    key.push('\0');
-    key
+    let key = super::get_upload_part_key(key, part_number);
+    put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion).await
 }

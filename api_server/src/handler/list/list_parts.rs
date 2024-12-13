@@ -1,17 +1,22 @@
 use crate::response_xml::Xml;
 use axum::{
     extract::{Query, Request},
+    http::StatusCode,
     response::{self, IntoResponse, Response},
     RequestExt,
 };
-use rpc_client_nss::RpcClientNss;
+use rkyv::{self, rancor::Error};
+use rpc_client_nss::{rpc::list_inodes_response, RpcClientNss};
 use serde::{Deserialize, Serialize};
+
+use crate::handler::mpu;
+use crate::object_layout::ObjectLayout;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct ListPartsOptions {
-    max_parts: Option<usize>,
+    max_parts: Option<u32>,
     part_number_marker: Option<usize>,
     upload_id: Option<String>,
 }
@@ -62,9 +67,38 @@ struct Owner {
 
 pub async fn list_parts(
     mut request: Request,
-    _key: String,
-    _rpc_client_nss: &RpcClientNss,
+    key: String,
+    rpc_client_nss: &RpcClientNss,
 ) -> response::Result<Response> {
-    let Query(_opts): Query<ListPartsOptions> = request.extract_parts().await?;
+    let Query(opts): Query<ListPartsOptions> = request.extract_parts().await?;
+    let max_parts = opts.max_parts.unwrap_or(1000);
+    // TODO: check upload_id
+    let _upload_id = match opts.upload_id {
+        Some(upload_id) => upload_id,
+        None => return Err((StatusCode::BAD_REQUEST, "missing upload id").into()),
+    };
+
+    let prefix = mpu::get_upload_part_key(key, 0);
+    let resp = rpc_client_nss
+        .list_inodes(max_parts, prefix, "".into())
+        .await
+        .unwrap();
+
+    // Process results
+    let inodes = match resp.result.unwrap() {
+        list_inodes_response::Result::Ok(res) => res.inodes,
+        list_inodes_response::Result::Err(e) => {
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, e)
+                .into_response()
+                .into())
+        }
+    };
+
+    for inode in inodes {
+        let _object = rkyv::from_bytes::<ObjectLayout, Error>(&inode.inode).unwrap();
+        // dbg!(&inode.key);
+        // dbg!(object.timestamp);
+        // dbg!(object.size);
+    }
     Ok(Xml(ListPartsResult::default()).into_response())
 }
