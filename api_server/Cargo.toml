@@ -24,3 +24,7 @@ uuid = { version = "1.11.0", features = ["v7"] }
 rkyv = { version = "0.8.8", features = ["uuid-1", "unaligned"] }
 rand = "0.8.5"
 hex = "0.4.3"
+
+[dev-dependencies]
+aws-sdk-s3 = "1.65.0"
+cmd_lib = "1.9.5"
