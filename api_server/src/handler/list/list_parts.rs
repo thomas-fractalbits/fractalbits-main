@@ -1,5 +1,10 @@
+use crate::handler::get::get_raw_object;
 use crate::handler::time;
-use crate::{object_layout::ObjectState, response_xml::Xml};
+use crate::{
+    object_layout::{MpuState, ObjectState},
+    response_xml::Xml,
+};
+use axum::http::StatusCode;
 use axum::{
     extract::{Query, Request},
     response::{self, IntoResponse, Response},
@@ -71,17 +76,28 @@ pub async fn list_parts(
 ) -> response::Result<Response> {
     let Query(opts): Query<ListPartsOptions> = request.extract_parts().await?;
     let max_parts = opts.max_parts.unwrap_or(1000);
-    // TODO: check upload_id
     let upload_id = opts.upload_id;
+    let object = get_raw_object(rpc_client_nss, key.clone()).await?;
+    if object.version_id.simple().to_string() != upload_id {
+        return Err((StatusCode::BAD_REQUEST, "upload_id mismatch").into());
+    }
+    if ObjectState::Mpu(MpuState::Uploading) != object.state {
+        return Err((StatusCode::BAD_REQUEST, "key is not in uploading state").into());
+    }
+
     let mpu_prefix = mpu::get_upload_part_prefix(key, 0);
     let mpus =
         super::list_raw_objects(rpc_client_nss, max_parts, mpu_prefix, "".into(), false).await?;
-    dbg!(mpus.len());
-    let mut res = ListPartsResult::default();
-    res.upload_id = upload_id;
+    let mut res = ListPartsResult {
+        upload_id,
+        ..Default::default()
+    };
     for mpu in mpus {
-        let mut part = Part::default();
-        part.last_modified = time::format_timestamp(mpu.timestamp);
+        let last_modified = time::format_timestamp(mpu.timestamp);
+        let mut part = Part {
+            last_modified,
+            ..Default::default()
+        };
         if let ObjectState::Normal(obj) = mpu.state {
             part.etag = obj.etag;
             part.size = obj.size;

@@ -134,16 +134,16 @@ async fn test_multipart_upload() {
         .await
         .unwrap();
 
-    // // The multipart upload must not appear anymore
-    // assert!(ctx
-    //     .client
-    //     .list_parts()
-    //     .bucket(&bucket)
-    //     .key("a")
-    //     .upload_id(uid)
-    //     .send()
-    //     .await
-    //     .is_err());
+    // The multipart upload must not appear anymore
+    assert!(ctx
+        .client
+        .list_parts()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .send()
+        .await
+        .is_err());
 
     // {
     //     // The object must appear as a regular object

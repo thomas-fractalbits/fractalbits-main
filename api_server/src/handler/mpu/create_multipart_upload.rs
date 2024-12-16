@@ -61,7 +61,7 @@ pub async fn create_multipart_upload(
     let init_mpu_res = InitiateMultipartUploadResult {
         bucket,
         key,
-        upload_id: hex::encode(version_id),
+        upload_id: version_id.simple().to_string(),
     };
     Ok(Xml(init_mpu_res).into_response())
 }

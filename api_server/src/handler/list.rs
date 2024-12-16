@@ -35,7 +35,6 @@ pub async fn list_raw_objects(
                 .into())
         }
     };
-    dbg!(inodes.len());
 
     let mut res = Vec::with_capacity(inodes.len());
     for inode in inodes {

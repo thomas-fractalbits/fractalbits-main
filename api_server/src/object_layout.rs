@@ -1,18 +1,16 @@
 use crate::BlobId;
-use rand::RngCore;
 use rkyv::{Archive, Deserialize, Serialize};
+use uuid::Uuid;
 
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Deserialize, Serialize, PartialEq)]
 pub struct ObjectLayout {
     pub timestamp: u64,
-    pub version_id: [u8; 16],
+    pub version_id: Uuid, // v4
     pub state: ObjectState,
 }
 
-pub fn gen_version_id() -> [u8; 16] {
-    let mut bytes = [0; 16];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    bytes
+pub fn gen_version_id() -> Uuid {
+    Uuid::new_v4()
 }
 
 impl ObjectLayout {
@@ -31,13 +29,13 @@ impl ObjectLayout {
     }
 }
 
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Deserialize, Serialize, PartialEq)]
 pub enum ObjectState {
     Normal(ObjectData),
     Mpu(MpuState),
 }
 
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Deserialize, Serialize, PartialEq)]
 pub enum MpuState {
     Uploading,
     Aborted,
@@ -45,7 +43,7 @@ pub enum MpuState {
 }
 
 /// Data stored in normal object or mpu parts
-#[derive(Archive, Deserialize, Serialize)]
+#[derive(Archive, Deserialize, Serialize, PartialEq)]
 pub struct ObjectData {
     pub size: u64,
     pub etag: String,
