@@ -22,11 +22,11 @@ pub async fn put_object(
     let content_len = content.len();
     let blob_id = Uuid::now_v7();
 
-    let size = rpc_client_bss
+    let raw_size = rpc_client_bss
         .put_blob(blob_id, content)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
-    assert_eq!(content_len + MessageHeader::SIZE, size);
+    assert_eq!(content_len + MessageHeader::SIZE, raw_size);
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -38,7 +38,7 @@ pub async fn put_object(
         version_id,
         timestamp,
         state: ObjectState::Normal(ObjectData {
-            size: size as u64,
+            size: content_len as u64,
             blob_id,
             etag,
         }),

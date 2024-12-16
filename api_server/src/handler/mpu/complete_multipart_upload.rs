@@ -1,4 +1,9 @@
-use crate::response_xml::Xml;
+use std::collections::HashSet;
+
+use crate::{
+    handler::{delete::delete_object, get::get_raw_object},
+    response_xml::Xml,
+};
 use axum::{
     extract::Request,
     http::StatusCode,
@@ -7,14 +12,12 @@ use axum::{
 use bytes::Buf;
 use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_nss::{
-    rpc::{get_inode_response, put_inode_response},
-    RpcClientNss,
-};
+use rpc_client_bss::RpcClientBss;
+use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
 use serde::{Deserialize, Serialize};
 
 use crate::handler::{list, mpu};
-use crate::object_layout::{MpuState, ObjectLayout, ObjectState};
+use crate::object_layout::{MpuState, ObjectState};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
@@ -35,7 +38,7 @@ struct Part {
     checksum_sha256: String,
     #[serde(rename = "ETag")]
     etag: String,
-    part_number: usize,
+    part_number: u32,
 }
 
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
@@ -58,30 +61,55 @@ pub async fn complete_multipart_upload(
     mut key: String,
     upload_id: String,
     rpc_client_nss: &RpcClientNss,
+    rpc_client_bss: &RpcClientBss,
 ) -> response::Result<Response> {
     // TODO: verify mpu parts
     let body = request.into_body().collect().await.unwrap().to_bytes();
-    let _req_body: CompleteMultipartUpload = quick_xml::de::from_reader(body.reader()).unwrap();
+    let req_body: CompleteMultipartUpload = quick_xml::de::from_reader(body.reader()).unwrap();
+    let mut valid_part_numbers: HashSet<u32> =
+        req_body.part.iter().map(|part| part.part_number).collect();
 
-    let resp = rpc_client_nss
-        .get_inode(key.clone())
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    let mut object = get_raw_object(rpc_client_nss, key.clone()).await?;
+    if object.version_id.simple().to_string() != upload_id {
+        return Err((StatusCode::BAD_REQUEST, "upload_id mismatch").into());
+    }
+    if ObjectState::Mpu(MpuState::Uploading) != object.state {
+        return Err((StatusCode::BAD_REQUEST, "key is not in uploading state").into());
+    }
 
-    let object_bytes = match resp.result.unwrap() {
-        get_inode_response::Result::Ok(res) => res,
-        get_inode_response::Result::Err(e) => {
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, e)
-                .into_response()
-                .into())
-        }
-    };
-
-    // TODO: check upload_id and also do more clean ups and checks
-    let mut object = rkyv::from_bytes::<ObjectLayout, Error>(&object_bytes).unwrap();
+    let max_parts = 10000;
     let mpu_prefix = mpu::get_upload_part_prefix(key.clone(), 0);
+    let objs = list::list_raw_objects(
+        rpc_client_nss,
+        max_parts,
+        mpu_prefix.clone(),
+        "".into(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let mut total_size = 0;
+    let mut invalid_part_keys = HashSet::new();
+    for (mpu_key, mpu_obj) in objs.iter() {
+        let mut part_str = mpu_key.clone().split_off(key.len());
+        part_str.pop(); // remove trailing '\0'
+        let part = part_str.parse::<u32>().unwrap();
+        if !valid_part_numbers.remove(&part) {
+            invalid_part_keys.insert(mpu_key.clone());
+        } else {
+            total_size += mpu_obj.size() as u64;
+        }
+    }
+    if !valid_part_numbers.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "invalid mpu parts").into());
+    }
+    for mpu_key in invalid_part_keys.iter() {
+        delete_object(mpu_key.clone(), rpc_client_nss, rpc_client_bss).await?;
+    }
+
     object.state = ObjectState::Mpu(MpuState::Completed {
-        size: get_mpu_inode_size(rpc_client_nss, 10000, mpu_prefix).await,
+        size: total_size,
         etag: upload_id.clone(),
     });
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new()).unwrap();
@@ -104,11 +132,4 @@ pub async fn complete_multipart_upload(
     resp.key = key;
     resp.etag = upload_id;
     Ok(Xml(resp).into_response())
-}
-
-async fn get_mpu_inode_size(rpc_client_nss: &RpcClientNss, max_parts: u32, mpu_key: String) -> u64 {
-    let objs = list::list_raw_objects(rpc_client_nss, max_parts, mpu_key, "".into(), false)
-        .await
-        .unwrap();
-    objs.iter().map(|x| x.size()).sum()
 }

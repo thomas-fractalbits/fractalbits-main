@@ -209,11 +209,16 @@ async fn post_handler(
                 .await
                 .into_response()
         }
-        (None, Some(upload_id)) if key != "/" => {
-            mpu::complete_multipart_upload(request, bucket, key, upload_id, rpc_client_nss)
-                .await
-                .into_response()
-        }
+        (None, Some(upload_id)) if key != "/" => mpu::complete_multipart_upload(
+            request,
+            bucket,
+            key,
+            upload_id,
+            rpc_client_nss,
+            rpc_client_bss,
+        )
+        .await
+        .into_response(),
         (_, _) => StatusCode::BAD_REQUEST.into_response(),
     }
 }
@@ -231,7 +236,7 @@ async fn delete_handler(
                 .await
                 .into_response()
         }
-        None if key != "/" => delete::delete_object(request, key, rpc_client_nss, rpc_client_bss)
+        None if key != "/" => delete::delete_object(key, rpc_client_nss, rpc_client_bss)
             .await
             .into_response(),
         _ => StatusCode::BAD_REQUEST.into_response(),

@@ -92,7 +92,7 @@ pub async fn list_parts(
         upload_id,
         ..Default::default()
     };
-    for mpu in mpus {
+    for (_key, mpu) in mpus {
         let last_modified = time::format_timestamp(mpu.timestamp);
         let mut part = Part {
             last_modified,

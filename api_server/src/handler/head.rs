@@ -1,11 +1,14 @@
 use axum::{
     extract::{Query, Request},
-    http::StatusCode,
-    response::{self, IntoResponse},
-    RequestExt,
+    http::{HeaderMap, HeaderValue, StatusCode},
+    response, RequestExt,
 };
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
+
+use crate::object_layout::{MpuState, ObjectState};
+
+use super::{get::get_raw_object, time};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -27,12 +30,34 @@ pub async fn head_object(
     mut request: Request,
     key: String,
     rpc_client_nss: &RpcClientNss,
-) -> response::Result<()> {
+) -> response::Result<HeaderMap> {
     let Query(_opts): Query<HeadObjectOptions> = request.extract_parts().await?;
-    let _resp = rpc_client_nss
-        .get_inode(key)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
+    let obj = get_raw_object(rpc_client_nss, key).await?;
 
-    Ok(())
+    let mut headers = HeaderMap::new();
+    let last_modified = time::format_http_date(obj.timestamp);
+    headers.insert(
+        "Last-Modified",
+        HeaderValue::from_str(&last_modified).unwrap(),
+    );
+    match obj.state {
+        ObjectState::Normal(obj_data) => {
+            headers.insert("ETag", HeaderValue::from_str(&obj_data.etag).unwrap());
+            headers.insert(
+                "Content-Length",
+                HeaderValue::from_str(&obj_data.size.to_string()).unwrap(),
+            );
+        }
+        ObjectState::Mpu(MpuState::Completed { size, etag }) => {
+            headers.insert("ETag", HeaderValue::from_str(&etag).unwrap());
+            headers.insert(
+                "Content-Length",
+                HeaderValue::from_str(&size.to_string()).unwrap(),
+            );
+        }
+        _ => {
+            return Err((StatusCode::BAD_REQUEST, "invalid object state").into());
+        }
+    }
+    Ok(headers)
 }

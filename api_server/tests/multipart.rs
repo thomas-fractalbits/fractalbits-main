@@ -145,19 +145,19 @@ async fn test_multipart_upload() {
         .await
         .is_err());
 
-    // {
-    //     // The object must appear as a regular object
-    //     let r = ctx
-    //         .client
-    //         .head_object()
-    //         .bucket(&bucket)
-    //         .key("a")
-    //         .send()
-    //         .await
-    //         .unwrap();
+    {
+        // The object must appear as a regular object
+        let r = ctx
+            .client
+            .head_object()
+            .bucket(&bucket)
+            .key("a")
+            .send()
+            .await
+            .unwrap();
 
-    //     assert_eq!(r.content_length.unwrap(), (SZ_5MB * 3) as i64);
-    // }
+        assert_eq!(r.content_length.unwrap(), (SZ_1MB * 3) as i64);
+    }
 
     // {
     //     let o = ctx

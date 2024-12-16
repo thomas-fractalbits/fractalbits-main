@@ -1,5 +1,4 @@
 use axum::{
-    extract::Request,
     http::StatusCode,
     response::{self, IntoResponse},
 };
@@ -10,7 +9,6 @@ use rpc_client_nss::{rpc::delete_inode_response, RpcClientNss};
 use crate::object_layout::ObjectLayout;
 
 pub async fn delete_object(
-    _request: Request,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,

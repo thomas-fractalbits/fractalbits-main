@@ -20,7 +20,7 @@ pub async fn list_raw_objects(
     prefix: String,
     start_after: String,
     skip_mpu_parts: bool,
-) -> response::Result<Vec<ObjectLayout>> {
+) -> response::Result<Vec<(String, ObjectLayout)>> {
     let resp = rpc_client_nss
         .list_inodes(max_parts, prefix, start_after, skip_mpu_parts)
         .await
@@ -39,7 +39,7 @@ pub async fn list_raw_objects(
     let mut res = Vec::with_capacity(inodes.len());
     for inode in inodes {
         let object = rkyv::from_bytes::<ObjectLayout, Error>(&inode.inode).unwrap();
-        res.push(object);
+        res.push((inode.key, object));
     }
     Ok(res)
 }
