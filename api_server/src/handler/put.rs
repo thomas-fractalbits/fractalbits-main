@@ -1,11 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{object_layout::*, BlobId};
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    response::{IntoResponse, Result},
-};
+use axum::{extract::Request, http::StatusCode, response, response::IntoResponse};
 use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
@@ -19,7 +15,7 @@ pub async fn put_object(
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
     blob_deletion: Sender<BlobId>,
-) -> Result<()> {
+) -> response::Result<()> {
     // Write data at first
     // TODO: async stream
     let content = request.into_body().collect().await.unwrap().to_bytes();

@@ -1,4 +1,6 @@
-use axum::{extract::Request, http::StatusCode, response};
+use axum::{
+    extract::Request, http::HeaderValue, http::StatusCode, response, response::IntoResponse,
+};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
@@ -26,29 +28,28 @@ struct ResponseHeaders {
     x_amz_request_charged: String,
 }
 
-#[allow(dead_code)]
-#[derive(Default, Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "PascalCase")]
-struct InitiateMultipartUploadResult {
-    bucket: String,
-    key: String,
-    upload_id: String,
-}
-
 pub async fn upload_part(
     request: Request,
     key: String,
     part_number: u64,
-    _upload_id: String,
+    upload_id: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
     blob_deletion: Sender<BlobId>,
-) -> response::Result<()> {
+) -> response::Response {
     if !(1..=10_000).contains(&part_number) {
-        return Err((StatusCode::BAD_REQUEST, "invalid part number").into());
+        return (StatusCode::BAD_REQUEST, "invalid part number").into_response();
     }
     // TODO: check upload_id
 
     let key = super::get_upload_part_key(key, part_number);
-    put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion).await
+    put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion)
+        .await
+        .unwrap();
+
+    let mut resp = response::Response::default();
+    let etag = format!("{upload_id}{part_number}");
+    resp.headers_mut()
+        .insert("ETag", HeaderValue::from_str(&etag).unwrap());
+    resp
 }

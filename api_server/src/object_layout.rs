@@ -41,11 +41,7 @@ pub enum ObjectState {
 pub enum MpuState {
     Uploading,
     Aborted,
-    Completed {
-        size: u64,
-        etag: String,
-        part_number: u16,
-    },
+    Completed { size: u64, etag: String },
 }
 
 /// Data stored in normal object or mpu parts

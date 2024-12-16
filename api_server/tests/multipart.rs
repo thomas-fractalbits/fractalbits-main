@@ -103,36 +103,36 @@ async fn test_multipart_upload() {
     //     assert_eq!(r.parts.unwrap().len(), 4);
     // }
 
-    // let cmp = CompletedMultipartUpload::builder()
-    //     .parts(
-    //         CompletedPart::builder()
-    //             .part_number(1)
-    //             .e_tag(p1bis.e_tag.unwrap())
-    //             .build(),
-    //     )
-    //     .parts(
-    //         CompletedPart::builder()
-    //             .part_number(3)
-    //             .e_tag(p3.e_tag.unwrap())
-    //             .build(),
-    //     )
-    //     .parts(
-    //         CompletedPart::builder()
-    //             .part_number(6)
-    //             .e_tag(p6.e_tag.unwrap())
-    //             .build(),
-    //     )
-    //     .build();
+    let cmp = CompletedMultipartUpload::builder()
+        .parts(
+            CompletedPart::builder()
+                .part_number(1)
+                .e_tag(p1bis.e_tag.unwrap())
+                .build(),
+        )
+        .parts(
+            CompletedPart::builder()
+                .part_number(3)
+                .e_tag(p3.e_tag.unwrap())
+                .build(),
+        )
+        .parts(
+            CompletedPart::builder()
+                .part_number(6)
+                .e_tag(p6.e_tag.unwrap())
+                .build(),
+        )
+        .build();
 
-    // ctx.client
-    //     .complete_multipart_upload()
-    //     .bucket(&bucket)
-    //     .key("a")
-    //     .upload_id(uid)
-    //     .multipart_upload(cmp)
-    //     .send()
-    //     .await
-    //     .unwrap();
+    ctx.client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .multipart_upload(cmp)
+        .send()
+        .await
+        .unwrap();
 
     // // The multipart upload must not appear anymore
     // assert!(ctx
