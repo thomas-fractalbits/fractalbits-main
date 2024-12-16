@@ -90,18 +90,18 @@ async fn test_multipart_upload() {
         .await
         .unwrap();
 
-    // {
-    //     let r = ctx
-    //         .client
-    //         .list_parts()
-    //         .bucket(&bucket)
-    //         .key("a")
-    //         .upload_id(uid)
-    //         .send()
-    //         .await
-    //         .unwrap();
-    //     assert_eq!(r.parts.unwrap().len(), 4);
-    // }
+    {
+        let r = ctx
+            .client
+            .list_parts()
+            .bucket(&bucket)
+            .key("a")
+            .upload_id(uid)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.parts.unwrap().len(), 4);
+    }
 
     let cmp = CompletedMultipartUpload::builder()
         .parts(

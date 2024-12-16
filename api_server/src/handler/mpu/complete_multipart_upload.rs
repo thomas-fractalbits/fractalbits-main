@@ -13,6 +13,7 @@ use rpc_client_nss::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::handler::{list, mpu};
 use crate::object_layout::{MpuState, ObjectLayout, ObjectState};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -78,8 +79,9 @@ pub async fn complete_multipart_upload(
 
     // TODO: check upload_id and also do more clean ups and checks
     let mut object = rkyv::from_bytes::<ObjectLayout, Error>(&object_bytes).unwrap();
+    let mpu_key = mpu::get_upload_part_key(key.clone(), 0);
     object.state = ObjectState::Mpu(MpuState::Completed {
-        size: 100 * 1024 * 1024, // FIXME: get total size from all parts
+        size: get_mpu_inode_size(rpc_client_nss, 10000, mpu_key).await,
         etag: upload_id.clone(),
     });
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new()).unwrap();
@@ -102,4 +104,11 @@ pub async fn complete_multipart_upload(
     resp.key = key;
     resp.etag = upload_id;
     Ok(Xml(resp).into_response())
+}
+
+async fn get_mpu_inode_size(rpc_client_nss: &RpcClientNss, max_parts: u32, mpu_key: String) -> u64 {
+    let objs = list::list_raw_objects(rpc_client_nss, max_parts, mpu_key, "".into(), false)
+        .await
+        .unwrap();
+    objs.iter().map(|x| x.size()).sum()
 }
