@@ -159,36 +159,36 @@ async fn test_multipart_upload() {
         assert_eq!(r.content_length.unwrap(), (SZ_1MB * 3) as i64);
     }
 
-    // {
-    //     let o = ctx
-    //         .client
-    //         .get_object()
-    //         .bucket(&bucket)
-    //         .key("a")
-    //         .send()
-    //         .await
-    //         .unwrap();
+    {
+        let o = ctx
+            .client
+            .get_object()
+            .bucket(&bucket)
+            .key("a")
+            .send()
+            .await
+            .unwrap();
 
-    //     assert_bytes_eq!(o.body, &[&u2[..], &u3[..], &u5[..]].concat());
-    // }
+        assert_bytes_eq!(o.body, &[&u2[..], &u3[..], &u5[..]].concat());
+    }
 
-    // {
-    //     for (part_number, data) in [(1, &u2), (2, &u3), (3, &u5)] {
-    //         let o = ctx
-    //             .client
-    //             .get_object()
-    //             .bucket(&bucket)
-    //             .key("a")
-    //             .part_number(part_number)
-    //             .send()
-    //             .await
-    //             .unwrap();
+    {
+        for (part_number, data) in [(1, &u2), (2, &u3), (3, &u5)] {
+            let o = ctx
+                .client
+                .get_object()
+                .bucket(&bucket)
+                .key("a")
+                .part_number(part_number)
+                .send()
+                .await
+                .unwrap();
 
-    //         eprintln!("get_object with part_number = {}", part_number);
-    //         assert_eq!(o.content_length.unwrap(), SZ_5MB as i64);
-    //         assert_bytes_eq!(o.body, data);
-    //     }
-    // }
+            eprintln!("get_object with part_number = {}", part_number);
+            assert_eq!(o.content_length.unwrap(), SZ_1MB as i64);
+            assert_bytes_eq!(o.body, data);
+        }
+    }
 }
 
 // #[tokio::test]
