@@ -201,7 +201,7 @@ async fn benchmark_bss_write(
             let future = async {
                 let uuid = uuid;
                 let blob_id = Uuid::parse_str(&uuid).unwrap();
-                rpc_client.put_blob(blob_id, content).await
+                rpc_client.put_blob(blob_id, 0, content).await
             };
             futures.push(future);
         }
@@ -268,9 +268,7 @@ async fn benchmark_bss_read(
                 let uuid = uuid;
                 let blob_id = Uuid::parse_str(&uuid).unwrap();
                 let mut content = Bytes::new();
-                rpc_client
-                    .get_blob(blob_id, 0..8192 - 256, &mut content)
-                    .await
+                rpc_client.get_blob(blob_id, 0, &mut content).await
             };
             futures.push(future);
         }

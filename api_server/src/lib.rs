@@ -76,7 +76,7 @@ impl AppState {
         let rpc_client_bss = RpcClientBss::new(bss_ip).await?;
         while let Some(blob_id) = input.recv().await {
             rpc_client_bss
-                .delete_blob(blob_id)
+                .delete_blob(blob_id, 0)
                 .await
                 .inspect_err(|e| tracing::error!("delete {} failed: {}", blob_id, e))?;
         }

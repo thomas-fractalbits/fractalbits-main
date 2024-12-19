@@ -26,6 +26,7 @@ rand = "0.8.5"
 hex = "0.4.3"
 chrono = "0.4.39"
 httpdate = "1.0.3"
+futures = "0.3.31"
 
 [dev-dependencies]
 aws-sdk-s3 = "1.65.0"

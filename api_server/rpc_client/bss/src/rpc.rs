@@ -4,14 +4,19 @@ use crate::{
     rpc_client::{Message, RpcClient, RpcError},
 };
 use bytes::Bytes;
-use std::ops::Range;
 use uuid::Uuid;
 
 impl RpcClient {
-    pub async fn put_blob(&self, blob_id: Uuid, body: Bytes) -> Result<usize, RpcError> {
+    pub async fn put_blob(
+        &self,
+        blob_id: Uuid,
+        block_number: u32,
+        body: Bytes,
+    ) -> Result<usize, RpcError> {
         let mut header = MessageHeader::default();
         header.id = self.gen_request_id();
         header.blob_id = blob_id.into_bytes();
+        header.block_number = block_number;
         header.command = Command::PutBlob;
         header.size = (MessageHeader::SIZE + body.len()) as u32;
 
@@ -25,16 +30,15 @@ impl RpcClient {
     pub async fn get_blob(
         &self,
         blob_id: Uuid,
-        range: Range<u64>,
+        block_number: u32,
         body: &mut Bytes,
     ) -> Result<usize, RpcError> {
         let mut header = MessageHeader::default();
         header.id = self.gen_request_id();
         header.blob_id = blob_id.into_bytes();
+        header.block_number = block_number;
         header.command = Command::GetBlob;
         header.size = MessageHeader::SIZE as u32;
-        header.get_blob_range_start = range.start;
-        header.get_blob_range_end = range.end;
 
         let msg_frame = MessageFrame::new(header, Bytes::new());
         let resp = self
@@ -45,10 +49,11 @@ impl RpcClient {
         Ok(size as usize)
     }
 
-    pub async fn delete_blob(&self, blob_id: Uuid) -> Result<(), RpcError> {
+    pub async fn delete_blob(&self, blob_id: Uuid, block_number: u32) -> Result<(), RpcError> {
         let mut header = MessageHeader::default();
         header.id = self.gen_request_id();
         header.blob_id = blob_id.into_bytes();
+        header.block_number = block_number;
         header.command = Command::DeleteBlob;
         header.size = MessageHeader::SIZE as u32;
 

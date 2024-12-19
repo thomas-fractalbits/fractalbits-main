@@ -37,10 +37,10 @@ pub async fn get_object(
     let Query(opts): Query<GetObjectOptions> = request.extract_parts().await?;
     let object = get_raw_object(rpc_client_nss, key.clone()).await?;
     match object.state {
-        ObjectState::Normal(ref obj_data) => {
+        ObjectState::Normal(ref _obj_data) => {
             let mut content = Bytes::new();
             let _size = rpc_client_bss
-                .get_blob(object.blob_id(), 0..obj_data.size, &mut content)
+                .get_blob(object.blob_id(), 0, &mut content)
                 .await
                 .unwrap();
             Ok(content)
@@ -61,7 +61,7 @@ pub async fn get_object(
                 for (_mpu_key, mpu_obj) in mpus.iter() {
                     let mut mpu_content = Bytes::new();
                     let _size = rpc_client_bss
-                        .get_blob(mpu_obj.blob_id(), 0..mpu_obj.size(), &mut mpu_content)
+                        .get_blob(mpu_obj.blob_id(), 0, &mut mpu_content)
                         .await
                         .unwrap();
 
