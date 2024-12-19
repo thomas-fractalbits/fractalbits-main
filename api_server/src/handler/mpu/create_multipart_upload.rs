@@ -47,10 +47,9 @@ pub async fn create_multipart_upload(
         .unwrap()
         .as_millis() as u64;
     let version_id = gen_version_id();
-    let block_size = 1024 * 1024;
     let object_layout = ObjectLayout {
         version_id,
-        block_size,
+        block_size: ObjectLayout::DEFAULT_BLOCK_SIZE,
         timestamp,
         state: ObjectState::Mpu(MpuState::Uploading),
     };

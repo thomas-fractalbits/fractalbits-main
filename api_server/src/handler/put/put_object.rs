@@ -10,8 +10,6 @@ use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
 use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
-const BLOCK_CONTENT_SIZE: usize = 2 * 1024 * 1024 - 256;
-
 pub async fn put_object(
     request: Request,
     key: String,
@@ -21,7 +19,8 @@ pub async fn put_object(
 ) -> response::Result<()> {
     let blob_id = Uuid::now_v7();
     let body_data_stream = request.into_body().into_data_stream();
-    let mut block_data_stream = BlockDataStream::new(body_data_stream, BLOCK_CONTENT_SIZE);
+    let mut block_data_stream =
+        BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE as usize);
     let mut size: u64 = 0;
     let mut i: u32 = 0;
     while let Some(block_data) = block_data_stream.next().await {
@@ -41,10 +40,9 @@ pub async fn put_object(
         .as_millis() as u64;
     let etag = String::new();
     let version_id = gen_version_id();
-    let block_size = 1024 * 1024;
     let object_layout = ObjectLayout {
         version_id,
-        block_size,
+        block_size: ObjectLayout::DEFAULT_BLOCK_SIZE,
         timestamp,
         state: ObjectState::Normal(ObjectData {
             size,

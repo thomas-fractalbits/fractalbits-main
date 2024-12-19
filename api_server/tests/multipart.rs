@@ -3,7 +3,6 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::types::{ChecksumAlgorithm, CompletedMultipartUpload, CompletedPart};
 use base64::prelude::*;
 
-const SZ_1MB: usize = 1 * 1024 * 1024;
 const SZ_5MB: usize = 5 * 1024 * 1024;
 const SZ_10MB: usize = 10 * 1024 * 1024;
 
@@ -12,11 +11,11 @@ async fn test_multipart_upload() {
     let ctx = common::context();
     let bucket = ctx.create_bucket("testmpu");
 
-    let u1 = vec![0x11; SZ_1MB];
-    let u2 = vec![0x22; SZ_1MB];
-    let u3 = vec![0x33; SZ_1MB];
-    let u4 = vec![0x44; SZ_1MB];
-    let u5 = vec![0x55; SZ_1MB];
+    let u1 = vec![0x11; SZ_5MB];
+    let u2 = vec![0x22; SZ_5MB];
+    let u3 = vec![0x33; SZ_5MB];
+    let u4 = vec![0x44; SZ_5MB];
+    let u5 = vec![0x55; SZ_5MB];
 
     let up = ctx
         .client
@@ -156,7 +155,7 @@ async fn test_multipart_upload() {
             .await
             .unwrap();
 
-        assert_eq!(r.content_length.unwrap(), (SZ_1MB * 3) as i64);
+        assert_eq!(r.content_length.unwrap(), (SZ_5MB * 3) as i64);
     }
 
     {
@@ -185,7 +184,7 @@ async fn test_multipart_upload() {
                 .unwrap();
 
             eprintln!("get_object with part_number = {}", part_number);
-            assert_eq!(o.content_length.unwrap(), SZ_1MB as i64);
+            assert_eq!(o.content_length.unwrap(), SZ_5MB as i64);
             assert_bytes_eq!(o.body, data);
         }
     }

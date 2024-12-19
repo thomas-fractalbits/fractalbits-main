@@ -15,6 +15,9 @@ pub fn gen_version_id() -> Uuid {
 }
 
 impl ObjectLayout {
+    pub const DEFAULT_BLOCK_SIZE: u32 = 1024 * 1024 - 256;
+
+    #[inline]
     pub fn blob_id(&self) -> BlobId {
         match self.state {
             ObjectState::Normal(ref data) => data.blob_id,
@@ -22,11 +25,17 @@ impl ObjectLayout {
         }
     }
 
+    #[inline]
     pub fn size(&self) -> u64 {
         match self.state {
             ObjectState::Normal(ref data) => data.size,
             ObjectState::Mpu(_) => todo!(),
         }
+    }
+
+    #[inline]
+    pub fn num_blocks(&self) -> usize {
+        self.size().div_ceil(self.block_size as u64) as usize
     }
 }
 

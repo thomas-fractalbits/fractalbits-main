@@ -59,6 +59,7 @@ macro_rules! assert_bytes_eq {
             .expect("Error reading data")
             .into_bytes();
 
+        assert_eq!(data.len(), $bytes.len());
         assert_eq!(data.as_ref(), $bytes);
     };
 }

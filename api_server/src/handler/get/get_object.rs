@@ -11,6 +11,7 @@ use crate::handler::get::get_raw_object;
 use crate::handler::list::list_raw_objects;
 use crate::handler::mpu;
 use crate::object_layout::{MpuState, ObjectState};
+use crate::BlobId;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -38,12 +39,15 @@ pub async fn get_object(
     let object = get_raw_object(rpc_client_nss, key.clone()).await?;
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
-            let mut content = Bytes::new();
-            let _size = rpc_client_bss
-                .get_blob(object.blob_id(), 0, &mut content)
-                .await
-                .unwrap();
-            Ok(content)
+            let mut blob = BytesMut::new();
+            get_full_blob(
+                &mut blob,
+                rpc_client_bss,
+                object.blob_id(),
+                object.num_blocks(),
+            )
+            .await;
+            Ok(blob.freeze())
         }
         ObjectState::Mpu(mpu_state) => match mpu_state {
             MpuState::Uploading => {
@@ -57,23 +61,38 @@ pub async fn get_object(
                 let mpu_prefix = mpu::get_part_prefix(key.clone(), 0);
                 let mpus =
                     list_raw_objects(rpc_client_nss, 10000, mpu_prefix, "".into(), false).await?;
-                let mut cur_part = 1;
-                for (_mpu_key, mpu_obj) in mpus.iter() {
-                    let mut mpu_content = Bytes::new();
-                    let _size = rpc_client_bss
-                        .get_blob(mpu_obj.blob_id(), 0, &mut mpu_content)
-                        .await
-                        .unwrap();
-
-                    if opts.part_number == Some(cur_part) {
-                        // TODO: handle part_number option more efficiently without listing
-                        return Ok(mpu_content);
-                    }
-                    content.extend(mpu_content);
-                    cur_part += 1;
+                // Do filtering if there is part_number option
+                let mpus = match opts.part_number {
+                    None => &mpus[0..],
+                    Some(n) => &mpus[n as usize - 1..n as usize],
+                };
+                for (_, mpu_obj) in mpus.iter() {
+                    get_full_blob(
+                        &mut content,
+                        rpc_client_bss,
+                        mpu_obj.blob_id(),
+                        mpu_obj.num_blocks(),
+                    )
+                    .await;
                 }
                 Ok(content.into())
             }
         },
+    }
+}
+
+async fn get_full_blob(
+    blob: &mut BytesMut,
+    rpc_client_bss: &RpcClientBss,
+    blob_id: BlobId,
+    num_blocks: usize,
+) {
+    for i in 0..num_blocks {
+        let mut block = Bytes::new();
+        let _size = rpc_client_bss
+            .get_blob(blob_id, i as u32, &mut block)
+            .await
+            .unwrap();
+        blob.extend(block);
     }
 }
