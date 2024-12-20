@@ -4,6 +4,7 @@ use super::block_data_stream::BlockDataStream;
 use crate::{object_layout::*, BlobId};
 use axum::{extract::Request, http::StatusCode, response, response::IntoResponse};
 use futures::StreamExt;
+use futures::TryStreamExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
@@ -19,20 +20,18 @@ pub async fn put_object(
 ) -> response::Result<()> {
     let blob_id = Uuid::now_v7();
     let body_data_stream = request.into_body().into_data_stream();
-    let mut block_data_stream =
-        BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE as usize);
-    let mut size: u64 = 0;
-    let mut i: u32 = 0;
-    while let Some(block_data) = block_data_stream.next().await {
-        let block_data_len = block_data.len();
-        let raw_size = rpc_client_bss
-            .put_blob(blob_id, i, block_data)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
-        assert_eq!(block_data_len + MessageHeader::SIZE, raw_size);
-        size += block_data_len as u64;
-        i += 1;
-    }
+    let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
+        .enumerate()
+        .map(|(i, block_data)| async move {
+            rpc_client_bss
+                .put_blob(blob_id, i as u32, block_data)
+                .await
+                .map(|x| (x - MessageHeader::SIZE) as u64)
+        })
+        .buffer_unordered(5)
+        .try_fold(0, |acc, x| async move { Ok(acc + x) })
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

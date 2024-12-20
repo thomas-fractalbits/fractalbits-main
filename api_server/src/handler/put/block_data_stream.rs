@@ -10,12 +10,12 @@ pin_project! {
         #[pin]
         stream: BodyDataStream,
         block_data: BytesMut,
-        block_size: usize,
+        block_size: u32,
     }
 }
 
 impl BlockDataStream {
-    pub fn new(stream: BodyDataStream, block_size: usize) -> Self {
+    pub fn new(stream: BodyDataStream, block_size: u32) -> Self {
         assert!(block_size > 0);
 
         Self {
@@ -27,7 +27,7 @@ impl BlockDataStream {
 
     fn take_block(self: Pin<&mut Self>) -> Bytes {
         let this = self.project();
-        this.block_data.split_to(*this.block_size).freeze()
+        this.block_data.split_to(*this.block_size as usize).freeze()
     }
 }
 
@@ -43,7 +43,7 @@ impl Stream for BlockDataStream {
             match ready!(this.stream.as_mut().poll_next(cx)) {
                 Some(data) => {
                     this.block_data.extend(data.unwrap());
-                    if this.block_data.len() >= *this.block_size {
+                    if this.block_data.len() >= *this.block_size as usize {
                         return Poll::Ready(Some(self.take_block()));
                     }
                 }
