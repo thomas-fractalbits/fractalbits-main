@@ -3,6 +3,7 @@ pub mod handler;
 mod object_layout;
 mod response_xml;
 
+use futures::stream::{self, StreamExt};
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};
 use rpc_client_nss::RpcClientNss;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -73,15 +74,27 @@ impl AppState {
         bss_ip: &str,
         mut input: Receiver<(BlobId, usize)>,
     ) -> Result<(), RpcErrorBss> {
-        let rpc_client_bss = RpcClientBss::new(bss_ip).await?;
+        let rpc_client_bss = &RpcClientBss::new(bss_ip).await?;
         while let Some((blob_id, block_numbers)) = input.recv().await {
-            for block_number in 0..block_numbers {
-                rpc_client_bss
-                    .delete_blob(blob_id, block_number as u32)
-                    .await
-                    .inspect_err(|e| {
-                        tracing::error!("delete {blob_id}-p{block_number} failed: {e}")
-                    })?;
+            let deleted = stream::iter(0..block_numbers)
+                .map(|block_number| async move {
+                    let res = rpc_client_bss
+                        .delete_blob(blob_id, block_number as u32)
+                        .await;
+                    match res {
+                        Ok(()) => 1,
+                        Err(e) => {
+                            tracing::warn!("delete {blob_id}-p{block_number} failed: {e}");
+                            0
+                        }
+                    }
+                })
+                .buffer_unordered(10)
+                .fold(0, |acc, x| async move { acc + x })
+                .await;
+            let failed = block_numbers - deleted;
+            if failed != 0 {
+                tracing::warn!("delete parts of {blob_id}: ok={deleted},err={failed}");
             }
         }
         Ok(())
