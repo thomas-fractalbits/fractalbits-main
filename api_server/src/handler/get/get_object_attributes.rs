@@ -1,4 +1,4 @@
-use crate::response_xml::Xml;
+use crate::response::xml::Xml;
 use axum::{
     extract::Request,
     response::{self, IntoResponse, Response},

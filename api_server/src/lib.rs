@@ -1,7 +1,7 @@
 mod extract;
 pub mod handler;
 mod object_layout;
-mod response_xml;
+mod response;
 
 use futures::stream::{self, StreamExt};
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};

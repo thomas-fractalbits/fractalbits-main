@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::{
     handler::{delete::delete_object, get::get_raw_object, list, mpu},
     object_layout::{MpuState, ObjectState},
-    response_xml::Xml,
+    response::xml::Xml,
     BlobId,
 };
 use axum::{

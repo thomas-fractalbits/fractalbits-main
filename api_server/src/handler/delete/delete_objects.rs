@@ -1,4 +1,4 @@
-use crate::{response_xml::Xml, BlobId};
+use crate::{response::xml::Xml, BlobId};
 use axum::{
     extract::Request,
     response::{self, IntoResponse, Response},
