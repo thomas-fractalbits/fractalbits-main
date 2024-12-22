@@ -63,7 +63,7 @@ enum BenchService {
     BssRpc,
 }
 
-#[derive(EnumString)]
+#[derive(EnumString, PartialEq)]
 #[strum(serialize_all = "snake_case")]
 enum ServiceAction {
     Stop,
@@ -119,9 +119,11 @@ fn main() -> CmdResult {
                 })?;
         }
         Cmd::Service { action, service } => {
-            // In case they have never been built before
-            build::build_bss_nss_server(BuildMode::Debug)?;
-            build::build_api_server(BuildMode::Debug)?;
+            if action != ServiceAction::Stop {
+                // In case they have never been built before
+                build::build_bss_nss_server(BuildMode::Debug)?;
+                build::build_api_server(BuildMode::Debug)?;
+            }
             cmd_service::run_cmd_service(BuildMode::Debug, action, service)?
         }
         Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
