@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use api_server::{handler::any_handler, AppState};
-use axum::{extract::Request, routing};
+use axum::{extract::Request, routing, serve::ListenerExt};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -36,16 +36,17 @@ async fn main() {
         .into_make_service_with_connect_info::<SocketAddr>();
 
     let addr = "0.0.0.0:3000";
-    let listener = match tokio::net::TcpListener::bind(addr).await {
-        Ok(listener) => listener,
-        Err(e) => {
-            tracing::error!("Failed to bind addr {addr}: {e}");
-            return;
-        }
-    };
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap()
+        .tap_io(|tcp_stream| {
+            if let Err(err) = tcp_stream.set_nodelay(true) {
+                tracing::warn!("failed to set TCP_NODELAY on incoming connection: {err:#}");
+            }
+        });
 
     tracing::info!("Server started");
-    if let Err(e) = axum::serve(listener, app).tcp_nodelay(true).await {
+    if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("Server stopped: {e}");
     }
 }

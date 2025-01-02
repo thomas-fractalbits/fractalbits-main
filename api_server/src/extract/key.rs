@@ -1,10 +1,9 @@
 use std::convert::Infallible;
 
-use axum::{async_trait, extract::FromRequestParts, http::request::Parts};
+use axum::{extract::FromRequestParts, http::request::Parts};
 
 pub struct KeyFromPath(pub String);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for KeyFromPath
 where
     S: Send + Sync,

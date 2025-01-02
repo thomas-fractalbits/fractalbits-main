@@ -1,9 +1,9 @@
 use axum::{
-    async_trait,
-    extract::{FromRequestParts, Host},
+    extract::FromRequestParts,
     http::{request::Parts, uri::Authority, StatusCode},
     RequestPartsExt,
 };
+use axum_extra::extract::Host;
 
 // FIXME: put it into configs as part of the state
 #[allow(non_upper_case_globals)]
@@ -11,7 +11,6 @@ const root_domain: &str = ".localhost";
 
 pub struct BucketNameFromHost(pub Option<String>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for BucketNameFromHost
 where
     S: Send + Sync,
@@ -37,7 +36,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        Router::new().route("/*key", get(handler))
+        Router::new().route("/{*key}", get(handler))
     }
 
     async fn handler(BucketNameFromHost(bucket): BucketNameFromHost) -> String {

@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::str::FromStr;
 
 use axum::{
-    async_trait,
     extract::{rejection::QueryRejection, FromRequestParts, Query},
     http::request::Parts,
     RequestPartsExt,
@@ -48,7 +47,6 @@ pub enum ApiCommand {
 
 pub struct ApiCommandFromQuery(pub Option<ApiCommand>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ApiCommandFromQuery
 where
     S: Send + Sync,
@@ -83,7 +81,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        Router::new().route("/*key", get(handler))
+        Router::new().route("/{*key}", get(handler))
     }
 
     async fn handler(ApiCommandFromQuery(api_command): ApiCommandFromQuery) -> String {

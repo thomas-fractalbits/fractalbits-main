@@ -1,5 +1,4 @@
 use axum::{
-    async_trait,
     extract::{rejection::QueryRejection, FromRequestParts, Query},
     http::request::Parts,
     RequestPartsExt,
@@ -19,7 +18,6 @@ pub struct ApiSignature {
     pub x_amz_copy_source: Option<String>,
 }
 
-#[async_trait]
 impl<S> FromRequestParts<S> for ApiSignature
 where
     S: Send + Sync,
@@ -45,7 +43,7 @@ mod tests {
     use tower::ServiceExt;
 
     fn app() -> Router {
-        Router::new().route("/*key", get(handler))
+        Router::new().route("/{*key}", get(handler))
     }
 
     async fn handler(api_signature: ApiSignature) -> String {
