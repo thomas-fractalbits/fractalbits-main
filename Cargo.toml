@@ -5,6 +5,7 @@ members = [
     "api_server/benches/rewrk_rpc",
     "api_server/rpc_client/nss",
     "api_server/rpc_client/bss",
+    "root_server",
     "xtask",
 ]
 resolver = "2"
