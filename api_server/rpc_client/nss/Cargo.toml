@@ -19,5 +19,6 @@ prost-build = "0.13"
 
 [features]
 default = ["nss"]
-nss = []
 bss = []
+nss = []
+rss = []

@@ -2793,6 +2793,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rpc_client_rss"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "bytes",
+ "prost",
+ "prost-build",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"

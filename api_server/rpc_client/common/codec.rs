@@ -16,7 +16,7 @@ impl MessageFrame {
 #[derive(Default)]
 pub struct MesssageCodec {}
 
-#[cfg(feature = "nss")]
+#[cfg(any(feature = "nss", feature = "rss"))]
 const MAX: usize = 2 * 1024 * 1024;
 
 #[cfg(feature = "bss")]

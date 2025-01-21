@@ -23,9 +23,9 @@ use crate::message::MessageHeader;
 pub enum RpcError {
     IoError(io::Error),
     OneshotRecvError(oneshot::error::RecvError),
-    #[cfg(feature = "nss")]
+    #[cfg(any(feature = "nss", feature = "rss"))]
     EncodeError(prost::EncodeError),
-    #[cfg(feature = "nss")]
+    #[cfg(any(feature = "nss", feature = "rss"))]
     DecodeError(prost::DecodeError),
     #[error("internal request sending error: {0}")]
     InternalRequestError(String),
