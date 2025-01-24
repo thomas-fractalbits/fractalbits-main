@@ -2,8 +2,6 @@ use super::build::BuildMode;
 use super::{ServiceAction, ServiceName};
 use cmd_lib::*;
 
-const ROOT_BLOB_ID: &str = "947ef2be-44b2-4ac2-969b-2574eb85662b";
-
 pub fn run_cmd_service(
     build_mode: BuildMode,
     action: ServiceAction,
@@ -81,9 +79,9 @@ pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
 pub fn start_nss_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
-    if run_cmd!(test -f ./data/current/$ROOT_BLOB_ID).is_err() {
+    if run_cmd!(test -f ./data/fbs.state).is_err() {
         run_cmd! {
-            info "Could not find root blob ($ROOT_BLOB_ID), formatting at first ...";
+            info "Could not find state log, formatting at first ...";
             bash -c "mkdir -p data/{current,pending}";
             ./zig-out/bin/mkfs;
         }?;
