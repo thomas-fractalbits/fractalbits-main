@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 type BucketKeyPerm = bool; // TODO: real bucket pey permissions
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApiKey {
     pub key_id: String,
     pub secret_key: String,

@@ -45,7 +45,7 @@ pub async fn any_handler(
     };
     tracing::debug!(%bucket_name, %key);
 
-    if key == "/" && Method::PUT == request.method() {
+    if (key == "/" || key.is_empty()) && Method::PUT == request.method() {
         return bucket::create_bucket(bucket_name, request)
             .await
             .into_response();
