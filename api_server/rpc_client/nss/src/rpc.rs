@@ -106,4 +106,22 @@ impl RpcClient {
             PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
         Ok(resp)
     }
+
+    pub async fn create_root_inode(&self) -> Result<CreateRootInodeResponse, RpcError> {
+        let mut header = MessageHeader::default();
+        header.id = self.gen_request_id();
+        header.command = Command::CreateRootInode;
+        header.size = MessageHeader::SIZE as u32;
+
+        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
+        header.encode(&mut request_bytes);
+
+        let resp_bytes = self
+            .send_request(header.id, Message::Bytes(request_bytes.freeze()))
+            .await?
+            .body;
+        let resp: CreateRootInodeResponse =
+            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+        Ok(resp)
+    }
 }

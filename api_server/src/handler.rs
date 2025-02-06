@@ -45,14 +45,15 @@ pub async fn any_handler(
     };
     tracing::debug!(%bucket_name, %key);
 
+    let rpc_client_nss = app.get_rpc_client_nss(addr);
+    let rpc_client_bss = app.get_rpc_client_bss(addr);
+
     if key == "/" && Method::PUT == request.method() {
-        return bucket::create_bucket(bucket_name, request)
+        return bucket::create_bucket(bucket_name, request, rpc_client_nss)
             .await
             .into_response();
     }
 
-    let rpc_client_nss = app.get_rpc_client_nss(addr);
-    let rpc_client_bss = app.get_rpc_client_bss(addr);
     match request.method() {
         &Method::HEAD => head_handler(request, key, rpc_client_nss).await,
         &Method::GET => {

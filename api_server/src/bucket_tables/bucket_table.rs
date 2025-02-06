@@ -10,16 +10,16 @@ pub struct Bucket {
     pub bucket_name: String,
     pub creation_date: u64,
     pub authorized_keys: HashMap<String /* ApiKey id */, BucketKeyPerm>,
-    pub root_blob_id: String,
+    pub root_blob_name: String,
 }
 
 impl Bucket {
-    pub fn new(bucket_name: String) -> Self {
+    pub fn new(bucket_name: String, root_blob_name: String) -> Self {
         Self {
             bucket_name,
             creation_date: 0,
             authorized_keys: HashMap::new(),
-            root_blob_id: "".into(),
+            root_blob_name,
         }
     }
 }
