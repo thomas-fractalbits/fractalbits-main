@@ -8,8 +8,10 @@ pub fn run_cmd_precheckin() -> CmdResult {
 
     run_cmd! {
         info "Running zig unit tests ...";
+        mkdir -p data;
+        mkdir -p cache;
+        mkdir -p ebs;
         ./zig-out/bin/mkfs;
-        bash -c "mkdir -p data/{current,pending}";
         zig build test --summary all 2>&1;
     }?;
 

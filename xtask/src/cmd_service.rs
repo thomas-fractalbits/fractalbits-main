@@ -82,11 +82,12 @@ pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
 pub fn start_nss_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
-    if run_cmd!(test -f ./data/fbs.state).is_err() {
+    if run_cmd!(test -f ./ebs/fbs.state).is_err() {
         run_cmd! {
             info "Could not find state log, formatting at first ...";
-            bash -c "mkdir -p data/{current,pending}";
-            mkdir -p data/cache;
+            mkdir -p data;
+            mkdir -p cache;
+            mkdir -p ebs;
             ./zig-out/bin/mkfs;
         }?;
     }
