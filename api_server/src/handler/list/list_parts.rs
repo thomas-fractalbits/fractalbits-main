@@ -71,13 +71,14 @@ struct Owner {
 
 pub async fn list_parts(
     mut request: Request,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> response::Result<Response> {
     let Query(opts): Query<ListPartsOptions> = request.extract_parts().await?;
     let max_parts = opts.max_parts.unwrap_or(1000);
     let upload_id = opts.upload_id;
-    let object = get_raw_object(rpc_client_nss, key.clone()).await?;
+    let object = get_raw_object(rpc_client_nss, bucket.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err((StatusCode::BAD_REQUEST, "upload_id mismatch").into());
     }
@@ -86,8 +87,15 @@ pub async fn list_parts(
     }
 
     let mpu_prefix = mpu::get_part_prefix(key, 0);
-    let mpus =
-        super::list_raw_objects(rpc_client_nss, max_parts, mpu_prefix, "".into(), false).await?;
+    let mpus = super::list_raw_objects(
+        bucket,
+        rpc_client_nss,
+        max_parts,
+        mpu_prefix,
+        "".into(),
+        false,
+    )
+    .await?;
     let mut res = ListPartsResult {
         upload_id,
         ..Default::default()

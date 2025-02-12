@@ -14,10 +14,11 @@ use rpc_client_nss::{rpc::get_inode_response, RpcClientNss};
 
 pub async fn get_raw_object(
     rpc_client_nss: &RpcClientNss,
+    bucket: String,
     key: String,
 ) -> response::Result<ObjectLayout> {
     let resp = rpc_client_nss
-        .get_inode(key)
+        .get_inode(bucket, key)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
 

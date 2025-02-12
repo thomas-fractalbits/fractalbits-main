@@ -30,6 +30,7 @@ struct ResponseHeaders {
 
 pub async fn upload_part(
     request: Request,
+    bucket: String,
     key: String,
     part_number: u64,
     upload_id: String,
@@ -44,9 +45,16 @@ pub async fn upload_part(
 
     let mut key = super::get_part_prefix(key, part_number);
     key.push('\0');
-    put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion)
-        .await
-        .unwrap();
+    put_object(
+        request,
+        bucket,
+        key,
+        rpc_client_nss,
+        rpc_client_bss,
+        blob_deletion,
+    )
+    .await
+    .unwrap();
 
     let mut resp = response::Response::default();
     let etag = format!("{upload_id}{part_number}");

@@ -51,7 +51,7 @@ pub async fn create_bucket(
     }
 
     let resp = rpc_client_nss
-        .create_root_inode()
+        .create_root_inode(bucket_name.clone())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
     let root_blob_name = match resp.result.unwrap() {

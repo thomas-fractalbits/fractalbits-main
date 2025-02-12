@@ -67,7 +67,7 @@ pub async fn complete_multipart_upload(
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let mut object = get_raw_object(rpc_client_nss, key.clone()).await?;
+    let mut object = get_raw_object(rpc_client_nss, bucket.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err((StatusCode::BAD_REQUEST, "upload_id mismatch").into());
     }
@@ -78,6 +78,7 @@ pub async fn complete_multipart_upload(
     let max_parts = 10000;
     let mpu_prefix = mpu::get_part_prefix(key.clone(), 0);
     let objs = list::list_raw_objects(
+        bucket.clone(),
         rpc_client_nss,
         max_parts,
         mpu_prefix.clone(),
@@ -101,7 +102,13 @@ pub async fn complete_multipart_upload(
         return Err((StatusCode::BAD_REQUEST, "invalid mpu parts").into());
     }
     for mpu_key in invalid_part_keys.iter() {
-        delete_object(mpu_key.clone(), rpc_client_nss, blob_deletion.clone()).await?;
+        delete_object(
+            bucket.clone(),
+            mpu_key.clone(),
+            rpc_client_nss,
+            blob_deletion.clone(),
+        )
+        .await?;
     }
 
     object.state = ObjectState::Mpu(MpuState::Completed {
@@ -110,7 +117,7 @@ pub async fn complete_multipart_upload(
     });
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new()).unwrap();
     let resp = rpc_client_nss
-        .put_inode(key.clone(), new_object_bytes.into())
+        .put_inode(bucket.clone(), key.clone(), new_object_bytes.into())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
     match resp.result.unwrap() {

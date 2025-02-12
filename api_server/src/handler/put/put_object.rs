@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 pub async fn put_object(
     request: Request,
+    bucket_name: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -50,7 +51,7 @@ pub async fn put_object(
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new()).unwrap();
     let resp = rpc_client_nss
-        .put_inode(key, object_layout_bytes.into())
+        .put_inode(bucket_name, key, object_layout_bytes.into())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
 

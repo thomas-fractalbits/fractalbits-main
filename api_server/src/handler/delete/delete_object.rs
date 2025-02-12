@@ -9,12 +9,13 @@ use tokio::sync::mpsc::Sender;
 use crate::{object_layout::ObjectLayout, BlobId};
 
 pub async fn delete_object(
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> response::Result<()> {
     let resp = rpc_client_nss
-        .delete_inode(key)
+        .delete_inode(bucket, key)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
 

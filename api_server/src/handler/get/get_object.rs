@@ -31,12 +31,13 @@ pub struct GetObjectOptions {
 
 pub async fn get_object(
     mut request: Request,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
 ) -> response::Result<Bytes> {
     let Query(opts): Query<GetObjectOptions> = request.extract_parts().await?;
-    let object = get_raw_object(rpc_client_nss, key.clone()).await?;
+    let object = get_raw_object(rpc_client_nss, bucket.clone(), key.clone()).await?;
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
             let mut blob = BytesMut::new();
@@ -60,7 +61,8 @@ pub async fn get_object(
                 let mut content = BytesMut::new();
                 let mpu_prefix = mpu::get_part_prefix(key.clone(), 0);
                 let mpus =
-                    list_raw_objects(rpc_client_nss, 10000, mpu_prefix, "".into(), false).await?;
+                    list_raw_objects(bucket, rpc_client_nss, 10000, mpu_prefix, "".into(), false)
+                        .await?;
                 // Do filtering if there is part_number option
                 let mpus = match opts.part_number {
                     None => &mpus[0..],

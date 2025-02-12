@@ -55,12 +55,13 @@ pub async fn any_handler(
     }
 
     match request.method() {
-        &Method::HEAD => head_handler(request, key, rpc_client_nss).await,
+        &Method::HEAD => head_handler(request, bucket_name, key, rpc_client_nss).await,
         &Method::GET => {
             get_handler(
                 request,
                 api_cmd,
                 api_sig,
+                bucket_name,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -72,6 +73,7 @@ pub async fn any_handler(
                 request,
                 api_cmd,
                 api_sig,
+                bucket_name,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -95,6 +97,7 @@ pub async fn any_handler(
             delete_handler(
                 request,
                 api_sig,
+                bucket_name,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -129,10 +132,15 @@ fn get_bucket_and_key_from_path(path: String) -> (String, String) {
     (bucket, key)
 }
 
-async fn head_handler(request: Request, key: String, rpc_client_nss: &RpcClientNss) -> Response {
+async fn head_handler(
+    request: Request,
+    bucket: String,
+    key: String,
+    rpc_client_nss: &RpcClientNss,
+) -> Response {
     match key.as_str() {
         "/" => StatusCode::BAD_REQUEST.into_response(),
-        _key => head::head_object(request, key, rpc_client_nss)
+        _key => head::head_object(request, bucket, key, rpc_client_nss)
             .await
             .into_response(),
     }
@@ -142,13 +150,14 @@ async fn get_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
 ) -> Response {
     match (api_cmd, key.as_str()) {
         (Some(ApiCommand::Attributes), _) => {
-            get::get_object_attributes(request, key, rpc_client_nss)
+            get::get_object_attributes(request, bucket, key, rpc_client_nss)
                 .await
                 .into_response()
         }
@@ -158,17 +167,17 @@ async fn get_handler(
         (Some(ApiCommand::Session), _) => session::create_session(request).await,
         (Some(api_cmd), _) => (StatusCode::BAD_REQUEST, format!("TODO: {api_cmd}")).into_response(),
         (None, "/") if api_sig.list_type.is_some() => {
-            list::list_objects_v2(request, rpc_client_nss)
+            list::list_objects_v2(request, bucket, rpc_client_nss)
                 .await
                 .into_response()
         }
         (None, "/") => (StatusCode::BAD_REQUEST, "Legacy listObjects api").into_response(),
         (None, _key) if api_sig.upload_id.is_some() => {
-            list::list_parts(request, key, rpc_client_nss)
+            list::list_parts(request, bucket, key, rpc_client_nss)
                 .await
                 .into_response()
         }
-        (None, _key) => get::get_object(request, key, rpc_client_nss, rpc_client_bss)
+        (None, _key) => get::get_object(request, bucket, key, rpc_client_nss, rpc_client_bss)
             .await
             .into_response(),
     }
@@ -178,6 +187,7 @@ async fn put_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -189,6 +199,7 @@ async fn put_handler(
         }
         (None, Some(part_number), Some(upload_id)) if key != "/" => mpu::upload_part(
             request,
+            bucket,
             key,
             part_number,
             upload_id,
@@ -198,11 +209,16 @@ async fn put_handler(
         )
         .await
         .into_response(),
-        (None, None, None) if key != "/" => {
-            put::put_object(request, key, rpc_client_nss, rpc_client_bss, blob_deletion)
-                .await
-                .into_response()
-        }
+        (None, None, None) if key != "/" => put::put_object(
+            request,
+            bucket,
+            key,
+            rpc_client_nss,
+            rpc_client_bss,
+            blob_deletion,
+        )
+        .await
+        .into_response(),
         _ => StatusCode::BAD_REQUEST.into_response(),
     }
 }
@@ -244,18 +260,24 @@ async fn post_handler(
 async fn delete_handler(
     request: Request,
     api_sig: ApiSignature,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Response {
     match api_sig.upload_id {
-        Some(upload_id) if key != "/" => {
-            mpu::abort_multipart_upload(request, key, upload_id, rpc_client_nss, rpc_client_bss)
-                .await
-                .into_response()
-        }
-        None if key != "/" => delete::delete_object(key, rpc_client_nss, blob_deletion)
+        Some(upload_id) if key != "/" => mpu::abort_multipart_upload(
+            request,
+            bucket,
+            key,
+            upload_id,
+            rpc_client_nss,
+            rpc_client_bss,
+        )
+        .await
+        .into_response(),
+        None if key != "/" => delete::delete_object(bucket, key, rpc_client_nss, blob_deletion)
             .await
             .into_response(),
         _ => StatusCode::BAD_REQUEST.into_response(),

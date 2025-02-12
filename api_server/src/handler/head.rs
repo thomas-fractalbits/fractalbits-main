@@ -28,11 +28,12 @@ pub struct HeadObjectOptions {
 
 pub async fn head_object(
     mut request: Request,
+    bucket: String,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> response::Result<HeaderMap> {
     let Query(_opts): Query<HeadObjectOptions> = request.extract_parts().await?;
-    let obj = get_raw_object(rpc_client_nss, key).await?;
+    let obj = get_raw_object(rpc_client_nss, bucket, key).await?;
 
     let mut headers = HeaderMap::new();
     let last_modified = time::format_http_date(obj.timestamp);

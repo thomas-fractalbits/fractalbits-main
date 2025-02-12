@@ -74,6 +74,7 @@ struct ResponseHeaders {
 
 pub async fn get_object_attributes(
     _request: Request,
+    _bucket: String,
     _key: String,
     _rpc_client_nss: &RpcClientNss,
 ) -> response::Result<Response> {

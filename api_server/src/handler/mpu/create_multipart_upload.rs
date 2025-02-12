@@ -55,7 +55,7 @@ pub async fn create_multipart_upload(
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new()).unwrap();
     let _resp = rpc_client_nss
-        .put_inode(key.clone(), object_layout_bytes.into())
+        .put_inode(bucket.clone(), key.clone(), object_layout_bytes.into())
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response())?;
     key.pop();
