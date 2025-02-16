@@ -1,10 +1,23 @@
-use std::net::SocketAddr;
 use std::sync::Arc;
+use std::{net::SocketAddr, path::PathBuf};
 
-use api_server::{config::Config, handler::any_handler, AppState};
+use api_server::{config, handler::any_handler, AppState};
 use axum::{extract::Request, routing, serve::ListenerExt};
+use clap::Parser;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+#[derive(Parser)]
+#[clap(name = "api_server", about = "API server")]
+struct Opt {
+    #[clap(
+        short = 'c',
+        long = "config",
+        long_help = "Config file path",
+        default_value = "etc/api_server_default.toml"
+    )]
+    pub config_file: PathBuf,
+}
 
 #[tokio::main]
 async fn main() {
@@ -17,7 +30,8 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
-    let config = Config::default();
+    let opt = Opt::parse();
+    let config = config::read_config(opt.config_file);
     let port = config.port;
     let app_state = AppState::new(config).await;
 

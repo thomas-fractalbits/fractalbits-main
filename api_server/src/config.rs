@@ -37,6 +37,7 @@ impl Default for Config {
         toml::from_str("").unwrap()
     }
 }
+
 pub fn read_config(config_file: PathBuf) -> Config {
     let config = fs::read_to_string(config_file).unwrap();
 

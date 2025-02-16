@@ -46,6 +46,7 @@ pin-project-lite = "0.2.15"
 etcd-client = "0.14.0"
 serde_json = "1.0.138"
 toml = { version = "0.8", default-features = false, features = ["parse"] }
+clap = { version = "4.5.27", features = ["derive"] }
 
 # Dev dependencies
 aws-sdk-s3 = "1.65.0"
@@ -53,6 +54,10 @@ base64 = "0.22.1"
 cmd_lib = "1.9.5"
 sha1 = "0.10.6"
 tracing-test = {version = "0.2.5", features = ["no-env-filter"]}
+env_logger = "0.11.5"
+num_cpus = "1.16.0"
+rayon = "1.10.0"
+rlimit = "0.10.2"
 
 # Build dependencies
 prost-build = "0.13"
