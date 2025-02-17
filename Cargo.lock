@@ -120,6 +120,7 @@ dependencies = [
  "axum 0.8.1",
  "axum-extra",
  "base64 0.22.1",
+ "bucket_tables",
  "bytes",
  "chrono",
  "clap 4.5.27",
@@ -664,6 +665,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bucket_tables"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2776,6 +2787,7 @@ dependencies = [
 name = "rpc_client_rss"
 version = "0.1.0"
 dependencies = [
+ "bucket_tables",
  "bytemuck",
  "bytes",
  "prost",

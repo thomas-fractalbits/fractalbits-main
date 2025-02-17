@@ -6,6 +6,7 @@ members = [
     "api_server/rpc_client/bss",
     "api_server/rpc_client/nss",
     "api_server/rpc_client/rss",
+    "api_server/bucket_tables",
     "root_server",
     "xtask",
 ]
@@ -15,6 +16,7 @@ resolver = "2"
 rpc_client_bss = { path = "api_server/rpc_client/bss" }
 rpc_client_nss = { path = "api_server/rpc_client/nss" }
 rpc_client_rss = { path = "api_server/rpc_client/rss" }
+bucket_tables = { path = "api_server/bucket_tables" }
 
 tokio-util = { version = "0.7.12", features = ["codec"] }
 tokio-stream = "0.1.16"

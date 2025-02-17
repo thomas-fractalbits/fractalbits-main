@@ -12,10 +12,8 @@ use rpc_client_nss::{
     RpcClientNss,
 };
 
-use crate::{
-    bucket_tables::bucket_table::Bucket,
-    object_layout::{MpuState, ObjectLayout, ObjectState},
-};
+use crate::object_layout::{MpuState, ObjectLayout, ObjectState};
+use bucket_tables::bucket_table::Bucket;
 
 pub async fn abort_multipart_upload(
     _request: Request,

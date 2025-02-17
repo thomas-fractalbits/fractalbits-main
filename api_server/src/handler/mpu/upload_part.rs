@@ -8,9 +8,9 @@ use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 
-use crate::bucket_tables::bucket_table::Bucket;
 use crate::handler::put::put_object;
 use crate::BlobId;
+use bucket_tables::bucket_table::Bucket;
 
 #[allow(dead_code)]
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]

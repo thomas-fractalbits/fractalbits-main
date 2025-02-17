@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
-use crate::{bucket_tables::bucket_table::Bucket, response::xml::Xml};
+use crate::response::xml::Xml;
 use axum::{
     extract::{Query, Request},
     http::StatusCode,
     response::{self, IntoResponse, Response},
     RequestExt,
 };
+use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, rancor::Error};
 use rpc_client_nss::{rpc::list_inodes_response, RpcClientNss};
 use serde::{Deserialize, Serialize};

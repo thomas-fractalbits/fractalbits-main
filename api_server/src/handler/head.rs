@@ -5,13 +5,11 @@ use axum::{
     http::{HeaderMap, HeaderValue, StatusCode},
     response, RequestExt,
 };
+use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
-use crate::{
-    bucket_tables::bucket_table::Bucket,
-    object_layout::{MpuState, ObjectState},
-};
+use crate::object_layout::{MpuState, ObjectState};
 
 use super::{get::get_raw_object, time};
 

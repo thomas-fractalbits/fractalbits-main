@@ -1,4 +1,3 @@
-mod bucket_tables;
 pub mod config;
 mod extract;
 pub mod handler;
@@ -9,7 +8,7 @@ use config::Config;
 use futures::stream::{self, StreamExt};
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};
 use rpc_client_nss::RpcClientNss;
-use rpc_client_rss::RpcClientRss;
+use rpc_client_rss::{ArcRpcClientRss, RpcClientRss};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -25,7 +24,7 @@ pub struct AppState {
     pub rpc_clients_bss: Vec<RpcClientBss>,
     pub blob_deletion: Sender<(BlobId, usize)>,
 
-    pub rpc_client_rss: Arc<RpcClientRss>,
+    pub rpc_client_rss: ArcRpcClientRss,
 }
 
 impl AppState {
@@ -57,11 +56,11 @@ impl AppState {
             }
         });
 
-        let rpc_client_rss = Arc::new(
+        let rpc_client_rss = ArcRpcClientRss(Arc::new(
             RpcClientRss::new(&config.rss_addr)
                 .await
                 .expect("rpc client rss failure"),
-        );
+        ));
 
         Self {
             config,
@@ -82,8 +81,8 @@ impl AppState {
         &self.rpc_clients_bss[hash]
     }
 
-    pub fn get_rpc_client_rss(&self) -> Arc<RpcClientRss> {
-        Arc::clone(&self.rpc_client_rss)
+    pub fn get_rpc_client_rss(&self) -> ArcRpcClientRss {
+        ArcRpcClientRss(Arc::clone(&self.rpc_client_rss.0))
     }
 
     #[inline]

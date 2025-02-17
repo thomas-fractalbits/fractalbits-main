@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use crate::{bucket_tables::bucket_table::Bucket, response::xml::Xml};
+use crate::response::xml::Xml;
 use axum::{
     extract::Request,
     response::{self, IntoResponse, Response},
 };
+use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
 

@@ -13,6 +13,7 @@ pub trait TableSchema {
     type E: Entry;
 }
 
+#[allow(async_fn_in_trait)]
 pub trait KvClient {
     async fn put(&mut self, key: String, value: Bytes) -> Bytes;
     async fn get(&mut self, key: String) -> Bytes;

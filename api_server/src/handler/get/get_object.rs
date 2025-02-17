@@ -9,12 +9,12 @@ use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
-use crate::bucket_tables::bucket_table::Bucket;
 use crate::handler::get::get_raw_object;
 use crate::handler::list::list_raw_objects;
 use crate::handler::mpu;
 use crate::object_layout::{MpuState, ObjectState};
 use crate::BlobId;
+use bucket_tables::bucket_table::Bucket;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]

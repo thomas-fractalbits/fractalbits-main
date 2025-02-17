@@ -8,7 +8,8 @@ use rkyv::{self, rancor::Error};
 use rpc_client_nss::{rpc::delete_inode_response, RpcClientNss};
 use tokio::sync::mpsc::Sender;
 
-use crate::{bucket_tables::bucket_table::Bucket, object_layout::ObjectLayout, BlobId};
+use crate::{object_layout::ObjectLayout, BlobId};
+use bucket_tables::bucket_table::Bucket;
 
 pub async fn delete_object(
     bucket: Arc<Bucket>,

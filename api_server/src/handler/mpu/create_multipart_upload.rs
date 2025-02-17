@@ -1,13 +1,14 @@
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::object_layout::*;
 use crate::response::xml::Xml;
-use crate::{bucket_tables::bucket_table::Bucket, object_layout::*};
 use axum::{
     extract::Request,
     http::StatusCode,
     response::{self, IntoResponse, Response},
 };
+use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;

@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bucket_tables.workspace = true
 serde.workspace = true
 tokio.workspace = true
 prost.workspace = true

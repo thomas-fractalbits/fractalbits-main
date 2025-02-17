@@ -1,18 +1,16 @@
-use std::sync::Arc;
-
-use crate::bucket_tables::{
-    bucket_table::{Bucket, BucketTable},
-    table::Table,
-};
 use axum::{
     extract::Request,
     http::StatusCode,
     response::{self, IntoResponse},
 };
+use bucket_tables::{
+    bucket_table::{Bucket, BucketTable},
+    table::Table,
+};
 use bytes::Buf;
 use http_body_util::BodyExt;
 use rpc_client_nss::{rpc::create_root_inode_response, RpcClientNss};
-use rpc_client_rss::RpcClientRss;
+use rpc_client_rss::ArcRpcClientRss;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -43,7 +41,7 @@ pub async fn create_bucket(
     bucket_name: String,
     request: Request,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_rss: Arc<RpcClientRss>,
+    rpc_client_rss: ArcRpcClientRss,
 ) -> response::Result<()> {
     let body = request.into_body().collect().await.unwrap().to_bytes();
     if !body.is_empty() {
@@ -64,7 +62,7 @@ pub async fn create_bucket(
         }
     };
 
-    let mut bucket_table: Table<Arc<RpcClientRss>, BucketTable> = Table::new(rpc_client_rss);
+    let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss);
     let bucket = Bucket::new(bucket_name.clone(), root_blob_name);
     bucket_table.put(&bucket).await;
     Ok(())

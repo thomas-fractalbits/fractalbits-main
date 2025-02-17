@@ -1,7 +1,6 @@
 use std::{collections::HashSet, sync::Arc};
 
 use crate::{
-    bucket_tables::bucket_table::Bucket,
     handler::{delete::delete_object, get::get_raw_object, list, mpu},
     object_layout::{MpuState, ObjectState},
     response::xml::Xml,
@@ -12,6 +11,7 @@ use axum::{
     http::StatusCode,
     response::{self, IntoResponse, Response},
 };
+use bucket_tables::bucket_table::Bucket;
 use bytes::Buf;
 use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};

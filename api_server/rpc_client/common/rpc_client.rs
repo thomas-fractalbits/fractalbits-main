@@ -1,3 +1,5 @@
+#[cfg(feature = "rss")]
+use bucket_tables::table::KvClient;
 use bytes::{Bytes, BytesMut};
 use std::collections::HashMap;
 use std::io::{self};
@@ -143,5 +145,23 @@ impl RpcClient {
     pub fn gen_request_id(&self) -> u32 {
         self.next_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+#[cfg(feature = "rss")]
+pub struct ArcRpcClient(pub Arc<RpcClient>);
+
+#[cfg(feature = "rss")]
+impl KvClient for ArcRpcClient {
+    async fn put(&mut self, key: String, value: Bytes) -> Bytes {
+        self.0.put(key.into(), value).await.unwrap()
+    }
+
+    async fn get(&mut self, key: String) -> Bytes {
+        self.0.get(key.into()).await.unwrap()
+    }
+
+    async fn delete(&mut self, key: String) -> Bytes {
+        self.0.delete(key.into()).await.unwrap()
     }
 }

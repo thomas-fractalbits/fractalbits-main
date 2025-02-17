@@ -15,8 +15,6 @@ use super::extract::{
     api_command::ApiCommandFromQuery, bucket_name::BucketNameFromHost, key::KeyFromPath,
 };
 use super::AppState;
-use crate::bucket_tables::bucket_table::{Bucket, BucketTable};
-use crate::bucket_tables::table::Table;
 use crate::extract::api_command::ApiCommand;
 use crate::extract::api_signature::ApiSignature;
 use crate::BlobId;
@@ -26,9 +24,11 @@ use axum::{
     extract::{ConnectInfo, Request, State},
     response::{IntoResponse, Response},
 };
+use bucket_tables::bucket_table::{Bucket, BucketTable};
+use bucket_tables::table::Table;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
-use rpc_client_rss::RpcClientRss;
+use rpc_client_rss::ArcRpcClientRss;
 use tokio::sync::mpsc::Sender;
 
 pub async fn any_handler(
@@ -58,7 +58,7 @@ pub async fn any_handler(
             .into_response();
     }
 
-    let mut bucket_table: Table<Arc<RpcClientRss>, BucketTable> = Table::new(rpc_client_rss);
+    let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss);
     let bucket = Arc::new(bucket_table.get(bucket_name).await);
 
     match request.method() {

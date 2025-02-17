@@ -4,8 +4,9 @@ use std::{
 };
 
 use super::block_data_stream::BlockDataStream;
-use crate::{bucket_tables::bucket_table::Bucket, object_layout::*, BlobId};
+use crate::{object_layout::*, BlobId};
 use axum::{extract::Request, http::StatusCode, response, response::IntoResponse};
+use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
