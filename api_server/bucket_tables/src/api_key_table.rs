@@ -1,11 +1,10 @@
 #![allow(dead_code)]
+use super::permission::BucketKeyPerm;
 use super::table::{Entry, TableSchema};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-type BucketKeyPerm = bool; // TODO: real bucket key permissions
-
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApiKey {
     pub key_id: String,
     pub secret_key: String,
@@ -13,6 +12,21 @@ pub struct ApiKey {
     pub allow_create_bucket: bool,
     pub authorized_buckets: HashMap<String /* bucket name */, BucketKeyPerm>,
     pub is_deleted: bool,
+}
+
+impl ApiKey {
+    pub fn new(name: &str) -> Self {
+        let key_id = format!("{}", hex::encode(&rand::random::<[u8; 12]>()[..]));
+        let secret_key = hex::encode(&rand::random::<[u8; 32]>()[..]);
+        Self {
+            key_id,
+            secret_key,
+            name: name.to_string(),
+            allow_create_bucket: true,
+            authorized_buckets: HashMap::new(),
+            is_deleted: false,
+        }
+    }
 }
 
 impl Entry for ApiKey {

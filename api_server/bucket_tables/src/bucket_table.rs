@@ -1,9 +1,8 @@
 #![allow(dead_code)]
+use super::permission::BucketKeyPerm;
 use super::table::{Entry, TableSchema};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-type BucketKeyPerm = bool; // TODO: real bucket pey permissions
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Bucket {

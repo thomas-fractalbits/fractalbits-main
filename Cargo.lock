@@ -672,6 +672,8 @@ name = "bucket_tables"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "hex",
+ "rand",
  "serde",
  "serde_json",
  "tokio",
