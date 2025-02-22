@@ -149,6 +149,7 @@ impl RpcClient {
 }
 
 #[cfg(feature = "rss")]
+#[derive(Clone)]
 pub struct ArcRpcClient(pub Arc<RpcClient>);
 
 #[cfg(feature = "rss")]

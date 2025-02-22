@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 
 use axum::{
@@ -17,10 +18,11 @@ const LONG_DATETIME: &str = "%Y%m%dT%H%M%SZ";
 
 pub struct AuthorizationFromReq(pub Option<Authorization>);
 
+#[derive(Debug)]
 pub struct Authorization {
     pub key_id: String,
     pub scope: String,
-    pub signed_headers: String,
+    pub signed_headers: BTreeSet<String>,
     pub signature: String,
     pub content_sha256: String,
     pub date: DateTime<Utc>,
@@ -62,7 +64,9 @@ where
         let signed_headers = auth_params
             .get("SignedHeaders")
             .expect("Could not find SignedHeaders in Authorization field")
-            .to_string();
+            .split(';')
+            .map(|s| s.to_string())
+            .collect();
         let signature = auth_params
             .get("Signature")
             .expect("Could not find Signature in Authorization field")

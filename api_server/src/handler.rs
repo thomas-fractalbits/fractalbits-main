@@ -11,10 +11,6 @@ mod session;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::handler::common::request::extract::{
-    api_command::ApiCommand, api_command::ApiCommandFromQuery, api_signature::ApiSignature,
-    bucket_name::BucketNameFromHost, key::KeyFromPath,
-};
 use crate::{AppState, BlobId};
 use axum::http::status::StatusCode;
 use axum::http::Method;
@@ -24,6 +20,11 @@ use axum::{
 };
 use bucket_tables::bucket_table::{Bucket, BucketTable};
 use bucket_tables::table::Table;
+use common::request::extract::{
+    api_command::ApiCommand, api_command::ApiCommandFromQuery, api_signature::ApiSignature,
+    authorization::AuthorizationFromReq, bucket_name::BucketNameFromHost, key::KeyFromPath,
+};
+use common::request::signature::verify_request;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::ArcRpcClientRss;
@@ -32,6 +33,7 @@ use tokio::sync::mpsc::Sender;
 pub async fn any_handler(
     State(app): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    AuthorizationFromReq(auth): AuthorizationFromReq,
     BucketNameFromHost(bucket_name_from_host): BucketNameFromHost,
     ApiCommandFromQuery(api_cmd): ApiCommandFromQuery,
     KeyFromPath(key_from_path): KeyFromPath,
@@ -46,10 +48,15 @@ pub async fn any_handler(
     };
     tracing::debug!(%bucket_name, %key);
 
-    let rpc_client_nss = app.get_rpc_client_nss(addr);
-    let rpc_client_bss = app.get_rpc_client_bss(addr);
     let rpc_client_rss = app.get_rpc_client_rss();
 
+    let (request, _api_key) = match auth {
+        None => (request, None),
+        Some(auth) => verify_request(request, &auth, rpc_client_rss.clone()).await,
+    };
+
+    let rpc_client_nss = app.get_rpc_client_nss(addr);
+    let rpc_client_bss = app.get_rpc_client_bss(addr);
     if key == "/" && Method::PUT == request.method() {
         return bucket::create_bucket(bucket_name, request, rpc_client_nss, rpc_client_rss)
             .await

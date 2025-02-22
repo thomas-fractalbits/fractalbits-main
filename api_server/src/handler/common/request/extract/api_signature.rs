@@ -47,7 +47,6 @@ mod tests {
     }
 
     async fn handler(api_signature: ApiSignature) -> String {
-        dbg!(&api_signature);
         if let Some(upload_id) = api_signature.upload_id {
             upload_id
         } else {
