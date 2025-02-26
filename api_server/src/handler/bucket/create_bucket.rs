@@ -4,8 +4,9 @@ use axum::{
     response::{self, IntoResponse},
 };
 use bucket_tables::{
-    api_key_table::ApiKey,
+    api_key_table::{ApiKey, ApiKeyTable},
     bucket_table::{Bucket, BucketTable},
+    permission::BucketKeyPerm,
     table::Table,
 };
 use bytes::Buf;
@@ -54,7 +55,7 @@ pub async fn create_bucket(
                 .into_response()
                 .into());
         }
-        Some(api_key) => {
+        Some(ref api_key) => {
             if !api_key.allow_create_bucket {
                 return Err((
                     StatusCode::UNAUTHORIZED,
@@ -85,8 +86,20 @@ pub async fn create_bucket(
         }
     };
 
-    let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss);
-    let bucket = Bucket::new(bucket_name.clone(), root_blob_name);
+    let mut api_key = api_key.unwrap();
+    let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
+    let mut bucket = Bucket::new(bucket_name.clone(), root_blob_name);
+    let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
+    bucket
+        .authorized_keys
+        .insert(api_key.key_id.clone(), bucket_key_perm);
     bucket_table.put(&bucket).await;
+
+    let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
+    api_key
+        .authorized_buckets
+        .insert(bucket_name, bucket_key_perm);
+    api_key_table.put(&api_key).await;
+
     Ok(())
 }
