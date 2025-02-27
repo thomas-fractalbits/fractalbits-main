@@ -28,6 +28,23 @@ pub enum AuthError {
     Invalid(String),
 }
 
+impl IntoResponse for AuthError {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            AuthError::ToStrError(s) => (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid string in authorization header: {s}"),
+            )
+                .into_response(),
+            AuthError::Invalid(s) => (
+                StatusCode::BAD_REQUEST,
+                format!("Invalid authorization header: {s}"),
+            )
+                .into_response(),
+        }
+    }
+}
+
 pub struct AuthorizationFromReq(pub Option<Authorization>);
 
 #[derive(Debug)]
@@ -138,23 +155,6 @@ where
             date,
         };
         Ok(Self(Some(auth)))
-    }
-}
-
-impl IntoResponse for AuthError {
-    fn into_response(self) -> axum::response::Response {
-        match self {
-            AuthError::ToStrError(s) => (
-                StatusCode::BAD_REQUEST,
-                format!("Invalid string in authorization header: {s}"),
-            )
-                .into_response(),
-            AuthError::Invalid(s) => (
-                StatusCode::BAD_REQUEST,
-                format!("Invalid authorization header: {s}"),
-            )
-                .into_response(),
-        }
     }
 }
 

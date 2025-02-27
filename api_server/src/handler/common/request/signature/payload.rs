@@ -17,7 +17,7 @@ use crate::handler::common::encoding::uri_encode;
 use crate::handler::common::request::extract::authorization::Authorization;
 use crate::handler::common::time::LONG_DATETIME;
 
-use super::signing_hmac;
+use super::{signing_hmac, SignatureError};
 
 const AWS4_HMAC_SHA256: &str = "AWS4-HMAC-SHA256";
 
@@ -26,9 +26,9 @@ pub async fn check_standard_signature(
     request: Request,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> (Request, Option<ApiKey>) {
+) -> Result<(Request, Option<ApiKey>), SignatureError> {
     let (mut head, body) = request.into_parts();
-    let query_params: Query<BTreeMap<String, String>> = head.extract().await.unwrap();
+    let query_params: Query<BTreeMap<String, String>> = head.extract().await?;
     let request = Request::from_parts(head, body);
     let canonical_request = canonical_request(
         request.method(),
@@ -37,18 +37,16 @@ pub async fn check_standard_signature(
         request.headers(),
         &auth.signed_headers,
         &auth.content_sha256,
-    );
+    )?;
     let string_to_sign =
         string_to_sign(&auth.date, &auth.scope.to_sign_string(), &canonical_request);
 
     tracing::trace!("canonical request:\n{}", canonical_request);
     tracing::trace!("string to sign:\n{}", string_to_sign);
 
-    let key = verify_v4(&auth, string_to_sign.as_bytes(), rpc_client_rss, region)
-        .await
-        .unwrap();
+    let key = verify_v4(&auth, string_to_sign.as_bytes(), rpc_client_rss, region).await?;
 
-    (request, Some(key))
+    Ok((request, key))
 }
 
 pub fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_req: &str) -> String {
@@ -70,7 +68,7 @@ pub fn canonical_request(
     headers: &HeaderMap<HeaderValue>,
     signed_headers: &BTreeSet<String>,
     content_sha256: &str,
-) -> String {
+) -> Result<String, SignatureError> {
     // Canonical query string from passed HeaderMap
     let canonical_query_string = {
         let mut items = Vec::with_capacity(query_params.len());
@@ -85,13 +83,14 @@ pub fn canonical_request(
     let canonical_header_string = signed_headers
         .iter()
         .map(|name| {
-            let value = headers
-                .get(name)
-                .expect(&format!("signed header `{}` is not present", name));
-            let value = std::str::from_utf8(value.as_bytes()).unwrap();
-            format!("{}:{}", name.as_str(), value.trim())
+            let value = headers.get(name).ok_or(SignatureError::Invalid(format!(
+                "signed header `{}` is not present",
+                name
+            )))?;
+            let value = std::str::from_utf8(value.as_bytes())?;
+            Ok(format!("{}:{}", name.as_str(), value.trim()))
         })
-        .collect::<Vec<String>>()
+        .collect::<Result<Vec<String>, SignatureError>>()?
         .join("\n");
     let signed_headers = signed_headers.iter().join(";");
 
@@ -104,7 +103,7 @@ pub fn canonical_request(
         &signed_headers,
         content_sha256,
     ];
-    list.join("\n")
+    Ok(list.join("\n"))
 }
 
 pub async fn verify_v4(
@@ -112,17 +111,17 @@ pub async fn verify_v4(
     payload: &[u8],
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Option<ApiKey> {
+) -> Result<Option<ApiKey>, SignatureError> {
     let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
     let key = api_key_table.get(auth.key_id.clone()).await;
 
-    let mut hmac =
-        signing_hmac(&auth.date, &key.secret_key, region).expect("Unable to build signing HMAC");
+    let mut hmac = signing_hmac(&auth.date, &key.secret_key, region)
+        .map_err(|_| SignatureError::Invalid("Unable to build signing HMAC".into()))?;
     hmac.update(payload);
-    let signature = hex::decode(&auth.signature).unwrap();
+    let signature = hex::decode(&auth.signature)?;
     if hmac.verify_slice(&signature).is_err() {
-        panic!("Invalid signature");
+        return Err(SignatureError::Invalid("signature mismatch".into()));
     }
 
-    Some(key)
+    Ok(Some(key))
 }

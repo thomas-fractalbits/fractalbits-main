@@ -54,13 +54,17 @@ pub async fn any_handler(
     let (request, api_key) = match auth {
         None => (request, None),
         Some(auth) => {
-            verify_request(
+            match verify_request(
                 request,
                 &auth,
                 rpc_client_rss.clone(),
                 &app.config.s3_region,
             )
             .await
+            {
+                Err(e) => return e.into_response(),
+                Ok((request, auth)) => (request, auth),
+            }
         }
     };
 
