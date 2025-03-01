@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::handler::common::response::xml::Xml;
+use crate::handler::common::{response::xml::Xml, s3_error::S3Error};
 use axum::{
     extract::Request,
-    response::{self, IntoResponse, Response},
+    response::{IntoResponse, Response},
 };
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
@@ -80,6 +80,6 @@ pub async fn get_object_attributes(
     _bucket: Arc<Bucket>,
     _key: String,
     _rpc_client_nss: &RpcClientNss,
-) -> response::Result<Response> {
+) -> Result<Response, S3Error> {
     Ok(Xml(GetObjectAttributesOutput::default()).into_response())
 }

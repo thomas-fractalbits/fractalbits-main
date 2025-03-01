@@ -3,6 +3,7 @@
 use std::convert::From;
 
 use axum::{
+    extract::rejection::QueryRejection,
     http::{uri::InvalidUri, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -744,6 +745,13 @@ impl From<HostRejection> for S3Error {
     }
 }
 
+impl From<QueryRejection> for S3Error {
+    fn from(value: QueryRejection) -> Self {
+        tracing::error!("QueryRejection: {value}");
+        Self::UnsupportedArgument
+    }
+}
+
 impl From<InvalidUri> for S3Error {
     fn from(value: InvalidUri) -> Self {
         tracing::error!("InvalidUri: {value}");
@@ -775,6 +783,13 @@ impl From<RpcErrorBss> for S3Error {
 impl From<RpcErrorRss> for S3Error {
     fn from(value: RpcErrorRss) -> Self {
         tracing::error!("RpcErrorRss: {value}");
+        Self::InternalError
+    }
+}
+
+impl From<rkyv::rancor::Error> for S3Error {
+    fn from(value: rkyv::rancor::Error) -> Self {
+        tracing::error!("rkyv rancor::Error: {value}");
         Self::InternalError
     }
 }

@@ -1,14 +1,14 @@
 use std::sync::Arc;
 
 use axum::extract::Query;
-use axum::http::StatusCode;
+use axum::extract::Request;
 use axum::RequestExt;
-use axum::{extract::Request, response};
 use bytes::{Bytes, BytesMut};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
+use crate::handler::common::s3_error::S3Error;
 use crate::handler::get::get_raw_object;
 use crate::handler::list::list_raw_objects;
 use crate::handler::mpu;
@@ -38,7 +38,7 @@ pub async fn get_object(
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
-) -> response::Result<Bytes> {
+) -> Result<Bytes, S3Error> {
     let Query(opts): Query<GetObjectOptions> = request.extract_parts().await?;
     let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     match object.state {
@@ -50,15 +50,17 @@ pub async fn get_object(
                 object.blob_id(),
                 object.num_blocks(),
             )
-            .await;
+            .await?;
             Ok(blob.freeze())
         }
         ObjectState::Mpu(mpu_state) => match mpu_state {
             MpuState::Uploading => {
-                Err((StatusCode::BAD_REQUEST, "object is still mpu uploading").into())
+                tracing::warn!("invalid mpu state: Uploading");
+                return Err(S3Error::InvalidObjectState);
             }
             MpuState::Aborted => {
-                Err((StatusCode::BAD_REQUEST, "object is in mpu aborted state").into())
+                tracing::warn!("invalid mpu state: Aborted");
+                return Err(S3Error::InvalidObjectState);
             }
             MpuState::Completed { size: _, etag: _ } => {
                 let mut content = BytesMut::new();
@@ -84,7 +86,7 @@ pub async fn get_object(
                         mpu_obj.blob_id(),
                         mpu_obj.num_blocks(),
                     )
-                    .await;
+                    .await?;
                 }
                 Ok(content.into())
             }
@@ -97,13 +99,14 @@ async fn get_full_blob(
     rpc_client_bss: &RpcClientBss,
     blob_id: BlobId,
     num_blocks: usize,
-) {
+) -> Result<(), S3Error> {
     for i in 0..num_blocks {
         let mut block = Bytes::new();
         let _size = rpc_client_bss
             .get_blob(blob_id, i as u32, &mut block)
-            .await
-            .unwrap();
+            .await?;
         blob.extend(block);
     }
+
+    Ok(())
 }
