@@ -31,7 +31,7 @@ pub async fn abort_multipart_upload(
 
     let object_bytes = match resp.result.unwrap() {
         get_inode_response::Result::Ok(res) => res,
-        get_inode_response::Result::ErrNotFound(_e) => {
+        get_inode_response::Result::ErrNotFound(()) => {
             return Err(S3Error::NoSuchKey);
         }
         get_inode_response::Result::ErrOthers(e) => {
