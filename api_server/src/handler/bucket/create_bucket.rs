@@ -19,8 +19,11 @@ use crate::handler::common::s3_error::S3Error;
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct CreateBucketConfiguration {
+    #[serde(default)]
     location_constraint: String,
+    #[serde(default)]
     location: Location,
+    #[serde(default)]
     bucket: BucketConfig,
 }
 
@@ -58,8 +61,7 @@ pub async fn create_bucket(
 
     let body = request.into_body().collect().await.unwrap().to_bytes();
     if !body.is_empty() {
-        let _req_body_res: CreateBucketConfiguration =
-            quick_xml::de::from_reader(body.reader()).unwrap();
+        let _req_body_res: CreateBucketConfiguration = quick_xml::de::from_reader(body.reader())?;
     }
 
     let resp = rpc_client_nss
