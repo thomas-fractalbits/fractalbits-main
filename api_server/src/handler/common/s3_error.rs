@@ -52,7 +52,7 @@ pub enum S3Error {
     #[error("The bucket does not allow ACLs.")]
     AccessControlListNotSupported,
 
-    #[error("Access Denied")]
+    #[error("Access Denied.")]
     AccessDenied,
 
     #[error("An access point with an identical name already exists in your account.")]

@@ -121,6 +121,7 @@ async fn any_handler_inner(
             request,
             rpc_client_nss,
             rpc_client_rss,
+            &app.config.s3_region,
         )
         .await;
     }

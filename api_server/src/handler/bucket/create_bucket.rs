@@ -1,5 +1,6 @@
 use axum::{
     extract::Request,
+    http::{header, HeaderValue},
     response::{IntoResponse, Response},
 };
 use bucket_tables::{
@@ -49,19 +50,30 @@ pub async fn create_bucket(
     request: Request,
     rpc_client_nss: &RpcClientNss,
     rpc_client_rss: ArcRpcClientRss,
+    region: &str,
 ) -> Result<Response, S3Error> {
-    match api_key {
+    let mut api_key = match api_key {
         None => return Err(S3Error::InvalidAccessKeyId),
-        Some(ref api_key) => {
+        Some(api_key) => {
             if !api_key.allow_create_bucket {
                 return Err(S3Error::AccessDenied);
             }
+            api_key
         }
-    }
+    };
 
     let body = request.into_body().collect().await.unwrap().to_bytes();
     if !body.is_empty() {
-        let _req_body_res: CreateBucketConfiguration = quick_xml::de::from_reader(body.reader())?;
+        let create_bucket_conf: CreateBucketConfiguration =
+            quick_xml::de::from_reader(body.reader())?;
+        let location_constraint = create_bucket_conf.location_constraint;
+        if !location_constraint.is_empty() && location_constraint != region {
+            return Err(S3Error::InvalidLocationConstraint);
+        }
+    }
+
+    if api_key.authorized_buckets.contains_key(&bucket_name) {
+        return Err(S3Error::BucketAlreadyExists);
     }
 
     let resp = rpc_client_nss
@@ -75,7 +87,6 @@ pub async fn create_bucket(
         }
     };
 
-    let mut api_key = api_key.unwrap();
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
     let mut bucket = Bucket::new(bucket_name.clone(), root_blob_name);
     let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
@@ -87,8 +98,12 @@ pub async fn create_bucket(
     let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
     api_key
         .authorized_buckets
-        .insert(bucket_name, bucket_key_perm);
+        .insert(bucket_name.clone(), bucket_key_perm);
     api_key_table.put(&api_key).await?;
 
-    Ok(().into_response())
+    Ok([(
+        header::LOCATION,
+        HeaderValue::from_str(&format!("/{bucket_name}")).unwrap(),
+    )]
+    .into_response())
 }
