@@ -19,7 +19,10 @@ pub async fn get_raw_object(
 
     let object_bytes = match resp.result.unwrap() {
         get_inode_response::Result::Ok(res) => res,
-        get_inode_response::Result::Err(e) => {
+        get_inode_response::Result::ErrNotFound(_e) => {
+            return Err(S3Error::NoSuchKey);
+        }
+        get_inode_response::Result::ErrOthers(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }
