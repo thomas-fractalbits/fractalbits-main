@@ -1,5 +1,5 @@
 mod bucket;
-mod common;
+pub mod common;
 mod delete;
 mod get;
 mod head;

@@ -83,15 +83,15 @@ struct Contents {
 }
 
 impl Contents {
-    fn from_obj_and_key(obj: ObjectLayout, key: String) -> Self {
-        Self {
+    fn from_obj_and_key(obj: ObjectLayout, key: String) -> Result<Self, S3Error> {
+        Ok(Self {
             key,
             last_modified: format_timestamp(obj.timestamp),
             etag: "bf1d737a4d46a19f3bced6905cc8b902".into(), //obj.etag(),
-            size: obj.size(),
+            size: obj.size()?,
             storage_class: "STANDARD".into(),
             ..Default::default()
-        }
+        })
     }
 }
 
@@ -167,13 +167,16 @@ pub async fn list_objects_v2(
     let contents = inodes
         .iter()
         .map(|x| {
-            rkyv::from_bytes::<ObjectLayout, Error>(&x.inode).map(|obj| {
-                let mut key = x.key.clone();
-                key.pop(); // removing nss's trailing '\0'
-                Contents::from_obj_and_key(obj, key)
-            })
+            match rkyv::from_bytes::<ObjectLayout, Error>(&x.inode) {
+                Err(e) => Err(e.into()),
+                Ok(obj) => {
+                    let mut key = x.key.clone();
+                    key.pop(); // removing nss's trailing '\0'
+                    Contents::from_obj_and_key(obj, key)
+                }
+            }
         })
-        .collect::<Result<Vec<Contents>, Error>>()?;
+        .collect::<Result<Vec<Contents>, S3Error>>()?;
 
     Ok(Xml(ListBucketResult::default()
         .contents(contents)

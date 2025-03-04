@@ -27,8 +27,9 @@ pub async fn delete_object(
     };
 
     let object = rkyv::from_bytes::<ObjectLayout, Error>(&object_bytes)?;
-    let blob_id = object.blob_id();
-    let num_blocks = object.num_blocks();
+    // FIXME: mpu object
+    let blob_id = object.blob_id()?;
+    let num_blocks = object.num_blocks()?;
     if let Err(e) = blob_deletion.send((blob_id, num_blocks)).await {
         tracing::warn!(
             "Failed to send blob {blob_id} num_blocks={num_blocks} for background deletion: {e}"

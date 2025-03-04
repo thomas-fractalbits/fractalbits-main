@@ -49,8 +49,8 @@ pub async fn get_object(
             get_full_blob(
                 &mut blob,
                 rpc_client_bss,
-                object.blob_id(),
-                object.num_blocks(),
+                object.blob_id()?,
+                object.num_blocks()?,
             )
             .await?;
             Ok(blob.freeze().into_response())
@@ -85,8 +85,8 @@ pub async fn get_object(
                     get_full_blob(
                         &mut content,
                         rpc_client_bss,
-                        mpu_obj.blob_id(),
-                        mpu_obj.num_blocks(),
+                        mpu_obj.blob_id()?,
+                        mpu_obj.num_blocks()?,
                     )
                     .await?;
                 }

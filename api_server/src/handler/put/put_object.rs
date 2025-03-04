@@ -75,8 +75,8 @@ pub async fn put_object(
     };
     if !old_object_bytes.is_empty() {
         let old_object = rkyv::from_bytes::<ObjectLayout, Error>(&old_object_bytes)?;
-        let blob_id = old_object.blob_id();
-        let num_blocks = old_object.num_blocks();
+        let blob_id = old_object.blob_id()?;
+        let num_blocks = old_object.num_blocks()?;
         if let Err(e) = blob_deletion.send((blob_id, num_blocks)).await {
             tracing::warn!(
             "Failed to send blob {blob_id} num_blocks={num_blocks} for background deletion: {e}");

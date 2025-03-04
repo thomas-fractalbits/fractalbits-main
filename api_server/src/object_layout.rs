@@ -1,3 +1,4 @@
+use crate::handler::common::s3_error::S3Error;
 use crate::BlobId;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
@@ -18,32 +19,34 @@ impl ObjectLayout {
     pub const DEFAULT_BLOCK_SIZE: u32 = 1024 * 1024 - 256;
 
     #[inline]
-    pub fn blob_id(&self) -> BlobId {
+    pub fn blob_id(&self) -> Result<BlobId, S3Error> {
         match self.state {
-            ObjectState::Normal(ref data) => data.blob_id,
-            ObjectState::Mpu(_) => todo!(),
+            ObjectState::Normal(ref data) => Ok(data.blob_id),
+            _ => Err(S3Error::InvalidObjectState),
         }
     }
 
     #[inline]
-    pub fn size(&self) -> u64 {
+    pub fn size(&self) -> Result<u64, S3Error> {
         match self.state {
-            ObjectState::Normal(ref data) => data.size,
-            ObjectState::Mpu(_) => todo!(),
+            ObjectState::Normal(ref data) => Ok(data.size),
+            ObjectState::Mpu(MpuState::Completed { size, .. }) => Ok(size),
+            _ => Err(S3Error::InvalidObjectState),
         }
     }
 
     #[inline]
-    pub fn etag(&self) -> String {
+    pub fn etag(&self) -> Result<String, S3Error> {
         match self.state {
-            ObjectState::Normal(ref data) => data.etag.clone(),
-            ObjectState::Mpu(_) => todo!(),
+            ObjectState::Normal(ref data) => Ok(data.etag.clone()),
+            ObjectState::Mpu(MpuState::Completed { ref etag, .. }) => Ok(etag.clone()),
+            _ => Err(S3Error::InvalidObjectState),
         }
     }
 
     #[inline]
-    pub fn num_blocks(&self) -> usize {
-        self.size().div_ceil(self.block_size as u64) as usize
+    pub fn num_blocks(&self) -> Result<usize, S3Error> {
+        Ok(self.size()?.div_ceil(self.block_size as u64) as usize)
     }
 }
 

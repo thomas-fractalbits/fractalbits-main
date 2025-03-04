@@ -99,7 +99,7 @@ pub async fn complete_multipart_upload(
         if !valid_part_numbers.remove(&part_number) {
             invalid_part_keys.insert(mpu_key.clone());
         } else {
-            total_size += mpu_obj.size();
+            total_size += mpu_obj.size()?;
         }
     }
     if !valid_part_numbers.is_empty() {
