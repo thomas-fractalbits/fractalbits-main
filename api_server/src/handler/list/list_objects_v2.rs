@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::handler::common::{response::xml::Xml, s3_error::S3Error};
+use crate::handler::common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp};
 use axum::{
     extract::{Query, Request},
     response::{IntoResponse, Response},
@@ -44,6 +44,31 @@ struct ListBucketResult {
     start_after: String,
 }
 
+impl ListBucketResult {
+    fn contents(self, contents: Vec<Contents>) -> Self {
+        Self {
+            key_count: contents.len(),
+            contents,
+            ..self
+        }
+    }
+
+    fn bucket_name(self, bucket_name: String) -> Self {
+        Self {
+            name: bucket_name,
+            ..self
+        }
+    }
+
+    fn prefix(self, prefix: String) -> Self {
+        Self { prefix, ..self }
+    }
+
+    fn max_keys(self, max_keys: u32) -> Self {
+        Self { max_keys, ..self }
+    }
+}
+
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct Contents {
@@ -52,9 +77,22 @@ struct Contents {
     key: String,
     last_modified: String, // timestamp
     owner: Owner,
-    restore_status: RestoreStatus,
-    size: usize,
+    restore_status: Option<RestoreStatus>,
+    size: u64,
     storage_class: String,
+}
+
+impl Contents {
+    fn from_obj_and_key(obj: ObjectLayout, key: String) -> Self {
+        Self {
+            key,
+            last_modified: format_timestamp(obj.timestamp),
+            etag: "bf1d737a4d46a19f3bced6905cc8b902".into(), //obj.etag(),
+            size: obj.size(),
+            storage_class: "STANDARD".into(),
+            ..Default::default()
+        }
+    }
 }
 
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
@@ -64,6 +102,7 @@ struct Owner {
     id: String,
 }
 
+#[allow(dead_code)]
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct RestoreStatus {
@@ -110,7 +149,7 @@ pub async fn list_objects_v2(
         .list_inodes(
             bucket.root_blob_name.clone(),
             max_keys,
-            prefix,
+            prefix.clone(),
             start_after,
             true,
         )
@@ -125,12 +164,21 @@ pub async fn list_objects_v2(
         }
     };
 
-    for inode in inodes {
-        let _object = rkyv::from_bytes::<ObjectLayout, Error>(&inode.inode)?;
-        // dbg!(&inode.key);
-        // dbg!(object.timestamp);
-        // dbg!(object.size);
-    }
+    let contents = inodes
+        .iter()
+        .map(|x| {
+            rkyv::from_bytes::<ObjectLayout, Error>(&x.inode).map(|obj| {
+                let mut key = x.key.clone();
+                key.pop(); // removing nss's trailing '\0'
+                Contents::from_obj_and_key(obj, key)
+            })
+        })
+        .collect::<Result<Vec<Contents>, Error>>()?;
 
-    Ok(Xml(ListBucketResult::default()).into_response())
+    Ok(Xml(ListBucketResult::default()
+        .contents(contents)
+        .bucket_name(bucket.bucket_name.clone())
+        .prefix(prefix)
+        .max_keys(max_keys))
+    .into_response())
 }

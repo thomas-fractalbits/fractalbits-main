@@ -34,6 +34,14 @@ impl ObjectLayout {
     }
 
     #[inline]
+    pub fn etag(&self) -> String {
+        match self.state {
+            ObjectState::Normal(ref data) => data.etag.clone(),
+            ObjectState::Mpu(_) => todo!(),
+        }
+    }
+
+    #[inline]
     pub fn num_blocks(&self) -> usize {
         self.size().div_ceil(self.block_size as u64) as usize
     }
