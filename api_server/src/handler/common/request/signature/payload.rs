@@ -26,7 +26,7 @@ pub async fn check_standard_signature(
     request: Request,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<(Request, Option<ApiKey>), SignatureError> {
+) -> Result<(Request, Option<(i64, ApiKey)>), SignatureError> {
     let (mut head, body) = request.into_parts();
     let query_params: Query<BTreeMap<String, String>> = head.extract().await?;
     let request = Request::from_parts(head, body);
@@ -111,9 +111,9 @@ pub async fn verify_v4(
     payload: &[u8],
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<Option<ApiKey>, SignatureError> {
+) -> Result<Option<(i64, ApiKey)>, SignatureError> {
     let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
-    let key = api_key_table.get(auth.key_id.clone()).await?;
+    let (version, key) = api_key_table.get(auth.key_id.clone()).await?;
 
     let mut hmac = signing_hmac(&auth.date, &key.secret_key, region)
         .map_err(|_| SignatureError::Invalid("Unable to build signing HMAC".into()))?;
@@ -123,5 +123,5 @@ pub async fn verify_v4(
         return Err(SignatureError::Invalid("signature mismatch".into()));
     }
 
-    Ok(Some(key))
+    Ok(Some((version, key)))
 }

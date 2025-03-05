@@ -32,12 +32,15 @@ pub enum RpcError {
     #[cfg(any(feature = "nss", feature = "rss"))]
     #[error(transparent)]
     DecodeError(prost::DecodeError),
-    #[error("internal request sending error: {0}")]
+    #[error("Internal request sending error: {0}")]
     InternalRequestError(String),
-    #[error("internal response error: {0}")]
+    #[error("Internal response error: {0}")]
     InternalResponseError(String),
     #[error("Entry not found")]
     NotFound,
+    #[cfg(feature = "rss")] // for etcd txn api
+    #[error("Retry")]
+    Retry,
 }
 
 pub enum Message {
@@ -154,11 +157,11 @@ pub struct ArcRpcClient(pub Arc<RpcClient>);
 #[cfg(feature = "rss")]
 impl KvClient for ArcRpcClient {
     type Error = RpcError;
-    async fn put(&mut self, key: String, value: Bytes) -> Result<Bytes, Self::Error> {
-        self.0.put(key.into(), value).await
+    async fn put(&mut self, version: i64, key: String, value: Bytes) -> Result<Bytes, Self::Error> {
+        self.0.put(version, key.into(), value).await
     }
 
-    async fn get(&mut self, key: String) -> Result<Bytes, Self::Error> {
+    async fn get(&mut self, key: String) -> Result<(i64, Bytes), Self::Error> {
         self.0.get(key.into()).await
     }
 

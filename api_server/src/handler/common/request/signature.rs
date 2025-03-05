@@ -42,7 +42,7 @@ pub async fn verify_request(
     auth: &Authorization,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<(Request, Option<ApiKey>), SignatureError> {
+) -> Result<(Request, Option<(i64, ApiKey)>), SignatureError> {
     payload::check_standard_signature(auth, request, rpc_client_rss, region).await
 }
 

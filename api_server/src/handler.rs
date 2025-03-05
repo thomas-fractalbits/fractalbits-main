@@ -134,7 +134,7 @@ async fn any_handler_inner(
 
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
     let bucket = match bucket_table.get(bucket_name).await {
-        Ok(bucket) => Arc::new(bucket),
+        Ok(bucket) => Arc::new(bucket.1),
         Err(RpcErrorRss::NotFound) => return Err(S3Error::NoSuchBucket),
         Err(e) => return Err(e.into()),
     };
@@ -315,7 +315,7 @@ async fn post_handler(
 
 #[allow(clippy::too_many_arguments)]
 async fn delete_handler(
-    api_key: Option<ApiKey>,
+    api_key: Option<(i64, ApiKey)>,
     request: Request,
     api_sig: ApiSignature,
     bucket: Arc<Bucket>,

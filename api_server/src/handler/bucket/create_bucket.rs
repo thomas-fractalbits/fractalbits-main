@@ -12,7 +12,7 @@ use bucket_tables::{
 use bytes::Buf;
 use http_body_util::BodyExt;
 use rpc_client_nss::{rpc::create_root_inode_response, RpcClientNss};
-use rpc_client_rss::ArcRpcClientRss;
+use rpc_client_rss::{ArcRpcClientRss, RpcErrorRss};
 use serde::{Deserialize, Serialize};
 
 use crate::handler::common::s3_error::S3Error;
@@ -45,20 +45,23 @@ struct BucketConfig {
 }
 
 pub async fn create_bucket(
-    api_key: Option<ApiKey>,
+    api_key: Option<(i64, ApiKey)>,
     bucket_name: String,
     request: Request,
     rpc_client_nss: &RpcClientNss,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
 ) -> Result<Response, S3Error> {
-    let mut api_key = match api_key {
+    let api_key_id = match api_key {
         None => return Err(S3Error::InvalidAccessKeyId),
-        Some(api_key) => {
+        Some((_version, api_key)) => {
+            if api_key.authorized_buckets.contains_key(&bucket_name) {
+                return Err(S3Error::BucketAlreadyExists);
+            }
             if !api_key.allow_create_bucket {
                 return Err(S3Error::AccessDenied);
             }
-            api_key
+            api_key.key_id.clone()
         }
     };
 
@@ -70,10 +73,6 @@ pub async fn create_bucket(
         if !location_constraint.is_empty() && location_constraint != region {
             return Err(S3Error::InvalidLocationConstraint);
         }
-    }
-
-    if api_key.authorized_buckets.contains_key(&bucket_name) {
-        return Err(S3Error::BucketAlreadyExists);
     }
 
     let resp = rpc_client_nss
@@ -92,18 +91,38 @@ pub async fn create_bucket(
     let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
     bucket
         .authorized_keys
-        .insert(api_key.key_id.clone(), bucket_key_perm);
-    bucket_table.put(&bucket).await?;
+        .insert(api_key_id.clone(), bucket_key_perm);
+    tracing::debug!("putting bucket_table with {bucket_name}");
+    bucket_table.put(0, &bucket).await?;
+    tracing::debug!("putting bucket_table with {bucket_name} done");
 
-    let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
-    api_key
-        .authorized_buckets
-        .insert(bucket_name.clone(), bucket_key_perm);
-    api_key_table.put(&api_key).await?;
+    let retry_times = 10;
+    for i in 0..retry_times {
+        let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> =
+            Table::new(rpc_client_rss.clone());
+        let (api_key_version, mut api_key) = api_key_table.get(api_key_id.clone()).await?;
+        api_key
+            .authorized_buckets
+            .insert(bucket_name.clone(), bucket_key_perm);
+        tracing::debug!(
+            "Inserting {} into api_key {} (retry={})",
+            bucket_name.clone(),
+            api_key_id.clone(),
+            i,
+        );
+        match api_key_table.put(api_key_version, &api_key).await {
+            Err(RpcErrorRss::Retry) => continue,
+            Ok(_) => {
+                return Ok([(
+                    header::LOCATION,
+                    HeaderValue::from_str(&format!("/{bucket_name}")).unwrap(),
+                )]
+                .into_response())
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
 
-    Ok([(
-        header::LOCATION,
-        HeaderValue::from_str(&format!("/{bucket_name}")).unwrap(),
-    )]
-    .into_response())
+    tracing::error!("Inserting {bucket_name} into api_key {api_key_id} failed after retrying {retry_times} times");
+    Err(S3Error::InternalError)
 }
