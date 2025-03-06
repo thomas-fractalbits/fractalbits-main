@@ -74,8 +74,8 @@ pub async fn delete_bucket(
             .await
         {
             Err(RpcErrorRss::Retry) => continue,
-            Ok(_) => return Ok(().into_response()),
             Err(e) => return Err(e.into()),
+            Ok(()) => return Ok(().into_response()),
         }
     }
 

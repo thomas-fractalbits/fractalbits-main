@@ -36,22 +36,22 @@ pub trait TableSchema {
 #[allow(async_fn_in_trait)]
 pub trait KvClient {
     type Error: std::error::Error;
-    async fn put(&mut self, key: String, value: Versioned<Bytes>) -> Result<Bytes, Self::Error>;
+    async fn put(&mut self, key: String, value: Versioned<Bytes>) -> Result<(), Self::Error>;
     async fn put_with_extra(
         &mut self,
         key: String,
         value: Versioned<Bytes>,
         extra_key: String,
         extra_value: Versioned<Bytes>,
-    ) -> Result<Bytes, Self::Error>;
+    ) -> Result<(), Self::Error>;
     async fn get(&mut self, key: String) -> Result<Versioned<Bytes>, Self::Error>;
-    async fn delete(&mut self, key: String) -> Result<Bytes, Self::Error>;
+    async fn delete(&mut self, key: String) -> Result<(), Self::Error>;
     async fn delete_with_extra(
         &mut self,
         key: String,
         extra_key: String,
         extra_value: Versioned<Bytes>,
-    ) -> Result<Bytes, Self::Error>;
+    ) -> Result<(), Self::Error>;
     async fn list(&mut self, prefix: String) -> Result<Vec<Bytes>, Self::Error>;
 }
 

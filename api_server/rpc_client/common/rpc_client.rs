@@ -157,7 +157,7 @@ pub struct ArcRpcClient(pub Arc<RpcClient>);
 #[cfg(feature = "rss")]
 impl KvClient for ArcRpcClient {
     type Error = RpcError;
-    async fn put(&mut self, key: String, value: Versioned<Bytes>) -> Result<Bytes, Self::Error> {
+    async fn put(&mut self, key: String, value: Versioned<Bytes>) -> Result<(), Self::Error> {
         self.0.put(value.version, key.into(), value.data).await
     }
 
@@ -165,7 +165,7 @@ impl KvClient for ArcRpcClient {
         self.0.get(key.into()).await.map(|x| x.into())
     }
 
-    async fn delete(&mut self, key: String) -> Result<Bytes, Self::Error> {
+    async fn delete(&mut self, key: String) -> Result<(), Self::Error> {
         self.0.delete(key.into()).await
     }
 
@@ -179,7 +179,7 @@ impl KvClient for ArcRpcClient {
         value: Versioned<Bytes>,
         extra_key: String,
         extra_value: Versioned<Bytes>,
-    ) -> Result<Bytes, Self::Error> {
+    ) -> Result<(), Self::Error> {
         self.0
             .put_with_extra(
                 value.version,
@@ -197,7 +197,7 @@ impl KvClient for ArcRpcClient {
         key: String,
         extra_key: String,
         extra_value: Versioned<Bytes>,
-    ) -> Result<Bytes, Self::Error> {
+    ) -> Result<(), Self::Error> {
         self.0
             .delete_with_extra(
                 key.into(),

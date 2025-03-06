@@ -121,14 +121,14 @@ pub async fn create_bucket(
             .await
         {
             Err(RpcErrorRss::Retry) => continue,
-            Ok(_) => {
+            Err(e) => return Err(e.into()),
+            Ok(()) => {
                 return Ok([(
                     header::LOCATION,
                     HeaderValue::from_str(&format!("/{bucket_name}")).unwrap(),
                 )]
                 .into_response())
             }
-            Err(e) => return Err(e.into()),
         }
     }
 

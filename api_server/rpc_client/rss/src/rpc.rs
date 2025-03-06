@@ -8,7 +8,7 @@ use prost::Message as PbMessage;
 include!(concat!(env!("OUT_DIR"), "/rss_ops.rs"));
 
 impl RpcClient {
-    pub async fn put(&self, version: i64, key: Bytes, value: Bytes) -> Result<Bytes, RpcError> {
+    pub async fn put(&self, version: i64, key: Bytes, value: Bytes) -> Result<(), RpcError> {
         let body = PutRequest {
             version,
             key,
@@ -31,7 +31,7 @@ impl RpcClient {
             .body;
         let resp: PutResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
         match resp.result.unwrap() {
-            put_response::Result::Ok(resp) => Ok(resp),
+            put_response::Result::Ok(()) => Ok(()),
             put_response::Result::ErrOthers(resp) => Err(RpcError::InternalResponseError(resp)),
             put_response::Result::ErrRetry(()) => Err(RpcError::Retry),
         }
@@ -45,7 +45,7 @@ impl RpcClient {
         extra_version: i64,
         extra_key: Bytes,
         extra_value: Bytes,
-    ) -> Result<Bytes, RpcError> {
+    ) -> Result<(), RpcError> {
         let body = PutWithExtraRequest {
             version,
             key,
@@ -72,7 +72,7 @@ impl RpcClient {
         let resp: PutWithExtraResponse =
             PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
         match resp.result.unwrap() {
-            put_with_extra_response::Result::Ok(resp) => Ok(resp),
+            put_with_extra_response::Result::Ok(()) => Ok(()),
             put_with_extra_response::Result::ErrOthers(resp) => {
                 Err(RpcError::InternalResponseError(resp))
             }
@@ -105,7 +105,7 @@ impl RpcClient {
         }
     }
 
-    pub async fn delete(&self, key: Bytes) -> Result<Bytes, RpcError> {
+    pub async fn delete(&self, key: Bytes) -> Result<(), RpcError> {
         let body = DeleteRequest { key };
 
         let mut header = MessageHeader::default();
@@ -124,7 +124,7 @@ impl RpcClient {
             .body;
         let resp: DeleteResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
         match resp.result.unwrap() {
-            delete_response::Result::Ok(resp) => Ok(resp),
+            delete_response::Result::Ok(()) => Ok(()),
             delete_response::Result::Err(resp) => Err(RpcError::InternalResponseError(resp)),
         }
     }
@@ -135,7 +135,7 @@ impl RpcClient {
         extra_version: i64,
         extra_key: Bytes,
         extra_value: Bytes,
-    ) -> Result<Bytes, RpcError> {
+    ) -> Result<(), RpcError> {
         let body = DeleteWithExtraRequest {
             key,
             extra_version,
@@ -160,7 +160,7 @@ impl RpcClient {
         let resp: DeleteWithExtraResponse =
             PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
         match resp.result.unwrap() {
-            delete_with_extra_response::Result::Ok(resp) => Ok(resp),
+            delete_with_extra_response::Result::Ok(()) => Ok(()),
             delete_with_extra_response::Result::ErrOthers(resp) => {
                 Err(RpcError::InternalResponseError(resp))
             }
