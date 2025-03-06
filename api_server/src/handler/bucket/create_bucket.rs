@@ -87,6 +87,10 @@ pub async fn create_bucket(
     };
 
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
+    if bucket_table.get(bucket_name.clone()).await.is_ok() {
+        return Err(S3Error::BucketAlreadyExists);
+    }
+
     let mut bucket = Bucket::new(bucket_name.clone(), root_blob_name);
     let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
     bucket
@@ -124,5 +128,7 @@ pub async fn create_bucket(
     }
 
     tracing::error!("Inserting {bucket_name} into api_key {api_key_id} failed after retrying {retry_times} times");
+    // TODO: wrap multiple kv updates into etcd txn and send them through rpc call, since it may
+    // leave etcd datebase into an inconsistent state
     Err(S3Error::InternalError)
 }

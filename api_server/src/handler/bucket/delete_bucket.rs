@@ -72,5 +72,7 @@ pub async fn delete_bucket(
         "Deleting {} from api_key {api_key_id} failed after retrying {retry_times} times",
         bucket.bucket_name
     );
+    // TODO: wrap multiple kv updates into etcd txn and send them through rpc call, since it may
+    // leave etcd datebase into an inconsistent state
     Err(S3Error::InternalError)
 }
