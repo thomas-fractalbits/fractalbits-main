@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
 use crate::{
     handler::{
@@ -14,7 +14,7 @@ use axum::{
     extract::Request,
     response::{IntoResponse, Response},
 };
-use bucket_tables::{bucket_table::Bucket, table::Versioned};
+use bucket_tables::bucket_table::Bucket;
 use bytes::Buf;
 use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
@@ -60,7 +60,7 @@ struct CompleteMultipartUploadResult {
 
 pub async fn complete_multipart_upload(
     request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     mut key: String,
     upload_id: String,
     rpc_client_nss: &RpcClientNss,
@@ -71,12 +71,8 @@ pub async fn complete_multipart_upload(
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let mut object = get_raw_object(
-        rpc_client_nss,
-        bucket.data.root_blob_name.clone(),
-        key.clone(),
-    )
-    .await?;
+    let mut object =
+        get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchVersion);
     }
@@ -87,7 +83,7 @@ pub async fn complete_multipart_upload(
     let max_parts = 10000;
     let mpu_prefix = mpu::get_part_prefix(key.clone(), 0);
     let objs = list::list_raw_objects(
-        bucket.data.root_blob_name.clone(),
+        bucket.root_blob_name.clone(),
         rpc_client_nss,
         max_parts,
         mpu_prefix.clone(),
@@ -111,7 +107,7 @@ pub async fn complete_multipart_upload(
     }
     for mpu_key in invalid_part_keys.iter() {
         delete_object(
-            bucket.clone(),
+            bucket,
             mpu_key.clone(),
             rpc_client_nss,
             blob_deletion.clone(),
@@ -126,7 +122,7 @@ pub async fn complete_multipart_upload(
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new())?;
     let resp = rpc_client_nss
         .put_inode(
-            bucket.data.root_blob_name.clone(),
+            bucket.root_blob_name.clone(),
             key.clone(),
             new_object_bytes.into(),
         )
@@ -141,7 +137,7 @@ pub async fn complete_multipart_upload(
 
     let mut resp = CompleteMultipartUploadResult::default();
     key.pop();
-    resp.bucket = bucket.data.bucket_name.clone();
+    resp.bucket = bucket.bucket_name.clone();
     resp.key = key;
     resp.etag = upload_id;
     Ok(Xml(resp).into_response())

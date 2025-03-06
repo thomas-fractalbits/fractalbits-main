@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use axum::{
     extract::{Query, Request},
     http::{HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
     RequestExt,
 };
-use bucket_tables::{bucket_table::Bucket, table::Versioned};
+use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
@@ -34,12 +32,12 @@ pub struct HeadObjectOptions {
 
 pub async fn head_object(
     mut request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
     let Query(_opts): Query<HeadObjectOptions> = request.extract_parts().await?;
-    let obj = get_raw_object(rpc_client_nss, bucket.data.root_blob_name.clone(), key).await?;
+    let obj = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key).await?;
 
     let mut headers = HeaderMap::new();
     let last_modified = time::format_http_date(obj.timestamp);

@@ -134,19 +134,19 @@ async fn any_handler_inner(
 
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
     let bucket = match bucket_table.get(bucket_name).await {
-        Ok(bucket) => Arc::new(bucket),
+        Ok(bucket) => bucket.data,
         Err(RpcErrorRss::NotFound) => return Err(S3Error::NoSuchBucket),
         Err(e) => return Err(e.into()),
     };
 
     match request.method() {
-        &Method::HEAD => head_handler(request, bucket, key, rpc_client_nss).await,
+        &Method::HEAD => head_handler(request, &bucket, key, rpc_client_nss).await,
         &Method::GET => {
             get_handler(
                 request,
                 api_cmd,
                 api_sig,
-                bucket,
+                &bucket,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -158,7 +158,7 @@ async fn any_handler_inner(
                 request,
                 api_cmd,
                 api_sig,
-                bucket,
+                &bucket,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -171,7 +171,7 @@ async fn any_handler_inner(
                 request,
                 api_cmd,
                 api_sig,
-                bucket,
+                &bucket,
                 key,
                 rpc_client_nss,
                 app.blob_deletion.clone(),
@@ -183,7 +183,7 @@ async fn any_handler_inner(
                 api_key,
                 request,
                 api_sig,
-                bucket,
+                &bucket,
                 key,
                 rpc_client_nss,
                 rpc_client_bss,
@@ -198,7 +198,7 @@ async fn any_handler_inner(
 
 async fn head_handler(
     request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
@@ -212,7 +212,7 @@ async fn get_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -246,7 +246,7 @@ async fn put_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -286,7 +286,7 @@ async fn post_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     blob_deletion: Sender<(BlobId, usize)>,
@@ -318,7 +318,7 @@ async fn delete_handler(
     api_key: Option<Versioned<ApiKey>>,
     request: Request,
     api_sig: ApiSignature,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,

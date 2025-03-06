@@ -1,8 +1,5 @@
-use std::sync::Arc;
-
 use axum::response::Response;
 use axum::{extract::Request, http::HeaderValue, response};
-use bucket_tables::table::Versioned;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
@@ -35,7 +32,7 @@ struct ResponseHeaders {
 #[allow(clippy::too_many_arguments)]
 pub async fn upload_part(
     request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     part_number: u64,
     upload_id: String,

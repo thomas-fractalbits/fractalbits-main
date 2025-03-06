@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     extract::Request,
     response::{IntoResponse, Response},
@@ -17,7 +15,7 @@ use crate::handler::common::s3_error::S3Error;
 
 pub async fn delete_bucket(
     api_key: Option<Versioned<ApiKey>>,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     _request: Request,
     rpc_client_nss: &RpcClientNss,
     rpc_client_rss: ArcRpcClientRss,
@@ -28,7 +26,7 @@ pub async fn delete_bucket(
             if !api_key
                 .data
                 .authorized_buckets
-                .contains_key(&bucket.data.bucket_name)
+                .contains_key(&bucket.bucket_name)
             {
                 return Err(S3Error::AccessDenied);
             }
@@ -37,7 +35,7 @@ pub async fn delete_bucket(
     };
 
     let resp = rpc_client_nss
-        .delete_root_inode(bucket.data.root_blob_name.clone())
+        .delete_root_inode(bucket.root_blob_name.clone())
         .await?;
     match resp.result.unwrap() {
         delete_root_inode_response::Result::Ok(res) => res,
@@ -58,19 +56,16 @@ pub async fn delete_bucket(
         let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> =
             Table::new(rpc_client_rss.clone());
         let mut api_key = api_key_table.get(api_key_id.clone()).await?;
-        api_key
-            .data
-            .authorized_buckets
-            .remove(&bucket.data.bucket_name);
+        api_key.data.authorized_buckets.remove(&bucket.bucket_name);
         tracing::debug!(
             "Deleting {} from api_key {} (retry={})",
-            bucket.data.bucket_name,
+            bucket.bucket_name,
             api_key_id.clone(),
             i,
         );
 
         match bucket_table
-            .delete_with_extra::<ApiKeyTable>(&bucket.data, &api_key)
+            .delete_with_extra::<ApiKeyTable>(bucket, &api_key)
             .await
         {
             Err(RpcErrorRss::Retry) => continue,
@@ -81,7 +76,7 @@ pub async fn delete_bucket(
 
     tracing::error!(
         "Deleting {} from api_key {api_key_id} failed after retrying {retry_times} times",
-        bucket.data.bucket_name
+        bucket.bucket_name
     );
     Err(S3Error::InternalError)
 }

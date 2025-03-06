@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     extract::Request,
     response::{IntoResponse, Response},
@@ -15,18 +13,18 @@ use crate::{
     handler::common::s3_error::S3Error,
     object_layout::{MpuState, ObjectLayout, ObjectState},
 };
-use bucket_tables::{bucket_table::Bucket, table::Versioned};
+use bucket_tables::bucket_table::Bucket;
 
 pub async fn abort_multipart_upload(
     _request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     _upload_id: String,
     rpc_client_nss: &RpcClientNss,
     _rpc_client_bss: &RpcClientBss,
 ) -> Result<Response, S3Error> {
     let resp = rpc_client_nss
-        .get_inode(bucket.data.root_blob_name.clone(), key.clone())
+        .get_inode(bucket.root_blob_name.clone(), key.clone())
         .await?;
 
     let object_bytes = match resp.result.unwrap() {
@@ -46,11 +44,7 @@ pub async fn abort_multipart_upload(
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new())?;
 
     let resp = rpc_client_nss
-        .put_inode(
-            bucket.data.root_blob_name.clone(),
-            key,
-            new_object_bytes.into(),
-        )
+        .put_inode(bucket.root_blob_name.clone(), key, new_object_bytes.into())
         .await?;
     match resp.result.unwrap() {
         put_inode_response::Result::Ok(_) => {}

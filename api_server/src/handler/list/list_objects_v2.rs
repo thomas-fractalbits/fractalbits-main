@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use crate::handler::common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp};
 use axum::{
     extract::{Query, Request},
     response::{IntoResponse, Response},
     RequestExt,
 };
-use bucket_tables::{bucket_table::Bucket, table::Versioned};
+use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, rancor::Error};
 use rpc_client_nss::{rpc::list_inodes_response, RpcClientNss};
 use serde::{Deserialize, Serialize};
@@ -118,7 +116,7 @@ struct CommonPrefixes {
 
 pub async fn list_objects_v2(
     mut request: Request,
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
     let Query(opts): Query<ListObjectsV2Options> = request.extract_parts().await?;
@@ -147,7 +145,7 @@ pub async fn list_objects_v2(
     let start_after = opts.start_after.unwrap_or_default();
     let resp = rpc_client_nss
         .list_inodes(
-            bucket.data.root_blob_name.clone(),
+            bucket.root_blob_name.clone(),
             max_keys,
             prefix.clone(),
             start_after,
@@ -180,7 +178,7 @@ pub async fn list_objects_v2(
 
     Ok(Xml(ListBucketResult::default()
         .contents(contents)
-        .bucket_name(bucket.data.bucket_name.clone())
+        .bucket_name(bucket.bucket_name.clone())
         .prefix(prefix)
         .max_keys(max_keys))
     .into_response())

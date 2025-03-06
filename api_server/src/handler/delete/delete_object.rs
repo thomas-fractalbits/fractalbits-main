@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::response::{IntoResponse, Response};
 use rkyv::{self, rancor::Error};
 use rpc_client_nss::{rpc::delete_inode_response, RpcClientNss};
@@ -10,16 +8,16 @@ use crate::{
     object_layout::{MpuState, ObjectLayout, ObjectState},
     BlobId,
 };
-use bucket_tables::{bucket_table::Bucket, table::Versioned};
+use bucket_tables::bucket_table::Bucket;
 
 pub async fn delete_object(
-    bucket: Arc<Versioned<Bucket>>,
+    bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let resp = rpc_client_nss
-        .delete_inode(bucket.data.root_blob_name.clone(), key.clone())
+        .delete_inode(bucket.root_blob_name.clone(), key.clone())
         .await?;
 
     let object_bytes = match resp.result.unwrap() {
@@ -47,7 +45,7 @@ pub async fn delete_object(
             MpuState::Completed { .. } => {
                 let mpu_prefix = mpu::get_part_prefix(key, 0);
                 let mpus = list_raw_objects(
-                    bucket.data.root_blob_name.clone(),
+                    bucket.root_blob_name.clone(),
                     rpc_client_nss,
                     10000,
                     mpu_prefix,
@@ -57,7 +55,7 @@ pub async fn delete_object(
                 .await?;
                 for (mpu_key, mpu_obj) in mpus.iter() {
                     rpc_client_nss
-                        .delete_inode(bucket.data.root_blob_name.clone(), mpu_key.clone())
+                        .delete_inode(bucket.root_blob_name.clone(), mpu_key.clone())
                         .await?;
                     delete_blob(mpu_obj, blob_deletion.clone()).await?;
                 }
