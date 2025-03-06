@@ -11,6 +11,7 @@ use axum::{
     RequestExt,
 };
 use bucket_tables::bucket_table::Bucket;
+use bucket_tables::table::Versioned;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
 
@@ -73,14 +74,19 @@ struct Owner {
 
 pub async fn list_parts(
     mut request: Request,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
     let Query(opts): Query<ListPartsOptions> = request.extract_parts().await?;
     let max_parts = opts.max_parts.unwrap_or(1000);
     let upload_id = opts.upload_id;
-    let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let object = get_raw_object(
+        rpc_client_nss,
+        bucket.data.root_blob_name.clone(),
+        key.clone(),
+    )
+    .await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchUpload);
     }
@@ -90,7 +96,7 @@ pub async fn list_parts(
 
     let mpu_prefix = mpu::get_part_prefix(key, 0);
     let mpus = super::list_raw_objects(
-        bucket.root_blob_name.clone(),
+        bucket.data.root_blob_name.clone(),
         rpc_client_nss,
         max_parts,
         mpu_prefix,

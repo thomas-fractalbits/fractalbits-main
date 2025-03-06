@@ -9,7 +9,7 @@ use axum::{
     extract::Request,
     response::{IntoResponse, Response},
 };
-use bucket_tables::bucket_table::Bucket;
+use bucket_tables::{bucket_table::Bucket, table::Versioned};
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 pub async fn put_object(
     request: Request,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -59,7 +59,7 @@ pub async fn put_object(
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new())?;
     let resp = rpc_client_nss
         .put_inode(
-            bucket.root_blob_name.clone(),
+            bucket.data.root_blob_name.clone(),
             key,
             object_layout_bytes.into(),
         )

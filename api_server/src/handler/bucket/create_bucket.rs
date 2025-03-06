@@ -7,7 +7,7 @@ use bucket_tables::{
     api_key_table::{ApiKey, ApiKeyTable},
     bucket_table::{Bucket, BucketTable},
     permission::BucketKeyPerm,
-    table::Table,
+    table::{Table, Versioned},
 };
 use bytes::Buf;
 use http_body_util::BodyExt;
@@ -45,7 +45,7 @@ struct BucketConfig {
 }
 
 pub async fn create_bucket(
-    api_key: Option<(i64, ApiKey)>,
+    api_key: Option<Versioned<ApiKey>>,
     bucket_name: String,
     request: Request,
     rpc_client_nss: &RpcClientNss,
@@ -54,14 +54,14 @@ pub async fn create_bucket(
 ) -> Result<Response, S3Error> {
     let api_key_id = match api_key {
         None => return Err(S3Error::InvalidAccessKeyId),
-        Some((_version, api_key)) => {
-            if api_key.authorized_buckets.contains_key(&bucket_name) {
+        Some(api_key) => {
+            if api_key.data.authorized_buckets.contains_key(&bucket_name) {
                 return Err(S3Error::BucketAlreadyExists);
             }
-            if !api_key.allow_create_bucket {
+            if !api_key.data.allow_create_bucket {
                 return Err(S3Error::AccessDenied);
             }
-            api_key.key_id.clone()
+            api_key.data.key_id.clone()
         }
     };
 
@@ -91,21 +91,23 @@ pub async fn create_bucket(
         return Err(S3Error::BucketAlreadyExists);
     }
 
-    let mut bucket = Bucket::new(bucket_name.clone(), root_blob_name);
+    let mut bucket = Versioned::new(0, Bucket::new(bucket_name.clone(), root_blob_name));
     let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
     bucket
+        .data
         .authorized_keys
         .insert(api_key_id.clone(), bucket_key_perm);
     tracing::debug!("putting bucket_table with {bucket_name}");
-    bucket_table.put(0, &bucket).await?;
+    bucket_table.put(&bucket).await?;
     tracing::debug!("putting bucket_table with {bucket_name} done");
 
     let retry_times = 10;
     for i in 0..retry_times {
         let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> =
             Table::new(rpc_client_rss.clone());
-        let (api_key_version, mut api_key) = api_key_table.get(api_key_id.clone()).await?;
+        let mut api_key = api_key_table.get(api_key_id.clone()).await?;
         api_key
+            .data
             .authorized_buckets
             .insert(bucket_name.clone(), bucket_key_perm);
         tracing::debug!(
@@ -114,7 +116,7 @@ pub async fn create_bucket(
             api_key_id.clone(),
             i,
         );
-        match api_key_table.put(api_key_version, &api_key).await {
+        match api_key_table.put(&api_key).await {
             Err(RpcErrorRss::Retry) => continue,
             Ok(_) => {
                 return Ok([(

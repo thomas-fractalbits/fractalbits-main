@@ -7,7 +7,7 @@ use axum::{
 use bucket_tables::{
     api_key_table::{ApiKey, ApiKeyTable},
     bucket_table::{Bucket, BucketTable},
-    table::Table,
+    table::{Table, Versioned},
 };
 // use rand::Rng;
 use rpc_client_nss::{rpc::delete_root_inode_response, RpcClientNss};
@@ -16,24 +16,28 @@ use rpc_client_rss::{ArcRpcClientRss, RpcErrorRss};
 use crate::handler::common::s3_error::S3Error;
 
 pub async fn delete_bucket(
-    api_key: Option<(i64, ApiKey)>,
-    bucket: Arc<Bucket>,
+    api_key: Option<Versioned<ApiKey>>,
+    bucket: Arc<Versioned<Bucket>>,
     _request: Request,
     rpc_client_nss: &RpcClientNss,
     rpc_client_rss: ArcRpcClientRss,
 ) -> Result<Response, S3Error> {
     let api_key_id = match api_key {
         None => return Err(S3Error::InvalidAccessKeyId),
-        Some((_version, api_key)) => {
-            if !api_key.authorized_buckets.contains_key(&bucket.bucket_name) {
+        Some(api_key) => {
+            if !api_key
+                .data
+                .authorized_buckets
+                .contains_key(&bucket.data.bucket_name)
+            {
                 return Err(S3Error::AccessDenied);
             }
-            api_key.key_id.clone()
+            api_key.data.key_id.clone()
         }
     };
 
     let resp = rpc_client_nss
-        .delete_root_inode(bucket.root_blob_name.clone())
+        .delete_root_inode(bucket.data.root_blob_name.clone())
         .await?;
     match resp.result.unwrap() {
         delete_root_inode_response::Result::Ok(res) => res,
@@ -47,21 +51,24 @@ pub async fn delete_bucket(
     };
 
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
-    bucket_table.delete(&bucket).await?;
+    bucket_table.delete(&bucket.data).await?;
 
     let retry_times = 10;
     for i in 0..retry_times {
         let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> =
             Table::new(rpc_client_rss.clone());
-        let (api_key_version, mut api_key) = api_key_table.get(api_key_id.clone()).await?;
-        api_key.authorized_buckets.remove(&bucket.bucket_name);
+        let mut api_key = api_key_table.get(api_key_id.clone()).await?;
+        api_key
+            .data
+            .authorized_buckets
+            .remove(&bucket.data.bucket_name);
         tracing::debug!(
             "Deleting {} from api_key {} (retry={})",
-            bucket.bucket_name,
+            bucket.data.bucket_name,
             api_key_id.clone(),
             i,
         );
-        match api_key_table.put(api_key_version, &api_key).await {
+        match api_key_table.put(&api_key).await {
             Err(RpcErrorRss::Retry) => continue,
             Ok(_) => return Ok(().into_response()),
             Err(e) => return Err(e.into()),
@@ -70,7 +77,7 @@ pub async fn delete_bucket(
 
     tracing::error!(
         "Deleting {} from api_key {api_key_id} failed after retrying {retry_times} times",
-        bucket.bucket_name
+        bucket.data.bucket_name
     );
     // TODO: wrap multiple kv updates into etcd txn and send them through rpc call, since it may
     // leave etcd datebase into an inconsistent state

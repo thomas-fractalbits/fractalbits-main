@@ -3,7 +3,7 @@ use axum::{
     extract::{Query, Request},
     RequestPartsExt,
 };
-use bucket_tables::table::Table;
+use bucket_tables::table::{Table, Versioned};
 use chrono::{DateTime, Utc};
 use hmac::Mac;
 use itertools::Itertools;
@@ -26,7 +26,7 @@ pub async fn check_standard_signature(
     request: Request,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<(Request, Option<(i64, ApiKey)>), SignatureError> {
+) -> Result<(Request, Option<Versioned<ApiKey>>), SignatureError> {
     let (mut head, body) = request.into_parts();
     let query_params: Query<BTreeMap<String, String>> = head.extract().await?;
     let request = Request::from_parts(head, body);
@@ -111,11 +111,11 @@ pub async fn verify_v4(
     payload: &[u8],
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<Option<(i64, ApiKey)>, SignatureError> {
+) -> Result<Option<Versioned<ApiKey>>, SignatureError> {
     let mut api_key_table: Table<ArcRpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
-    let (version, key) = api_key_table.get(auth.key_id.clone()).await?;
+    let key = api_key_table.get(auth.key_id.clone()).await?;
 
-    let mut hmac = signing_hmac(&auth.date, &key.secret_key, region)
+    let mut hmac = signing_hmac(&auth.date, &key.data.secret_key, region)
         .map_err(|_| SignatureError::Invalid("Unable to build signing HMAC".into()))?;
     hmac.update(payload);
     let signature = hex::decode(&auth.signature)?;
@@ -123,5 +123,5 @@ pub async fn verify_v4(
         return Err(SignatureError::Invalid("signature mismatch".into()));
     }
 
-    Ok(Some((version, key)))
+    Ok(Some(key))
 }

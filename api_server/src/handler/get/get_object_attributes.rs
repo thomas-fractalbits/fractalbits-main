@@ -5,7 +5,7 @@ use axum::{
     extract::Request,
     response::{IntoResponse, Response},
 };
-use bucket_tables::bucket_table::Bucket;
+use bucket_tables::{bucket_table::Bucket, table::Versioned};
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
 
@@ -77,7 +77,7 @@ struct ResponseHeaders {
 
 pub async fn get_object_attributes(
     _request: Request,
-    _bucket: Arc<Bucket>,
+    _bucket: Arc<Versioned<Bucket>>,
     _key: String,
     _rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {

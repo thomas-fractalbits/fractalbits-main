@@ -1,5 +1,5 @@
 #[cfg(feature = "rss")]
-use bucket_tables::table::KvClient;
+use bucket_tables::table::{KvClient, Versioned};
 use bytes::{Bytes, BytesMut};
 use std::collections::HashMap;
 use std::io::{self};
@@ -157,12 +157,12 @@ pub struct ArcRpcClient(pub Arc<RpcClient>);
 #[cfg(feature = "rss")]
 impl KvClient for ArcRpcClient {
     type Error = RpcError;
-    async fn put(&mut self, version: i64, key: String, value: Bytes) -> Result<Bytes, Self::Error> {
-        self.0.put(version, key.into(), value).await
+    async fn put(&mut self, key: String, value: Versioned<Bytes>) -> Result<Bytes, Self::Error> {
+        self.0.put(value.version, key.into(), value.data).await
     }
 
-    async fn get(&mut self, key: String) -> Result<(i64, Bytes), Self::Error> {
-        self.0.get(key.into()).await
+    async fn get(&mut self, key: String) -> Result<Versioned<Bytes>, Self::Error> {
+        self.0.get(key.into()).await.map(|x| x.into())
     }
 
     async fn delete(&mut self, key: String) -> Result<Bytes, Self::Error> {

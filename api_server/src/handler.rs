@@ -19,7 +19,7 @@ use axum::{
 };
 use bucket_tables::api_key_table::ApiKey;
 use bucket_tables::bucket_table::{Bucket, BucketTable};
-use bucket_tables::table::Table;
+use bucket_tables::table::{Table, Versioned};
 use common::request::extract::authorization::Authorization;
 use common::request::extract::{
     api_command::ApiCommand, api_command::ApiCommandFromQuery, api_signature::ApiSignature,
@@ -134,7 +134,7 @@ async fn any_handler_inner(
 
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
     let bucket = match bucket_table.get(bucket_name).await {
-        Ok(bucket) => Arc::new(bucket.1),
+        Ok(bucket) => Arc::new(bucket),
         Err(RpcErrorRss::NotFound) => return Err(S3Error::NoSuchBucket),
         Err(e) => return Err(e.into()),
     };
@@ -198,7 +198,7 @@ async fn any_handler_inner(
 
 async fn head_handler(
     request: Request,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
@@ -212,7 +212,7 @@ async fn get_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -246,7 +246,7 @@ async fn put_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
@@ -286,7 +286,7 @@ async fn post_handler(
     request: Request,
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
     blob_deletion: Sender<(BlobId, usize)>,
@@ -315,10 +315,10 @@ async fn post_handler(
 
 #[allow(clippy::too_many_arguments)]
 async fn delete_handler(
-    api_key: Option<(i64, ApiKey)>,
+    api_key: Option<Versioned<ApiKey>>,
     request: Request,
     api_sig: ApiSignature,
-    bucket: Arc<Bucket>,
+    bucket: Arc<Versioned<Bucket>>,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,

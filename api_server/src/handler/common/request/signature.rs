@@ -4,7 +4,7 @@ use crate::handler::common::time::SHORT_DATE;
 
 use super::extract::authorization::Authorization;
 use axum::extract::{rejection::QueryRejection, Request};
-use bucket_tables::api_key_table::ApiKey;
+use bucket_tables::{api_key_table::ApiKey, table::Versioned};
 use chrono::{DateTime, Utc};
 use hex::FromHexError;
 use hmac::{Hmac, Mac};
@@ -42,7 +42,7 @@ pub async fn verify_request(
     auth: &Authorization,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
-) -> Result<(Request, Option<(i64, ApiKey)>), SignatureError> {
+) -> Result<(Request, Option<Versioned<ApiKey>>), SignatureError> {
     payload::check_standard_signature(auth, request, rpc_client_rss, region).await
 }
 
