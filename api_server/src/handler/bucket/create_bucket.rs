@@ -1,5 +1,4 @@
 use axum::{
-    extract::Request,
     http::{header, HeaderValue},
     response::{IntoResponse, Response},
 };
@@ -10,12 +9,11 @@ use bucket_tables::{
     table::{Table, Versioned},
 };
 use bytes::Buf;
-use http_body_util::BodyExt;
 use rpc_client_nss::{rpc::create_root_inode_response, RpcClientNss};
 use rpc_client_rss::{ArcRpcClientRss, RpcErrorRss};
 use serde::{Deserialize, Serialize};
 
-use crate::handler::common::s3_error::S3Error;
+use crate::handler::{common::s3_error::S3Error, Request};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
@@ -65,7 +63,7 @@ pub async fn create_bucket(
         }
     };
 
-    let body = request.into_body().collect().await.unwrap().to_bytes();
+    let body = request.into_body().collect().await.unwrap();
     if !body.is_empty() {
         let create_bucket_conf: CreateBucketConfiguration =
             quick_xml::de::from_reader(body.reader())?;

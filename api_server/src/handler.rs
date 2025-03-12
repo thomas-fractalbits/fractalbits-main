@@ -14,7 +14,9 @@ use std::sync::Arc;
 use crate::{AppState, BlobId};
 use axum::http::Method;
 use axum::{
-    extract::{ConnectInfo, Request, State},
+    body::Body,
+    extract::{ConnectInfo, State},
+    http,
     response::{IntoResponse, Response},
 };
 use bucket_tables::bucket_table::Bucket;
@@ -23,12 +25,14 @@ use common::request::extract::{
     api_command::ApiCommand, api_command::ApiCommandFromQuery, api_signature::ApiSignature,
     authorization::AuthorizationFromReq, bucket_name::BucketNameFromHost, key::KeyFromPath,
 };
-use common::request::signature::{verify_request, SignatureError};
 use common::s3_error::S3Error;
+use common::signature::{self, body::ReqBody, verify_request, VerifiedRequest};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcErrorRss;
 use tokio::sync::mpsc::Sender;
+
+pub type Request<T = ReqBody> = http::Request<T>;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn any_handler(
@@ -39,7 +43,7 @@ pub async fn any_handler(
     KeyFromPath(key_from_path): KeyFromPath,
     api_sig: ApiSignature,
     AuthorizationFromReq(auth): AuthorizationFromReq,
-    request: Request,
+    request: http::Request<Body>,
 ) -> Response {
     let (bucket_name, key) = match bucket_name_from_host {
         Err(e) => return e.into_response(),
@@ -89,11 +93,13 @@ async fn any_handler_inner(
     api_cmd: Option<ApiCommand>,
     api_sig: ApiSignature,
     auth: Option<Authorization>,
-    request: Request,
+    request: http::Request<Body>,
 ) -> Result<Response, S3Error> {
     let rpc_client_rss = app.get_rpc_client_rss();
-    let (request, api_key) = match auth {
-        None => (request, None),
+    let VerifiedRequest {
+        request, api_key, ..
+    } = match auth {
+        None => unreachable!(),
         Some(auth) => {
             match verify_request(
                 request,
@@ -104,10 +110,10 @@ async fn any_handler_inner(
             .await
             {
                 Ok(res) => res,
-                Err(SignatureError::RpcErrorRss(RpcErrorRss::NotFound)) => {
+                Err(signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound)) => {
                     return Err(S3Error::InvalidAccessKeyId)
                 }
-                Err(e) => return Err(e.into()),
+                Err(_e) => return Err(S3Error::InvalidSignature),
             }
         }
     };

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use axum::body::BodyDataStream;
 use bytes::{Bytes, BytesMut};
 use futures::{ready, Stream};

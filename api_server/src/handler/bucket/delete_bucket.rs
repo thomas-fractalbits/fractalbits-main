@@ -1,7 +1,4 @@
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use bucket_tables::{
     api_key_table::{ApiKey, ApiKeyTable},
     bucket_table::{Bucket, BucketTable},
@@ -11,7 +8,7 @@ use bucket_tables::{
 use rpc_client_nss::{rpc::delete_root_inode_response, RpcClientNss};
 use rpc_client_rss::{ArcRpcClientRss, RpcErrorRss};
 
-use crate::handler::common::s3_error::S3Error;
+use crate::handler::{common::s3_error::S3Error, Request};
 
 pub async fn delete_bucket(
     api_key: Option<Versioned<ApiKey>>,

@@ -5,18 +5,14 @@ use crate::{
         common::{response::xml::Xml, s3_error::S3Error},
         delete::delete_object,
         get::get_raw_object,
-        list, mpu,
+        list, mpu, Request,
     },
     object_layout::{MpuState, ObjectState},
     BlobId,
 };
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use bucket_tables::bucket_table::Bucket;
 use bytes::Buf;
-use http_body_util::BodyExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
 use serde::{Deserialize, Serialize};
@@ -66,7 +62,7 @@ pub async fn complete_multipart_upload(
     rpc_client_nss: &RpcClientNss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
-    let body = request.into_body().collect().await.unwrap().to_bytes();
+    let body = request.into_body().collect().await.unwrap();
     let req_body: CompleteMultipartUpload = quick_xml::de::from_reader(body.reader())?;
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();

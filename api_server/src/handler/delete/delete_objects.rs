@@ -1,9 +1,7 @@
 use crate::handler::common::{response::xml::Xml, s3_error::S3Error};
+use crate::handler::Request;
 use crate::BlobId;
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;

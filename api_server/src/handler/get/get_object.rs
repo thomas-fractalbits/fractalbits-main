@@ -1,17 +1,17 @@
 use axum::{
-    extract::{Query, Request},
+    extract::Query,
     response::{IntoResponse, Response},
-    RequestExt,
+    RequestPartsExt,
 };
 use bytes::{Bytes, BytesMut};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
-use crate::handler::common::s3_error::S3Error;
 use crate::handler::get::get_raw_object;
 use crate::handler::list::list_raw_objects;
 use crate::handler::mpu;
+use crate::handler::{common::s3_error::S3Error, Request};
 use crate::object_layout::{MpuState, ObjectState};
 use crate::BlobId;
 use bucket_tables::bucket_table::Bucket;
@@ -33,13 +33,13 @@ pub struct GetObjectOptions {
 }
 
 pub async fn get_object(
-    mut request: Request,
+    request: Request,
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
     rpc_client_bss: &RpcClientBss,
 ) -> Result<Response, S3Error> {
-    let Query(opts): Query<GetObjectOptions> = request.extract_parts().await?;
+    let Query(opts): Query<GetObjectOptions> = request.into_parts().0.extract().await?;
     let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     match object.state {
         ObjectState::Normal(ref _obj_data) => {

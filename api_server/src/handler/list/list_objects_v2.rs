@@ -1,8 +1,11 @@
-use crate::handler::common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp};
+use crate::handler::{
+    common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp},
+    Request,
+};
 use axum::{
-    extract::{Query, Request},
+    extract::Query,
     response::{IntoResponse, Response},
-    RequestExt,
+    RequestPartsExt,
 };
 use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, rancor::Error};
@@ -115,11 +118,11 @@ struct CommonPrefixes {
 }
 
 pub async fn list_objects_v2(
-    mut request: Request,
+    request: Request,
     bucket: &Bucket,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
-    let Query(opts): Query<ListObjectsV2Options> = request.extract_parts().await?;
+    let Query(opts): Query<ListObjectsV2Options> = request.into_parts().0.extract().await?;
     tracing::debug!("list_objects_v2 {opts:?}");
 
     // Sanity checks

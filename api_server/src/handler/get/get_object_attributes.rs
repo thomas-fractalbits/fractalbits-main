@@ -1,8 +1,8 @@
-use crate::handler::common::{response::xml::Xml, s3_error::S3Error};
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
+use crate::handler::{
+    common::{response::xml::Xml, s3_error::S3Error},
+    Request,
 };
+use axum::response::{IntoResponse, Response};
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};

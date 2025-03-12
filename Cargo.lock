@@ -121,19 +121,24 @@ dependencies = [
  "axum-extra",
  "axum-macros",
  "base64 0.22.1",
+ "blake2",
  "bucket_tables",
  "bytes",
  "chrono",
  "clap 4.5.27",
  "cmd_lib",
  "console-subscriber",
+ "crc32c",
  "crc32fast",
  "futures",
  "hex",
  "hmac",
+ "http-body 1.0.1",
  "http-body-util",
  "httpdate",
  "itertools",
+ "md-5",
+ "nom",
  "pin-project-lite",
  "prost",
  "quick-xml",
@@ -143,6 +148,7 @@ dependencies = [
  "rpc_client_nss",
  "rpc_client_rss",
  "serde",
+ "serde_bytes",
  "serde_json",
  "sha1",
  "sha2",
@@ -155,7 +161,9 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
+ "xxhash-rust",
 ]
 
 [[package]]
@@ -675,6 +683,15 @@ name = "bitflags"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest",
+]
 
 [[package]]
 name = "block-buffer"
@@ -3006,6 +3023,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8437fd221bde2d4ca316d61b90e337e9e702b3820b87d63caa9ba6c02bd06d96"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.217"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4003,6 +4029,12 @@ dependencies = [
  "strum",
  "uuid",
 ]
+
+[[package]]
+name = "xxhash-rust"
+version = "0.8.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fdd20c5420375476fbd4394763288da7eb0cc0b8c11deed431a91562af7335d3"
 
 [[package]]
 name = "yoke"

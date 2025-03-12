@@ -1,7 +1,7 @@
 use axum::{
-    extract::{Query, Request},
+    extract::Query,
     response::{IntoResponse, Response},
-    RequestExt,
+    RequestPartsExt,
 };
 use bucket_tables::{
     bucket_table::{self, BucketTable},
@@ -10,7 +10,10 @@ use bucket_tables::{
 use rpc_client_rss::ArcRpcClientRss;
 use serde::{Deserialize, Serialize};
 
-use crate::handler::common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp};
+use crate::handler::{
+    common::{response::xml::Xml, s3_error::S3Error, time::format_timestamp},
+    Request,
+};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -75,11 +78,11 @@ struct Owner {
 }
 
 pub async fn list_buckets(
-    mut request: Request,
+    request: Request,
     rpc_client_rss: ArcRpcClientRss,
     region: &str,
 ) -> Result<Response, S3Error> {
-    let Query(_opts): Query<ListBucketsOptions> = request.extract_parts().await?;
+    let Query(_opts): Query<ListBucketsOptions> = request.into_parts().0.extract().await?;
     let mut bucket_table: Table<ArcRpcClientRss, BucketTable> = Table::new(rpc_client_rss.clone());
     let buckets: Vec<Bucket> = bucket_table
         .list()

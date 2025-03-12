@@ -4,15 +4,15 @@ use crate::handler::common::time;
 use crate::handler::get::get_raw_object;
 use crate::object_layout::{MpuState, ObjectState};
 use axum::{
-    extract::{Query, Request},
+    extract::Query,
     response::{IntoResponse, Response},
-    RequestExt,
+    RequestPartsExt,
 };
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
 
-use crate::handler::mpu;
+use crate::handler::{mpu, Request};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -70,12 +70,12 @@ struct Owner {
 }
 
 pub async fn list_parts(
-    mut request: Request,
+    request: Request,
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
-    let Query(opts): Query<ListPartsOptions> = request.extract_parts().await?;
+    let Query(opts): Query<ListPartsOptions> = request.into_parts().0.extract().await?;
     let max_parts = opts.max_parts.unwrap_or(1000);
     let upload_id = opts.upload_id;
     let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;

@@ -1,12 +1,9 @@
 use crate::handler::common::response::xml::Xml;
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::common::s3_error::S3Error;
+use super::{common::s3_error::S3Error, Request};
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]

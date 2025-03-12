@@ -1,8 +1,8 @@
 use axum::{
-    extract::{Query, Request},
+    extract::Query,
     http::{HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
-    RequestExt,
+    RequestPartsExt,
 };
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
@@ -12,7 +12,7 @@ use crate::handler::common::time;
 use crate::handler::get::get_raw_object;
 use crate::object_layout::{MpuState, ObjectState};
 
-use super::common::s3_error::S3Error;
+use super::{common::s3_error::S3Error, Request};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -31,12 +31,12 @@ pub struct HeadObjectOptions {
 }
 
 pub async fn head_object(
-    mut request: Request,
+    request: Request,
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
-    let Query(_opts): Query<HeadObjectOptions> = request.extract_parts().await?;
+    let Query(_opts): Query<HeadObjectOptions> = request.into_parts().0.extract().await?;
     let obj = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key).await?;
 
     let mut headers = HeaderMap::new();

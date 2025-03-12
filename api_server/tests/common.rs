@@ -48,6 +48,7 @@ impl Context {
             .unwrap();
     }
 
+    #[allow(dead_code)]
     pub async fn list_buckets(&self) -> ListBucketsOutput {
         self.client.list_buckets().send().await.unwrap()
     }

@@ -1,13 +1,15 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::block_data_stream::BlockDataStream;
-use crate::{handler::common::s3_error::S3Error, object_layout::*, BlobId};
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
+// use super::block_data_stream::BlockDataStream;
+use crate::{
+    handler::{common::s3_error::S3Error, Request},
+    object_layout::*,
+    BlobId,
 };
+use axum::response::{IntoResponse, Response};
 use bucket_tables::bucket_table::Bucket;
-use futures::{StreamExt, TryStreamExt};
+// use futures::{StreamExt, TryStreamExt};
+// use futures::StreamExt;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
@@ -23,19 +25,25 @@ pub async fn put_object(
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let blob_id = Uuid::now_v7();
-    let body_data_stream = request.into_body().into_data_stream();
-    let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
-        .enumerate()
-        .map(|(i, block_data)| async move {
-            rpc_client_bss
-                .put_blob(blob_id, i as u32, block_data)
-                .await
-                .map(|x| (x - MessageHeader::SIZE) as u64)
-        })
-        .buffer_unordered(5)
-        .try_fold(0, |acc, x| async move { Ok(acc + x) })
+    let body_content = request.into_body().collect().await.unwrap();
+    let size = rpc_client_bss
+        .put_blob(blob_id, 0, body_content)
         .await
-        .map_err(|_e| S3Error::InternalError)?;
+        .map(|x| (x - MessageHeader::SIZE) as u64)?;
+
+    // let body_data_stream = request.into_body().into_data_stream();
+    // let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
+    //     .enumerate()
+    //     .map(|(i, block_data)| async move {
+    //         rpc_client_bss
+    //             .put_blob(blob_id, i as u32, block_data)
+    //             .await
+    //             .map(|x| (x - MessageHeader::SIZE) as u64)
+    //     })
+    //     .buffer_unordered(5)
+    //     .try_fold(0, |acc, x| async move { Ok(acc + x) })
+    //     .await
+    //     .map_err(|_e| S3Error::InternalError)?;
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -1,5 +1,5 @@
 use axum::response::Response;
-use axum::{extract::Request, http::HeaderValue, response};
+use axum::{http::HeaderValue, response};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
@@ -7,6 +7,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::handler::common::s3_error::S3Error;
 use crate::handler::put::put_object;
+use crate::handler::Request;
 use crate::BlobId;
 use bucket_tables::bucket_table::Bucket;
 

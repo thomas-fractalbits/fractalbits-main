@@ -1,12 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::handler::common::response::xml::Xml;
 use crate::handler::common::s3_error::S3Error;
+use crate::handler::{common::response::xml::Xml, Request};
 use crate::object_layout::*;
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_nss::RpcClientNss;

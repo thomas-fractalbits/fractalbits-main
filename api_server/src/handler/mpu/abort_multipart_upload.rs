@@ -1,7 +1,4 @@
-use axum::{
-    extract::Request,
-    response::{IntoResponse, Response},
-};
+use axum::response::{IntoResponse, Response};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::{
@@ -10,7 +7,7 @@ use rpc_client_nss::{
 };
 
 use crate::{
-    handler::common::s3_error::S3Error,
+    handler::{common::s3_error::S3Error, Request},
     object_layout::{MpuState, ObjectLayout, ObjectState},
 };
 use bucket_tables::bucket_table::Bucket;
