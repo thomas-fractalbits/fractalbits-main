@@ -21,8 +21,17 @@ pub async fn delete_object(
         .await?;
 
     let object_bytes = match resp.result.unwrap() {
+        // S3 allow delete non-existing object
+        delete_inode_response::Result::ErrNotFound(()) => {
+            tracing::debug!("delete non-existing object {}/{key}", bucket.bucket_name);
+            return Ok(().into_response());
+        }
+        delete_inode_response::Result::ErrAlreadyDeleted(()) => {
+            tracing::warn!("object {}/{key} is already deleted", bucket.bucket_name);
+            return Ok(().into_response());
+        }
         delete_inode_response::Result::Ok(res) => res,
-        delete_inode_response::Result::Err(e) => {
+        delete_inode_response::Result::ErrOthers(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }
