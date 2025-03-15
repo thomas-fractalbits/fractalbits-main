@@ -11,3 +11,12 @@ pub use list_multipart_uploads::list_multipart_uploads;
 pub use list_objects::list_objects;
 pub use list_objects_v2::list_objects_v2;
 pub use list_parts::list_parts;
+
+pub enum GetEndpoint {
+    GetObject,
+    GetObjectAttributes,
+    ListMultipartUploads,
+    ListObjects,
+    ListObjectsV2,
+    ListParts,
+}

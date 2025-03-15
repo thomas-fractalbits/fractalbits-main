@@ -26,3 +26,10 @@ pub async fn resolve_bucket(
         Err(e) => Err(e.into()),
     }
 }
+
+pub enum BucketEndpoint {
+    CreateBucket,
+    DeleteBucket,
+    HeadBucket,
+    ListBuckets,
+}
