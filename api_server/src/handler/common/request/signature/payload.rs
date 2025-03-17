@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use bucket_tables::api_key_table::{ApiKey, ApiKeyTable};
 
 use crate::handler::common::encoding::uri_encode;
-use crate::handler::common::request::extract::authorization::Authentication;
+use crate::handler::common::request::extract::Authentication;
 use crate::handler::common::time::LONG_DATETIME;
 
 use super::{signing_hmac, SignatureError};

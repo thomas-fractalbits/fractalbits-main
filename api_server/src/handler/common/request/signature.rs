@@ -2,7 +2,7 @@ use std::str::Utf8Error;
 
 use crate::handler::common::time::SHORT_DATE;
 
-use super::extract::authorization::Authentication;
+use super::extract::Authentication;
 use axum::extract::{rejection::QueryRejection, Request};
 use bucket_tables::{api_key_table::ApiKey, table::Versioned};
 use chrono::{DateTime, Utc};

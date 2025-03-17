@@ -14,7 +14,7 @@ use rpc_client_rss::ArcRpcClientRss;
 // use hyper::{body::Incoming as IncomingBody, Method, Request};
 use sha2::{Digest, Sha256};
 
-use crate::handler::common::request::extract::authorization::Authentication;
+use crate::handler::common::request::extract::Authentication;
 
 // use garage_table::*;
 use super::super::data::Hash;

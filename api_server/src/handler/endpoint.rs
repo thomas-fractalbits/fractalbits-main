@@ -4,7 +4,7 @@ use axum::http::{self, Method};
 use super::{
     bucket::BucketEndpoint,
     common::{
-        request::extract::{api_command::ApiCommand, api_signature::ApiSignature},
+        request::extract::{ApiCommand, ApiSignature},
         s3_error::S3Error,
     },
     delete::DeleteEndpoint,

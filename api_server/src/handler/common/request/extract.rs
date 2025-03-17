@@ -1,5 +1,9 @@
-pub mod api_command;
-pub mod api_signature;
-pub mod authorization;
-pub mod bucket_name;
-pub mod key;
+mod api_command;
+mod api_signature;
+mod authorization;
+mod bucket_name_and_key;
+
+pub use api_command::{ApiCommand, ApiCommandFromQuery};
+pub use api_signature::ApiSignature;
+pub use authorization::{Authentication, AuthenticationFromReq};
+pub use bucket_name_and_key::BucketNameAndKey;

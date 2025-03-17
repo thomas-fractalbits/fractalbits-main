@@ -14,7 +14,7 @@ use axum::http::{request::Request, HeaderName};
 // use garage_model::key_table::Key;
 // use garage_util::data::{sha256sum, Hash};
 use super::data::{sha256sum, Hash};
-use super::request::extract::authorization::Authentication;
+use super::request::extract::Authentication;
 
 use error::*;
 

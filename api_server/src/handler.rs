@@ -21,11 +21,7 @@ use bucket::BucketEndpoint;
 use bucket_tables::api_key_table::ApiKey;
 use bucket_tables::bucket_table::Bucket;
 use bucket_tables::table::Versioned;
-use common::request::extract::authorization::Authentication;
-use common::request::extract::{
-    api_command::ApiCommandFromQuery, api_signature::ApiSignature,
-    authorization::AuthenticationFromReq, bucket_name::BucketNameFromHost, key::KeyFromPath,
-};
+use common::request::extract::*;
 use common::s3_error::S3Error;
 use common::signature::{self, body::ReqBody, verify_request, VerifiedRequest};
 use delete::DeleteEndpoint;
@@ -41,23 +37,18 @@ use tokio::sync::mpsc::Sender;
 
 pub type Request<T = ReqBody> = http::Request<T>;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn any_handler(
     State(app): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    bucket_name_from_host: Result<BucketNameFromHost, S3Error>,
     ApiCommandFromQuery(api_cmd): ApiCommandFromQuery,
-    KeyFromPath(key_from_path): KeyFromPath,
-    api_sig: ApiSignature,
     AuthenticationFromReq(auth): AuthenticationFromReq,
+    bucket_name_and_key: Result<BucketNameAndKey, S3Error>,
+    api_sig: ApiSignature,
     request: http::Request<Body>,
 ) -> Response {
-    let (bucket_name, key) = match bucket_name_from_host {
+    let (bucket_name, key) = match bucket_name_and_key {
         Err(e) => return e.into_response(),
-        // Virtual-hosted-style request
-        Ok(BucketNameFromHost(Some(bucket_name))) => (bucket_name, key_from_path),
-        // Path-style request
-        Ok(BucketNameFromHost(None)) => get_bucket_and_key_from_path(key_from_path),
+        Ok(BucketNameAndKey { bucket_name, key }) => (bucket_name, key),
     };
     tracing::debug!(%bucket_name, %key);
 
@@ -70,29 +61,6 @@ pub async fn any_handler(
         Err(e) => e.into_response_with_resource(&resource),
         Ok(response) => response,
     }
-}
-
-// Get bucket and key for path-style requests
-fn get_bucket_and_key_from_path(path: String) -> (String, String) {
-    let mut bucket = String::new();
-    let mut key = String::from("/");
-    let mut bucket_part = true;
-    path.chars().skip_while(|c| c == &'/').for_each(|c| {
-        if bucket_part && c == '/' {
-            bucket_part = false;
-            return;
-        }
-        if bucket_part && c != '\0' {
-            bucket.push(c);
-        } else {
-            key.push(c);
-        }
-    });
-    // Not a real key, removing hacking for nss
-    if key == "/\0" {
-        key.pop();
-    }
-    (bucket, key)
 }
 
 async fn any_handler_inner(
