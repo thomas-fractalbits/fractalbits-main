@@ -48,6 +48,14 @@ impl ObjectLayout {
     pub fn num_blocks(&self) -> Result<usize, S3Error> {
         Ok(self.size()?.div_ceil(self.block_size as u64) as usize)
     }
+
+    #[inline]
+    pub fn checksum(&self) -> Result<Option<ChecksumValue>, S3Error> {
+        match self.state {
+            ObjectState::Normal(ref data) => Ok(data.checksum.clone()),
+            ObjectState::Mpu(_) => todo!(),
+        }
+    }
 }
 
 #[derive(Archive, Deserialize, Serialize, PartialEq)]

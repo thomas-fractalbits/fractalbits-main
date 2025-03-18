@@ -1,8 +1,15 @@
 use crate::handler::{
-    common::{response::xml::Xml, s3_error::S3Error},
+    common::{
+        get_raw_object, response::xml::Xml, s3_error::S3Error, signature::checksum::ChecksumValue,
+        time,
+    },
     Request,
 };
-use axum::response::{IntoResponse, Response};
+use axum::{
+    http::HeaderValue,
+    response::{IntoResponse, Response},
+};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
@@ -31,13 +38,56 @@ struct GetObjectAttributesOutput {
     object_size: usize,
 }
 
+impl GetObjectAttributesOutput {
+    fn etag(self, etag: String) -> Self {
+        Self { etag, ..self }
+    }
+
+    fn object_size(self, object_size: usize) -> Self {
+        Self {
+            object_size,
+            ..self
+        }
+    }
+
+    fn checksum(mut self, checksum: Option<ChecksumValue>) -> Self {
+        match checksum {
+            Some(ChecksumValue::Crc32(crc32)) => {
+                self.checksum.checksum_crc32 = BASE64_STANDARD.encode(crc32);
+                self.checksum.checksum_type = "CRC32".to_string();
+            }
+            Some(ChecksumValue::Crc32c(crc32c)) => {
+                self.checksum.checksum_crc32c = BASE64_STANDARD.encode(crc32c);
+                self.checksum.checksum_type = "CRC32C".to_string();
+            }
+            Some(ChecksumValue::Sha1(sha1)) => {
+                self.checksum.checksum_sha1 = BASE64_STANDARD.encode(sha1);
+                self.checksum.checksum_type = "SHA1".to_string();
+            }
+            Some(ChecksumValue::Sha256(sha256)) => {
+                self.checksum.checksum_sha256 = BASE64_STANDARD.encode(sha256);
+                self.checksum.checksum_type = "SHA256".to_string();
+            }
+            None => (),
+        }
+        self
+    }
+}
+
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct CheckSum {
+    #[serde(rename = "ChecksumCRC32")]
     checksum_crc32: String,
+    #[serde(rename = "ChecksumCRC32C")]
     checksum_crc32c: String,
+    #[serde(rename = "ChecksumCRC64NVME")]
+    checksum_crc64nvme: String,
+    #[serde(rename = "ChecksumSHA1")]
     checksum_sha1: String,
+    #[serde(rename = "ChecksumSHA256")]
     checksum_sha256: String,
+    checksum_type: String,
 }
 
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
@@ -75,9 +125,24 @@ struct ResponseHeaders {
 
 pub async fn get_object_attributes(
     _request: Request,
-    _bucket: &Bucket,
-    _key: String,
-    _rpc_client_nss: &RpcClientNss,
+    bucket: &Bucket,
+    key: String,
+    rpc_client_nss: &RpcClientNss,
 ) -> Result<Response, S3Error> {
-    Ok(Xml(GetObjectAttributesOutput::default()).into_response())
+    let obj = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let etag = obj.etag()?;
+    let object_size = obj.size()? as usize;
+    let checksum = obj.checksum()?;
+    let last_modified = time::format_http_date(obj.timestamp);
+
+    let mut resp = Xml(GetObjectAttributesOutput::default()
+        .etag(etag)
+        .object_size(object_size)
+        .checksum(checksum))
+    .into_response();
+    resp.headers_mut().insert(
+        "Last-Modified",
+        HeaderValue::from_str(&last_modified).unwrap(),
+    );
+    Ok(resp)
 }
