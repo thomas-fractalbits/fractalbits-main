@@ -20,6 +20,7 @@ use axum::{
 };
 use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
+use rand::{rngs::OsRng, RngCore};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
@@ -74,7 +75,7 @@ pub async fn put_object(
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let etag = String::new();
+    let etag = gen_etag();
     let version_id = gen_version_id();
     let object_layout = ObjectLayout {
         version_id,
@@ -115,4 +116,11 @@ pub async fn put_object(
     }
 
     Ok(().into_response())
+}
+
+// Not using md5 as etag for speed reason
+fn gen_etag() -> String {
+    let mut random = [0u8; 16];
+    OsRng.fill_bytes(&mut random);
+    hex::encode(random)
 }
