@@ -52,7 +52,7 @@ impl ObjectLayout {
     #[inline]
     pub fn checksum(&self) -> Result<Option<ChecksumValue>, S3Error> {
         match self.state {
-            ObjectState::Normal(ref data) => Ok(data.checksum.clone()),
+            ObjectState::Normal(ref data) => Ok(data.checksum),
             ObjectState::Mpu(_) => todo!(),
         }
     }

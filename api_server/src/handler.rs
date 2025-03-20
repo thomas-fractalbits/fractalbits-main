@@ -276,6 +276,9 @@ async fn put_handler(
             )
             .await
         }
+        PutEndpoint::CopyObject => {
+            put::copy_object(request, bucket, key, rpc_client_nss, rpc_client_bss).await
+        }
     }
 }
 

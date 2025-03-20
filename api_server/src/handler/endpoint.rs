@@ -92,12 +92,18 @@ impl Endpoint {
         api_cmd: Option<ApiCommand>,
         api_sig: ApiSignature,
     ) -> Result<Endpoint, S3Error> {
-        match (api_cmd, api_sig.part_number, api_sig.upload_id) {
-            (Some(_api_cmd), _, _) => Err(S3Error::NotImplemented),
-            (None, Some(part_number), Some(upload_id)) => Ok(Endpoint::Put(
+        match (
+            api_cmd,
+            api_sig.part_number,
+            api_sig.upload_id,
+            api_sig.x_amz_copy_source,
+        ) {
+            (Some(_api_cmd), _, _, _) => Err(S3Error::NotImplemented),
+            (None, Some(part_number), Some(upload_id), None) => Ok(Endpoint::Put(
                 PutEndpoint::UploadPart(part_number, upload_id),
             )),
-            (None, None, None) => Ok(Endpoint::Put(PutEndpoint::PutObject)),
+            (None, None, None, Some(_)) => Ok(Endpoint::Put(PutEndpoint::CopyObject)),
+            (None, None, None, None) => Ok(Endpoint::Put(PutEndpoint::PutObject)),
             _ => Err(S3Error::NotImplemented),
         }
     }

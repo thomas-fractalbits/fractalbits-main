@@ -9,7 +9,7 @@ use crate::handler::{
 };
 use axum::{
     extract::Query,
-    http::{header::LAST_MODIFIED, HeaderValue},
+    http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
     RequestPartsExt,
 };
@@ -39,7 +39,7 @@ struct HeaderOpts {
 }
 
 impl HeaderOpts {
-    fn from_headers(headers: &axum::http::HeaderMap) -> Result<Self, S3Error> {
+    fn from_headers(headers: &HeaderMap) -> Result<Self, S3Error> {
         Ok(Self {
             x_amz_max_parts: headers
                 .get("x-amz-max-parts")
@@ -83,7 +83,6 @@ impl HeaderOpts {
                 .split(',')
                 .map(|x| x.to_lowercase())
                 .collect(),
-            ..Default::default()
         })
     }
 }
@@ -219,7 +218,9 @@ pub async fn get_object_attributes(
     }
     // TODO: ObjectParts | StorageClass
     let mut resp = Xml(resp).into_response();
-    resp.headers_mut()
-        .insert(LAST_MODIFIED, HeaderValue::from_str(&last_modified)?);
+    resp.headers_mut().insert(
+        header::LAST_MODIFIED,
+        HeaderValue::from_str(&last_modified)?,
+    );
     Ok(resp)
 }
