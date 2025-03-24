@@ -51,6 +51,7 @@ url.workspace = true
 http-body.workspace = true
 serde_bytes.workspace = true
 percent-encoding.workspace = true
+sync_wrapper.workspace = true
 
 [dev-dependencies]
 aws-sdk-s3.workspace = true

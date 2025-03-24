@@ -1,9 +1,3 @@
-#![allow(unused_imports, dead_code)]
-use std::{
-    sync::Mutex,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use crate::{
     handler::{
         bucket,
@@ -12,17 +6,11 @@ use crate::{
             request::extract::BucketNameAndKey,
             response::xml::Xml,
             s3_error::S3Error,
-            signature::{
-                self,
-                body::ReqBody,
-                checksum::{
-                    request_checksum_value, request_trailer_checksum_algorithm, ChecksumValue,
-                    Checksummer, ExpectedChecksums,
-                },
-            },
+            signature::{body::ReqBody, checksum::ChecksumValue},
             time,
         },
         get::get_object_content,
+        put::put_object_handler,
         Request,
     },
     object_layout::*,
@@ -30,22 +18,18 @@ use crate::{
 };
 use axum::{
     body::Body,
-    http::{header, HeaderMap, HeaderValue},
-    response::{IntoResponse, Response},
+    http::{header, HeaderMap},
+    response::Response,
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, table::Versioned};
-use futures::{StreamExt, TryStreamExt};
-use rand::{rngs::OsRng, RngCore};
-use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_bss::{message::MessageHeader, RpcClientBss};
-use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
+use rpc_client_bss::RpcClientBss;
+use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::ArcRpcClientRss;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 
-use super::{block_data_stream::BlockDataStream, put_object_handler};
-
+#[allow(dead_code)]
 #[derive(Debug, Default)]
 struct HeaderOpts {
     x_amz_acl: Option<String>,
@@ -361,20 +345,8 @@ pub async fn copy_object_handler(
     )
     .await?;
 
-    let req_body = {
-        let expected_checksums = ExpectedChecksums::default();
-        let checksummer = Checksummer::init(&expected_checksums, false);
-
-        let stream = http_body_util::BodyStream::new(body).map_err(signature::Error::from);
-        ReqBody {
-            stream: Mutex::new(stream.boxed()),
-            checksummer,
-            expected_checksums,
-            trailer_algorithm: None,
-        }
-    };
     put_object_handler(
-        Request::new(req_body),
+        Request::new(ReqBody::from(body)),
         bucket,
         key,
         rpc_client_nss,

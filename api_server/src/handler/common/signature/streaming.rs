@@ -1,6 +1,3 @@
-use std::pin::Pin;
-use std::sync::Mutex;
-
 use axum::body::Body;
 use axum::http::header::{HeaderMap, HeaderValue, CONTENT_ENCODING};
 use axum::http::request::Request;
@@ -11,16 +8,14 @@ use futures::task;
 use hmac::Mac;
 use http_body::Frame;
 use pin_project_lite::pin_project;
+use std::pin::Pin;
+use sync_wrapper::SyncWrapper;
 
 use super::super::data::Hash;
-
-use super::*;
-
+use super::body::ReqBody;
 use super::checksum::*;
 use super::payload::CheckedSignature;
-// use crate::helpers::body_stream;
-
-pub use super::body::ReqBody;
+use super::*;
 
 pub fn parse_streaming_body(
     mut req: Request<Body>,
@@ -115,7 +110,7 @@ pub fn parse_streaming_body(
                 let signed_payload_stream =
                     StreamingPayloadStream::new(stream, sign_params, trailer).map_err(Error::from);
                 ReqBody {
-                    stream: Mutex::new(signed_payload_stream.boxed()),
+                    stream: SyncWrapper::new(signed_payload_stream.boxed()),
                     checksummer,
                     expected_checksums: Default::default(),
                     trailer_algorithm,
@@ -134,7 +129,7 @@ pub fn parse_streaming_body(
 
             let stream = http_body_util::BodyStream::new(body).map_err(Error::from);
             ReqBody {
-                stream: Mutex::new(stream.boxed()),
+                stream: SyncWrapper::new(stream.boxed()),
                 checksummer,
                 expected_checksums,
                 trailer_algorithm: None,

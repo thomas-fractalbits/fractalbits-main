@@ -1,17 +1,15 @@
-use std::sync::Mutex;
-
 use bytes::Bytes;
-use futures::prelude::*;
 use futures::stream::BoxStream;
+use futures::{StreamExt, TryStreamExt};
 use http_body::Frame;
-use http_body_util::{BodyExt, StreamBody};
+use http_body_util::StreamBody;
 use serde::{Deserialize, Serialize};
+use sync_wrapper::SyncWrapper;
 use tokio::sync::mpsc;
 use tokio::task;
 
-use super::*;
-
 use super::checksum::*;
+use super::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum ChecksumAlgorithm {
@@ -22,13 +20,28 @@ pub enum ChecksumAlgorithm {
 }
 
 pub struct ReqBody {
-    pub(crate) stream: Mutex<BoxStream<'static, Result<Frame<Bytes>, Error>>>,
+    pub(crate) stream: SyncWrapper<BoxStream<'static, Result<Frame<Bytes>, Error>>>,
     pub(crate) checksummer: Checksummer,
     pub(crate) expected_checksums: ExpectedChecksums,
     pub(crate) trailer_algorithm: Option<ChecksumAlgorithm>,
 }
 
 pub type StreamingChecksumReceiver = task::JoinHandle<Result<Checksums, Error>>;
+
+impl From<axum::body::Body> for ReqBody {
+    fn from(body: axum::body::Body) -> Self {
+        let expected_checksums = ExpectedChecksums::default();
+        let checksummer = Checksummer::init(&expected_checksums, false);
+
+        let stream = http_body_util::BodyStream::new(body).map_err(super::Error::from);
+        Self {
+            stream: SyncWrapper::new(stream.boxed()),
+            checksummer,
+            expected_checksums,
+            trailer_algorithm: None,
+        }
+    }
+}
 
 impl ReqBody {
     pub fn add_expected_checksums(&mut self, more: ExpectedChecksums) {
@@ -55,8 +68,10 @@ impl ReqBody {
     }
 
     pub async fn collect_with_checksums(mut self) -> Result<(Bytes, Checksums), Error> {
-        let stream: BoxStream<_> = self.stream.into_inner().unwrap();
-        let bytes = BodyExt::collect(StreamBody::new(stream)).await?.to_bytes();
+        let stream: BoxStream<_> = self.stream.into_inner();
+        let bytes = http_body_util::BodyExt::collect(StreamBody::new(stream))
+            .await?
+            .to_bytes();
 
         self.checksummer.update(&bytes);
         let checksums = self.checksummer.finalize();
@@ -112,7 +127,7 @@ impl ReqBody {
             Ok(checksums)
         });
 
-        let stream: BoxStream<_> = stream.into_inner().unwrap();
+        let stream: BoxStream<_> = stream.into_inner();
         let stream = stream.filter_map(move |x| {
             let frame_tx = frame_tx.clone();
             async move {

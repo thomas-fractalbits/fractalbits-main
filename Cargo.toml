@@ -66,6 +66,7 @@ url = "2.5.4"
 http-body = "1.0.1"
 serde_bytes = "0.11"
 percent-encoding = "2.3.1"
+sync_wrapper = "1.0.2"
 
 # Dev dependencies
 aws-sdk-s3 = "1.65.0"

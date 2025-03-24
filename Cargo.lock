@@ -155,6 +155,7 @@ dependencies = [
  "sha1",
  "sha2",
  "strum",
+ "sync_wrapper",
  "tempfile",
  "thiserror",
  "tokio",

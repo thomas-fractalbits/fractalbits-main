@@ -1,3 +1,4 @@
+use body::ReqBody;
 use bucket_tables::api_key_table::ApiKey;
 use bucket_tables::table::Versioned;
 use chrono::{DateTime, Utc};
@@ -60,7 +61,7 @@ pub enum ContentSha256Header {
 // ---- top-level functions ----
 
 pub struct VerifiedRequest {
-    pub request: Request<streaming::ReqBody>,
+    pub request: Request<ReqBody>,
     pub api_key: Versioned<ApiKey>,
     pub content_sha256_header: ContentSha256Header,
 }

@@ -50,7 +50,7 @@ pub async fn get_object_handler(
     let Query(opts): Query<GetObjectOptions> = request.into_parts().0.extract().await?;
     let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     get_object_content(
-        &bucket,
+        bucket,
         &object,
         key,
         checksum_mode_enabled,
