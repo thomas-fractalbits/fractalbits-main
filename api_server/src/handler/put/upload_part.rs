@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::response::Response;
 use axum::{http::HeaderValue, response};
 use rpc_client_bss::RpcClientBss;
@@ -38,7 +40,7 @@ pub async fn upload_part_handler(
     part_number: u64,
     upload_id: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     if !(1..=10_000).contains(&part_number) {

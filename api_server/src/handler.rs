@@ -228,7 +228,7 @@ async fn get_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     endpoint: GetEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
@@ -260,7 +260,7 @@ async fn put_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     rpc_client_rss: ArcRpcClientRss,
     blob_deletion: Sender<(BlobId, usize)>,
     endpoint: PutEndpoint,
@@ -340,7 +340,7 @@ async fn delete_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     blob_deletion: Sender<(BlobId, usize)>,
     endpoint: DeleteEndpoint,
 ) -> Result<Response, S3Error> {

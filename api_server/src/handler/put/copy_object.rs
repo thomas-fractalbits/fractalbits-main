@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     handler::{
         bucket,
@@ -331,7 +333,7 @@ pub async fn copy_object_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     rpc_client_rss: ArcRpcClientRss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
@@ -340,7 +342,7 @@ pub async fn copy_object_handler(
         api_key,
         &header_opts.x_amz_copy_source,
         rpc_client_nss,
-        rpc_client_bss,
+        rpc_client_bss.clone(),
         rpc_client_rss,
     )
     .await?;
@@ -366,7 +368,7 @@ async fn get_copy_source_object(
     api_key: Versioned<ApiKey>,
     copy_source: &str,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     rpc_client_rss: ArcRpcClientRss,
 ) -> Result<(ObjectLayout, Body), S3Error> {
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;

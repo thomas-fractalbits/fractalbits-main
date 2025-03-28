@@ -1,13 +1,19 @@
+use std::sync::Arc;
+
 use axum::{
+    body::{Body, BodyDataStream},
     extract::Query,
     http::{header, HeaderMap, HeaderValue},
     response::{IntoResponse, Response},
     RequestPartsExt,
 };
 use bytes::{Bytes, BytesMut};
+use futures::StreamExt;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::object_layout::{MpuState, ObjectState};
 use crate::BlobId;
@@ -84,7 +90,7 @@ pub async fn get_object_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
 ) -> Result<Response, S3Error> {
     let mut parts = request.into_parts().0;
     let Query(opts): Query<QueryOpts> = parts.extract().await?;
@@ -109,19 +115,14 @@ pub async fn get_object_content(
     checksum_mode_enabled: bool,
     part_number: Option<u32>,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
 ) -> Result<Response, S3Error> {
     match object.state {
         ObjectState::Normal(ref obj_data) => {
-            let mut blob = BytesMut::new();
-            get_full_blob(
-                &mut blob,
-                rpc_client_bss,
-                object.blob_id()?,
-                object.num_blocks()?,
-            )
-            .await?;
-            let mut resp = blob.freeze().into_response();
+            let blob_id = object.blob_id()?;
+            let num_blocks = object.num_blocks()?;
+            let body_stream = get_full_blob_stream(rpc_client_bss, blob_id, num_blocks).await?;
+            let mut resp = Body::from_stream(body_stream).into_response();
             if checksum_mode_enabled {
                 tracing::debug!(
                     "checksum_mode enabled, adding checksum: {:?}",
@@ -160,7 +161,7 @@ pub async fn get_object_content(
                 for (_, mpu_obj) in mpus.iter() {
                     get_full_blob(
                         &mut content,
-                        rpc_client_bss,
+                        rpc_client_bss.clone(),
                         mpu_obj.blob_id()?,
                         mpu_obj.num_blocks()?,
                     )
@@ -174,7 +175,7 @@ pub async fn get_object_content(
 
 async fn get_full_blob(
     blob: &mut BytesMut,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     blob_id: BlobId,
     num_blocks: usize,
 ) -> Result<(), S3Error> {
@@ -187,4 +188,25 @@ async fn get_full_blob(
     }
 
     Ok(())
+}
+
+async fn get_full_blob_stream(
+    rpc_client_bss: Arc<RpcClientBss>,
+    blob_id: BlobId,
+    num_blocks: usize,
+) -> Result<BodyDataStream, S3Error> {
+    let (tx, rx) = mpsc::channel(num_blocks);
+    tokio::spawn(async move {
+        for i in 0..num_blocks {
+            let mut block = Bytes::new();
+            let _size = rpc_client_bss
+                .get_blob(blob_id, i as u32, &mut block)
+                .await
+                .unwrap();
+            let _ = tx.send(Body::from(block).into_data_stream()).await;
+        }
+    });
+
+    let body = Body::from_stream(ReceiverStream::new(rx).flatten());
+    Ok(body.into_data_stream())
 }

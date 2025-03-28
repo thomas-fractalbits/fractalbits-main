@@ -159,6 +159,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "toml",
  "tower 0.5.2",
  "tower-http",

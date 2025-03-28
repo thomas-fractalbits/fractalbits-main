@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::response::{IntoResponse, Response};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::RpcClientBss;
@@ -18,7 +20,7 @@ pub async fn abort_multipart_upload_handler(
     key: String,
     _upload_id: String,
     rpc_client_nss: &RpcClientNss,
-    _rpc_client_bss: &RpcClientBss,
+    _rpc_client_bss: Arc<RpcClientBss>,
 ) -> Result<Response, S3Error> {
     let resp = rpc_client_nss
         .get_inode(bucket.root_blob_name.clone(), key.clone())

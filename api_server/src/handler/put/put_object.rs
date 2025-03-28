@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     handler::{
@@ -33,7 +36,7 @@ pub async fn put_object_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: &RpcClientBss,
+    rpc_client_bss: Arc<RpcClientBss>,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let expected_checksums = ExpectedChecksums {
@@ -51,11 +54,15 @@ pub async fn put_object_handler(
     let blob_id = Uuid::now_v7();
     let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
         .enumerate()
-        .map(|(i, block_data)| async move {
-            rpc_client_bss
-                .put_blob(blob_id, i as u32, block_data)
-                .await
-                .map(|x| (x - MessageHeader::SIZE) as u64)
+        .map(|(i, block_data)| {
+            let rpc_client_bss = rpc_client_bss.clone();
+            async move {
+                rpc_client_bss
+                    .clone()
+                    .put_blob(blob_id, i as u32, block_data)
+                    .await
+                    .map(|x| (x - MessageHeader::SIZE) as u64)
+            }
         })
         .buffer_unordered(5)
         .try_fold(0, |acc, x| async move { Ok(acc + x) })

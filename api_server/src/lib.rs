@@ -20,7 +20,7 @@ pub struct AppState {
 
     pub rpc_clients_nss: Vec<RpcClientNss>,
 
-    pub rpc_clients_bss: Vec<RpcClientBss>,
+    pub rpc_clients_bss: Vec<Arc<RpcClientBss>>,
     pub blob_deletion: Sender<(BlobId, usize)>,
 
     pub rpc_client_rss: ArcRpcClientRss,
@@ -50,7 +50,7 @@ impl AppState {
             let rpc_client_bss = RpcClientBss::new(&config.bss_addr)
                 .await
                 .expect("rpc client bss failure");
-            rpc_clients_bss.push(rpc_client_bss);
+            rpc_clients_bss.push(Arc::new(rpc_client_bss));
         }
 
         let (tx, rx) = mpsc::channel(1024 * 1024);
@@ -81,9 +81,9 @@ impl AppState {
         &self.rpc_clients_nss[hash]
     }
 
-    pub fn get_rpc_client_bss(&self, addr: SocketAddr) -> &RpcClientBss {
+    pub fn get_rpc_client_bss(&self, addr: SocketAddr) -> Arc<RpcClientBss> {
         let hash = Self::calculate_hash(&addr) % Self::MAX_BSS_CONNECTION;
-        &self.rpc_clients_bss[hash]
+        self.rpc_clients_bss[hash].clone()
     }
 
     pub fn get_rpc_client_rss(&self) -> ArcRpcClientRss {
