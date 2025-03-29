@@ -22,17 +22,6 @@ pub mod streaming;
 pub const SHORT_DATE: &str = "%Y%m%d";
 pub const LONG_DATETIME: &str = "%Y%m%dT%H%M%SZ";
 
-// ---- Constants used in AWSv4 signatures ----
-
-pub const X_AMZ_ALGORITHM: HeaderName = HeaderName::from_static("x-amz-algorithm");
-pub const X_AMZ_CREDENTIAL: HeaderName = HeaderName::from_static("x-amz-credential");
-pub const X_AMZ_DATE: HeaderName = HeaderName::from_static("x-amz-date");
-pub const X_AMZ_EXPIRES: HeaderName = HeaderName::from_static("x-amz-expires");
-pub const X_AMZ_SIGNEDHEADERS: HeaderName = HeaderName::from_static("x-amz-signedheaders");
-pub const X_AMZ_SIGNATURE: HeaderName = HeaderName::from_static("x-amz-signature");
-pub const X_AMZ_CONTENT_SHA256: HeaderName = HeaderName::from_static("x-amz-content-sha256");
-pub const X_AMZ_TRAILER: HeaderName = HeaderName::from_static("x-amz-trailer");
-
 /// Result of `sha256("")`
 pub(crate) const EMPTY_STRING_HEX_DIGEST: &str =
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";

@@ -22,9 +22,8 @@ use crate::{
 use crate::{
     handler::{
         common::{
-            get_raw_object, list_raw_objects, mpu_get_part_prefix,
-            s3_error::S3Error,
-            signature::checksum::{add_checksum_response_headers, X_AMZ_CHECKSUM_MODE},
+            get_raw_object, list_raw_objects, mpu_get_part_prefix, s3_error::S3Error,
+            signature::checksum::add_checksum_response_headers, xheader,
         },
         Request,
     },
@@ -73,15 +72,15 @@ impl<'a> HeaderOpts<'a> {
             if_unmodified_since: headers.get(header::IF_UNMODIFIED_SINCE),
             range: headers.get(header::RANGE),
             x_amz_server_side_encryption_customer_algorithm: headers
-                .get("x-amz-server-side-encryption-customer-algorithm"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM),
             x_amz_server_side_encryption_customer_key: headers
-                .get("x-amz-server-side-encryption-customer-key"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY),
             x_amz_server_side_encryption_customer_key_md5: headers
-                .get("x-amz-server-side-encryption-customer-key-MD5"),
-            x_amz_request_payer: headers.get("x-amz-request-payer"),
-            x_amz_expected_bucket_owner: headers.get("x-amz-expected-bucket-owner"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5),
+            x_amz_request_payer: headers.get(xheader::X_AMZ_REQUEST_PAYER),
+            x_amz_expected_bucket_owner: headers.get(xheader::X_AMZ_EXPECTED_BUCKET_OWNER),
             x_amz_checksum_mode_enabled: headers
-                .get(X_AMZ_CHECKSUM_MODE)
+                .get(xheader::X_AMZ_CHECKSUM_MODE)
                 .map(|x| x == "ENABLED")
                 .unwrap_or(false),
         })

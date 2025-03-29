@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use crate::handler::{
     common::{
         get_raw_object, response::xml::Xml, s3_error::S3Error, signature::checksum::ChecksumValue,
-        time,
+        time, xheader,
     },
     Request,
 };
@@ -41,18 +41,18 @@ struct HeaderOpts<'a> {
 impl<'a> HeaderOpts<'a> {
     fn from_headers(headers: &'a HeaderMap) -> Result<Self, S3Error> {
         Ok(Self {
-            x_amz_max_parts: headers.get("x-amz-max-parts"),
-            x_amz_part_number_marker: headers.get("x-amz-part-number-marker"),
+            x_amz_max_parts: headers.get(xheader::X_AMZ_MAX_PARTS),
+            x_amz_part_number_marker: headers.get(xheader::X_AMZ_PART_NUMBER_MARKER),
             x_amz_server_side_encryption_customer_algorithm: headers
-                .get("x-amz-server-side-encryption-customer-algorithm"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM),
             x_amz_server_side_encryption_customer_key: headers
-                .get("x-amz-server-side-encryption-customer-key"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY),
             x_amz_server_side_encryption_customer_key_md5: headers
-                .get("x-amz-server-side-encryption-customer-key-MD5"),
-            x_amz_request_payer: headers.get("x-amz-request-payer"),
-            x_amz_expected_bucket_owner: headers.get("x-amz-expected-bucket-owner"),
+                .get(xheader::X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5),
+            x_amz_request_payer: headers.get(xheader::X_AMZ_REQUEST_PAYER),
+            x_amz_expected_bucket_owner: headers.get(xheader::X_AMZ_EXPECTED_BUCKET_OWNER),
             x_amz_object_attributes: headers
-                .get("x-amz-object-attributes")
+                .get(xheader::X_AMZ_OBJECT_ATTRIBUTES)
                 .ok_or(S3Error::InvalidArgument2)?
                 .to_str()?
                 .split(',')

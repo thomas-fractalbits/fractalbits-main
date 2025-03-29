@@ -13,7 +13,7 @@ use itertools::Itertools;
 use rpc_client_rss::ArcRpcClientRss;
 use sha2::{Digest, Sha256};
 
-use crate::handler::common::request::extract::Authentication;
+use crate::handler::common::{request::extract::Authentication, xheader};
 
 use super::super::data::Hash;
 
@@ -35,7 +35,7 @@ pub async fn check_payload_signature(
 ) -> Result<CheckedSignature, Error> {
     let Query(mut query): Query<BTreeMap<String, String>> = request.extract_parts().await?;
 
-    if query.contains_key(X_AMZ_ALGORITHM.as_str()) {
+    if query.contains_key(xheader::X_AMZ_ALGORITHM.as_str()) {
         // We check for presigned-URL-style authentication first, because
         // the browser or something else could inject an Authorization header
         // that is totally unrelated to AWS signatures.
@@ -46,7 +46,7 @@ pub async fn check_payload_signature(
         // Unsigned (anonymous) request
         let content_sha256 = request
             .headers()
-            .get(X_AMZ_CONTENT_SHA256)
+            .get(xheader::X_AMZ_CONTENT_SHA256)
             .map(|x| x.to_str())
             .transpose()?;
         Ok(CheckedSignature {
@@ -148,7 +148,7 @@ async fn check_presigned_signature(
     // but the signature cannot be computed from a string that contains itself.
     // AWS specifies that all query params except X-Amz-Signature are included
     // in the canonical request.
-    query.remove(X_AMZ_SIGNATURE.as_str());
+    query.remove(xheader::X_AMZ_SIGNATURE.as_str());
     let canonical_request = canonical_request(
         request.method(),
         request.uri().path(),

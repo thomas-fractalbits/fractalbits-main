@@ -11,6 +11,8 @@ use pin_project_lite::pin_project;
 use std::pin::Pin;
 use sync_wrapper::SyncWrapper;
 
+use crate::handler::common::xheader;
+
 use super::super::data::Hash;
 use super::body::ReqBody;
 use super::checksum::*;
@@ -83,7 +85,7 @@ pub fn parse_streaming_body(
 
                 let date = req
                     .headers()
-                    .get(X_AMZ_DATE)
+                    .get(xheader::X_AMZ_DATE)
                     .ok_or_else(|| Error::Other("Missing X-Amz-Date field".into()))?
                     .to_str()?;
                 let date: NaiveDateTime = NaiveDateTime::parse_from_str(date, LONG_DATETIME)

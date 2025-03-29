@@ -6,6 +6,7 @@ pub mod response;
 pub mod s3_error;
 pub mod signature;
 pub mod time;
+pub mod xheader;
 
 use crate::object_layout::ObjectLayout;
 use rkyv::{self, rancor::Error};

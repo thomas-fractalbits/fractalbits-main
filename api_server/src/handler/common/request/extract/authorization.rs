@@ -1,13 +1,15 @@
-#![allow(dead_code)]
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-use crate::handler::common::s3_error::S3Error;
-use crate::handler::common::time::{LONG_DATETIME, SHORT_DATE};
+use crate::handler::common::{
+    s3_error::S3Error,
+    time::{LONG_DATETIME, SHORT_DATE},
+    xheader,
+};
 use axum::{
     extract::FromRequestParts,
     http::{
-        header::{HeaderName, ToStrError, AUTHORIZATION},
+        header::{ToStrError, AUTHORIZATION},
         request::Parts,
     },
 };
@@ -16,8 +18,6 @@ use thiserror::Error;
 
 const AWS4_HMAC_SHA256: &str = "AWS4-HMAC-SHA256";
 const SCOPE_ENDING: &str = "aws4_request";
-const X_AMZ_CONTENT_SHA256: HeaderName = HeaderName::from_static("x-amz-content-sha256");
-const X_AMZ_DATE: HeaderName = HeaderName::from_static("x-amz-date");
 
 #[derive(Error, Debug)]
 pub enum AuthError {
@@ -108,16 +108,17 @@ where
             ))?
             .to_string();
 
-        let content_sha256 = parts
-            .headers
-            .get(X_AMZ_CONTENT_SHA256)
-            .ok_or(AuthError::Invalid(
-                "Missing x-amz-content-sha256 field".into(),
-            ))?;
+        let content_sha256 =
+            parts
+                .headers
+                .get(xheader::X_AMZ_CONTENT_SHA256)
+                .ok_or(AuthError::Invalid(
+                    "Missing x-amz-content-sha256 field".into(),
+                ))?;
 
         let date = parts
             .headers
-            .get(X_AMZ_DATE)
+            .get(xheader::X_AMZ_DATE)
             .ok_or(AuthError::Invalid("Missing x-amz-date field".into()))?
             .to_str()?;
         let date = parse_date(date)?;
