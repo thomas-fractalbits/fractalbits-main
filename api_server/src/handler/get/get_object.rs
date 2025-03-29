@@ -13,11 +13,11 @@ use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
-use crate::BlobId;
 use crate::{
     handler::common::signature::checksum::ChecksumValue,
     object_layout::{MpuState, ObjectState},
 };
+use crate::{handler::common::time, BlobId};
 use crate::{
     handler::{
         common::{
@@ -98,6 +98,8 @@ pub async fn get_object_handler(
     let header_opts = HeaderOpts::from_headers(&parts.headers)?;
     let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     let total_size = object.size()?;
+    let etag = object.etag()?;
+    let last_modified = time::format_http_date(object.timestamp);
     let range = parse_range_header(header_opts.range, total_size)?;
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
     match (opts.part_number, range) {
@@ -113,6 +115,12 @@ pub async fn get_object_handler(
             .await?;
 
             let mut resp = body.into_response();
+            resp.headers_mut().insert(
+                header::LAST_MODIFIED,
+                HeaderValue::from_str(&last_modified)?,
+            );
+            resp.headers_mut()
+                .insert(header::ETAG, HeaderValue::from_str(&etag)?);
             resp.headers_mut().insert(
                 header::CONTENT_LENGTH,
                 HeaderValue::from_str(&body_size.to_string())?,

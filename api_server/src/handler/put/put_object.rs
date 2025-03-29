@@ -10,6 +10,7 @@ use crate::{
             signature::checksum::{
                 request_checksum_value, request_trailer_checksum_algorithm, ExpectedChecksums,
             },
+            xheader,
         },
         Request,
     },
@@ -18,6 +19,7 @@ use crate::{
 };
 use axum::{
     body::Body,
+    http::{header, HeaderValue},
     response::{IntoResponse, Response},
 };
 use bucket_tables::bucket_table::Bucket;
@@ -89,7 +91,7 @@ pub async fn put_object_handler(
         state: ObjectState::Normal(ObjectData {
             size,
             blob_id,
-            etag,
+            etag: etag.clone(),
             checksum,
         }),
     };
@@ -120,7 +122,14 @@ pub async fn put_object_handler(
         }
     }
 
-    Ok(().into_response())
+    let mut resp = ().into_response();
+    resp.headers_mut()
+        .insert(header::ETAG, HeaderValue::from_str(&etag)?);
+    resp.headers_mut().insert(
+        xheader::X_AMZ_OBJECT_SIZE,
+        HeaderValue::from_str(&size.to_string())?,
+    );
+    Ok(resp)
 }
 
 // Not using md5 as etag for speed reason

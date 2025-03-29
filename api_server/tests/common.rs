@@ -39,6 +39,7 @@ impl Context {
         bucket_name
     }
 
+    #[allow(dead_code)]
     pub async fn delete_bucket(&self, bucket_name: &str) {
         self.client
             .delete_bucket()
