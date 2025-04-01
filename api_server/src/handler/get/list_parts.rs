@@ -98,7 +98,7 @@ pub async fn list_parts_handler(
     }
 
     let (parts, next_part_number_marker) =
-        fetch_part_info(bucket, key.clone(), &query_opts, max_parts, rpc_client_nss).await?;
+        fetch_mpu_parts(bucket, key.clone(), &query_opts, max_parts, rpc_client_nss).await?;
 
     assert_eq!(Some('\0'), key.pop());
     let resp = ListPartsResult {
@@ -119,7 +119,7 @@ pub async fn list_parts_handler(
     Xml(resp).try_into()
 }
 
-async fn fetch_part_info(
+async fn fetch_mpu_parts(
     bucket: &Bucket,
     key: String,
     query_opts: &QueryOpts,
@@ -148,19 +148,20 @@ async fn fetch_part_info(
                 part_number,
                 ..Default::default()
             };
-            if let Some(checksum) = mpu.checksum()? {
-                match checksum {
-                    ChecksumValue::Crc32(x) => {
-                        part.checksum_crc32 = Some(BASE64_STANDARD.encode(x))
-                    }
-                    ChecksumValue::Crc32c(x) => {
-                        part.checksum_crc32c = Some(BASE64_STANDARD.encode(x))
-                    }
-                    ChecksumValue::Sha1(x) => part.checksum_sha1 = Some(BASE64_STANDARD.encode(x)),
-                    ChecksumValue::Sha256(x) => {
-                        part.checksum_sha256 = Some(BASE64_STANDARD.encode(x))
-                    }
+            match mpu.checksum()? {
+                Some(ChecksumValue::Crc32(x)) => {
+                    part.checksum_crc32 = Some(BASE64_STANDARD.encode(x))
                 }
+                Some(ChecksumValue::Crc32c(x)) => {
+                    part.checksum_crc32c = Some(BASE64_STANDARD.encode(x))
+                }
+                Some(ChecksumValue::Sha1(x)) => {
+                    part.checksum_sha1 = Some(BASE64_STANDARD.encode(x))
+                }
+                Some(ChecksumValue::Sha256(x)) => {
+                    part.checksum_sha256 = Some(BASE64_STANDARD.encode(x))
+                }
+                None => {}
             }
             parts.push(part);
         }
