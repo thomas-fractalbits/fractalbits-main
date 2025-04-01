@@ -1,3 +1,4 @@
+use crate::handler::common::mpu_parse_part_number;
 use crate::handler::common::{
     get_raw_object, list_raw_objects, mpu_get_part_prefix, response::xml::Xml, s3_error::S3Error,
     signature::checksum::ChecksumValue, time,
@@ -27,15 +28,22 @@ struct ListPartsResult {
     bucket: String,
     key: String,
     upload_id: String,
-    part_number_marker: usize,
-    next_part_number_marker: usize,
-    max_parts: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    part_number_marker: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_part_number_marker: Option<u32>,
+    max_parts: u32,
     is_truncated: bool,
     part: Vec<Part>,
-    initiator: Initiator,
-    owner: Owner,
-    storage_class: String,
-    checksum_algorithm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    initiator: Option<Initiator>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner: Option<Owner>,
+    storage_class: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checksum_algorithm: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    checksum_type: Option<String>,
 }
 
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
@@ -49,6 +57,7 @@ struct Part {
     checksum_sha1: Option<String>,
     #[serde(rename = "ChecksumSHA256", skip_serializing_if = "Option::is_none")]
     checksum_sha256: Option<String>,
+    #[serde(rename = "ETag")]
     etag: String,
     last_modified: String, // timestamp
     part_number: u32,
@@ -67,6 +76,7 @@ struct Initiator {
 #[serde(rename_all = "PascalCase")]
 struct Owner {
     display_name: String,
+    #[serde(rename = "ID")]
     id: String,
 }
 
@@ -87,7 +97,7 @@ pub async fn list_parts_handler(
         return Err(S3Error::InvalidObjectState);
     }
 
-    let mpu_prefix = mpu_get_part_prefix(key, 0);
+    let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
     let mpus = list_raw_objects(
         bucket.root_blob_name.clone(),
         rpc_client_nss,
@@ -101,15 +111,10 @@ pub async fn list_parts_handler(
         upload_id,
         ..Default::default()
     };
-    for (mut key, mpu) in mpus {
+    for (mpu_key, mpu) in mpus {
         let last_modified = time::format_timestamp(mpu.timestamp);
         let etag = mpu.etag()?;
-        key.pop();
-        let part_str = key.split('#').last().ok_or(S3Error::InternalError)?;
-        let part_number = part_str
-            .parse::<u32>()
-            .map_err(|_| S3Error::InternalError)?
-            + 1;
+        let part_number = mpu_parse_part_number(&mpu_key, &key)?;
         let size = mpu.size()?;
         let mut part = Part {
             last_modified,

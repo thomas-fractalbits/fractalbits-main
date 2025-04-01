@@ -237,7 +237,7 @@ pub async fn complete_multipart_upload_handler(
 
     let max_parts = 10000;
     let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
-    let objs = list_raw_objects(
+    let mpu_objs = list_raw_objects(
         bucket.root_blob_name.clone(),
         rpc_client_nss,
         max_parts,
@@ -250,8 +250,8 @@ pub async fn complete_multipart_upload_handler(
     let mut total_size = 0;
     let mut invalid_part_keys = HashSet::new();
     let mut checksummer = MpuChecksummer::init(expected_checksum.map(|x| x.algorithm()));
-    for (mpu_key, mpu_obj) in objs.iter() {
-        let part_number = mpu_parse_part_number(mpu_key, &key);
+    for (mpu_key, mpu_obj) in mpu_objs.iter() {
+        let part_number = mpu_parse_part_number(mpu_key, &key)?;
         if !valid_part_numbers.remove(&part_number) {
             invalid_part_keys.insert(mpu_key.clone());
         } else {

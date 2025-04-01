@@ -91,10 +91,13 @@ pub fn mpu_get_part_prefix(mut key: String, part_number: u64) -> String {
     key
 }
 
-pub fn mpu_parse_part_number(mpu_key: &str, key: &str) -> u32 {
+pub fn mpu_parse_part_number(mpu_key: &str, key: &str) -> Result<u32, S3Error> {
     let mut part_str = mpu_key.to_owned().split_off(key.len());
     part_str.pop(); // remove trailing '\0'
-    part_str.parse::<u32>().unwrap() + 1
+    Ok(part_str
+        .parse::<u32>()
+        .map_err(|_| S3Error::InternalError)?
+        + 1)
 }
 
 pub fn extract_metadata_headers(headers: &HeaderMap<HeaderValue>) -> Result<HeaderList, S3Error> {
