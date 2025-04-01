@@ -15,6 +15,7 @@ use axum::{
     http::{header, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
+use rand::{rngs::OsRng, RngCore};
 use rkyv::{self, rancor::Error};
 use rpc_client_nss::{rpc::get_inode_response, rpc::list_inodes_response, RpcClientNss};
 use s3_error::S3Error;
@@ -177,4 +178,11 @@ pub fn object_headers(
     }
 
     Ok(())
+}
+
+// Not using md5 as etag for speed reason
+pub fn gen_etag() -> String {
+    let mut random = [0u8; 16];
+    OsRng.fill_bytes(&mut random);
+    hex::encode(random)
 }

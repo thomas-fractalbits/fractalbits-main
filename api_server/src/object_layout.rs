@@ -57,7 +57,10 @@ impl ObjectLayout {
     pub fn checksum(&self) -> Result<Option<ChecksumValue>, S3Error> {
         match self.state {
             ObjectState::Normal(ref data) => Ok(data.core_meta_data.checksum),
-            ObjectState::Mpu(_) => Ok(None), // TODO
+            ObjectState::Mpu(MpuState::Completed(ref core_meta_data)) => {
+                Ok(core_meta_data.checksum)
+            }
+            _ => Err(S3Error::InvalidObjectState),
         }
     }
 

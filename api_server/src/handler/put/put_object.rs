@@ -6,7 +6,7 @@ use std::{
 use crate::{
     handler::{
         common::{
-            extract_metadata_headers,
+            extract_metadata_headers, gen_etag,
             s3_error::S3Error,
             signature::checksum::{
                 request_checksum_value, request_trailer_checksum_algorithm, ExpectedChecksums,
@@ -25,7 +25,6 @@ use axum::{
 };
 use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
-use rand::{rngs::OsRng, RngCore};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_bss::{message::MessageHeader, RpcClientBss};
 use rpc_client_nss::{rpc::put_inode_response, RpcClientNss};
@@ -138,11 +137,4 @@ pub async fn put_object_handler(
         HeaderValue::from_str(&size.to_string())?,
     );
     Ok(resp)
-}
-
-// Not using md5 as etag for speed reason
-fn gen_etag() -> String {
-    let mut random = [0u8; 16];
-    OsRng.fill_bytes(&mut random);
-    hex::encode(random)
 }

@@ -332,7 +332,7 @@ async fn test_multipart_with_checksum() {
         .concat(),
     );
 
-    let _res = ctx
+    let res = ctx
         .client
         .complete_multipart_upload()
         .bucket(&bucket)
@@ -344,7 +344,7 @@ async fn test_multipart_with_checksum() {
         .await
         .unwrap();
 
-    // FIXME: assert_eq!(res.checksum_sha1, Some(expected_checksum));
+    assert_eq!(res.checksum_sha1, Some(expected_checksum));
 }
 
 // #[tokio::test]

@@ -97,7 +97,7 @@ impl GetObjectAttributesOutput {
             Some(ChecksumValue::Crc32(crc32)) => {
                 let checksum = Checksum {
                     checksum_crc32: Some(BASE64_STANDARD.encode(crc32)),
-                    checksum_type: "CRC32".to_string(),
+                    checksum_type: "FULL_OBJECT".to_string(),
                     ..Default::default()
                 };
                 self.checksum = Some(checksum);
@@ -105,7 +105,7 @@ impl GetObjectAttributesOutput {
             Some(ChecksumValue::Crc32c(crc32c)) => {
                 let checksum = Checksum {
                     checksum_crc32c: Some(BASE64_STANDARD.encode(crc32c)),
-                    checksum_type: "CRC32C".to_string(),
+                    checksum_type: "FULL_OBJECT".to_string(),
                     ..Default::default()
                 };
                 self.checksum = Some(checksum);
@@ -113,7 +113,7 @@ impl GetObjectAttributesOutput {
             Some(ChecksumValue::Sha1(sha1)) => {
                 let checksum = Checksum {
                     checksum_sha1: Some(BASE64_STANDARD.encode(sha1)),
-                    checksum_type: "SHA1".to_string(),
+                    checksum_type: "FULL_OBJECT".to_string(),
                     ..Default::default()
                 };
                 self.checksum = Some(checksum);
@@ -121,7 +121,7 @@ impl GetObjectAttributesOutput {
             Some(ChecksumValue::Sha256(sha256)) => {
                 let checksum = Checksum {
                     checksum_sha256: Some(BASE64_STANDARD.encode(sha256)),
-                    checksum_type: "SHA256".to_string(),
+                    checksum_type: "FULL_OBJECT".to_string(),
                     ..Default::default()
                 };
                 self.checksum = Some(checksum);
