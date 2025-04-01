@@ -74,12 +74,13 @@ pub async fn put_object_handler(
         .await
         .map_err(|_e| S3Error::InternalError)?;
 
+    let checksum_from_stream = checksummer.await.map_err(|e| {
+        tracing::error!("JoinHandle error: {e}");
+        S3Error::InternalError
+    })??;
     let checksum = match expected_checksums.extra {
         Some(x) => Some(x),
-        None => checksummer
-            .await
-            .expect("JoinHandle error")?
-            .extract(trailer_checksum_algorithm),
+        None => checksum_from_stream.extract(trailer_checksum_algorithm),
     };
 
     let timestamp = SystemTime::now()

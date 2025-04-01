@@ -239,20 +239,19 @@ async fn test_multipart_with_checksum() {
         .await
         .unwrap();
 
-    // FIXME:
-    // // wrong checksum value should return an error
-    // let err1 = ctx
-    //     .client
-    //     .upload_part()
-    //     .bucket(&bucket)
-    //     .key("a")
-    //     .upload_id(uid)
-    //     .part_number(2)
-    //     .checksum_sha1(&ck1)
-    //     .body(ByteStream::from(u2.clone()))
-    //     .send()
-    //     .await;
-    // assert!(err1.is_err());
+    // wrong checksum value should return an error
+    let err1 = ctx
+        .client
+        .upload_part()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .part_number(2)
+        .checksum_sha1(&ck1)
+        .body(ByteStream::from(u2.clone()))
+        .send()
+        .await;
+    assert!(err1.is_err());
 
     let p2 = ctx
         .client
@@ -291,7 +290,6 @@ async fn test_multipart_with_checksum() {
             .await
             .unwrap();
         let parts = r.parts.unwrap();
-        dbg!(&parts);
         assert_eq!(parts.len(), 3);
         assert!(parts[0].checksum_crc32.is_none());
         assert!(parts[0].checksum_crc32_c.is_none());
