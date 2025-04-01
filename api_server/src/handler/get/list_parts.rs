@@ -1,9 +1,10 @@
 use crate::handler::common::{
     get_raw_object, list_raw_objects, mpu_get_part_prefix, response::xml::Xml, s3_error::S3Error,
-    time,
+    signature::checksum::ChecksumValue, time,
 };
 use crate::object_layout::{MpuState, ObjectState};
 use axum::{extract::Query, response::Response, RequestPartsExt};
+use base64::prelude::*;
 use bucket_tables::bucket_table::Bucket;
 use rpc_client_nss::RpcClientNss;
 use serde::{Deserialize, Serialize};
@@ -40,13 +41,17 @@ struct ListPartsResult {
 #[derive(Default, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 struct Part {
-    checksum_crc32: String,
-    checksum_crc32c: String,
-    checksum_sha1: String,
-    checksum_sha256: String,
+    #[serde(rename = "ChecksumCRC32", skip_serializing_if = "Option::is_none")]
+    checksum_crc32: Option<String>,
+    #[serde(rename = "ChecksumCRC32C", skip_serializing_if = "Option::is_none")]
+    checksum_crc32c: Option<String>,
+    #[serde(rename = "ChecksumSHA1", skip_serializing_if = "Option::is_none")]
+    checksum_sha1: Option<String>,
+    #[serde(rename = "ChecksumSHA256", skip_serializing_if = "Option::is_none")]
+    checksum_sha256: Option<String>,
     etag: String,
     last_modified: String, // timestamp
-    part_number: usize,
+    part_number: u32,
     size: u64,
 }
 
@@ -96,15 +101,30 @@ pub async fn list_parts_handler(
         upload_id,
         ..Default::default()
     };
-    for (_key, mpu) in mpus {
+    for (mut key, mpu) in mpus {
         let last_modified = time::format_timestamp(mpu.timestamp);
+        let etag = mpu.etag()?;
+        key.pop();
+        let part_str = key.split('#').last().ok_or(S3Error::InternalError)?;
+        let part_number = part_str
+            .parse::<u32>()
+            .map_err(|_| S3Error::InternalError)?
+            + 1;
+        let size = mpu.size()?;
         let mut part = Part {
             last_modified,
+            etag,
+            size,
+            part_number,
             ..Default::default()
         };
-        if let ObjectState::Normal(obj) = mpu.state {
-            part.etag = obj.core_meta_data.etag;
-            part.size = obj.core_meta_data.size;
+        if let Some(checksum) = mpu.checksum()? {
+            match checksum {
+                ChecksumValue::Crc32(x) => part.checksum_crc32 = Some(BASE64_STANDARD.encode(x)),
+                ChecksumValue::Crc32c(x) => part.checksum_crc32c = Some(BASE64_STANDARD.encode(x)),
+                ChecksumValue::Sha1(x) => part.checksum_sha1 = Some(BASE64_STANDARD.encode(x)),
+                ChecksumValue::Sha256(x) => part.checksum_sha256 = Some(BASE64_STANDARD.encode(x)),
+            }
         }
         res.part.push(part);
     }

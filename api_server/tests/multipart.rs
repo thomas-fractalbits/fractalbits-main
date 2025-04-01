@@ -200,152 +200,154 @@ async fn test_multipart_upload() {
     ctx.delete_bucket(&bucket).await;
 }
 
-// #[tokio::test]
-// async fn test_multipart_with_checksum() {
-// let ctx = common::context();
-// let bucket = ctx.create_bucket("testmpu-cksum");
+#[tokio::test]
+async fn test_multipart_with_checksum() {
+    let ctx = common::context();
+    let bucket = ctx.create_bucket("testmpu-cksum").await;
 
-// let u1 = vec![0x11; SZ_5MB];
-// let u2 = vec![0x22; SZ_5MB];
-// let u3 = vec![0x33; SZ_5MB];
+    let u1 = vec![0x11; SZ_5MB];
+    let u2 = vec![0x22; SZ_5MB];
+    let u3 = vec![0x33; SZ_5MB];
 
-// let ck1 = calculate_sha1(&u1);
-// let ck2 = calculate_sha1(&u2);
-// let ck3 = calculate_sha1(&u3);
+    let ck1 = calculate_sha1(&u1);
+    let ck2 = calculate_sha1(&u2);
+    let ck3 = calculate_sha1(&u3);
 
-// let up = ctx
-//     .client
-//     .create_multipart_upload()
-//     .bucket(&bucket)
-//     .checksum_algorithm(ChecksumAlgorithm::Sha1)
-//     .key("a")
-//     .send()
-//     .await
-//     .unwrap();
-// assert!(up.upload_id.is_some());
+    let up = ctx
+        .client
+        .create_multipart_upload()
+        .bucket(&bucket)
+        .checksum_algorithm(ChecksumAlgorithm::Sha1)
+        .key("a")
+        .send()
+        .await
+        .unwrap();
+    assert!(up.upload_id.is_some());
 
-// let uid = up.upload_id.as_ref().unwrap();
+    let uid = up.upload_id.as_ref().unwrap();
 
-// let p1 = ctx
-//     .client
-//     .upload_part()
-//     .bucket(&bucket)
-//     .key("a")
-//     .upload_id(uid)
-//     .part_number(1)
-//     .checksum_sha1(&ck1)
-//     .body(ByteStream::from(u1.clone()))
-//     .send()
-//     .await
-//     .unwrap();
+    let p1 = ctx
+        .client
+        .upload_part()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .part_number(1)
+        .checksum_sha1(&ck1)
+        .body(ByteStream::from(u1.clone()))
+        .send()
+        .await
+        .unwrap();
 
-// // wrong checksum value should return an error
-// let err1 = ctx
-//     .client
-//     .upload_part()
-//     .bucket(&bucket)
-//     .key("a")
-//     .upload_id(uid)
-//     .part_number(2)
-//     .checksum_sha1(&ck1)
-//     .body(ByteStream::from(u2.clone()))
-//     .send()
-//     .await;
-// assert!(err1.is_err());
+    // FIXME:
+    // // wrong checksum value should return an error
+    // let err1 = ctx
+    //     .client
+    //     .upload_part()
+    //     .bucket(&bucket)
+    //     .key("a")
+    //     .upload_id(uid)
+    //     .part_number(2)
+    //     .checksum_sha1(&ck1)
+    //     .body(ByteStream::from(u2.clone()))
+    //     .send()
+    //     .await;
+    // assert!(err1.is_err());
 
-// let p2 = ctx
-//     .client
-//     .upload_part()
-//     .bucket(&bucket)
-//     .key("a")
-//     .upload_id(uid)
-//     .part_number(2)
-//     .checksum_sha1(&ck2)
-//     .body(ByteStream::from(u2))
-//     .send()
-//     .await
-//     .unwrap();
+    let p2 = ctx
+        .client
+        .upload_part()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .part_number(2)
+        .checksum_sha1(&ck2)
+        .body(ByteStream::from(u2))
+        .send()
+        .await
+        .unwrap();
 
-// let p3 = ctx
-//     .client
-//     .upload_part()
-//     .bucket(&bucket)
-//     .key("a")
-//     .upload_id(uid)
-//     .part_number(3)
-//     .checksum_sha1(&ck3)
-//     .body(ByteStream::from(u3.clone()))
-//     .send()
-//     .await
-//     .unwrap();
+    let p3 = ctx
+        .client
+        .upload_part()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .part_number(3)
+        .checksum_sha1(&ck3)
+        .body(ByteStream::from(u3.clone()))
+        .send()
+        .await
+        .unwrap();
 
-// {
-//     let r = ctx
-//         .client
-//         .list_parts()
-//         .bucket(&bucket)
-//         .key("a")
-//         .upload_id(uid)
-//         .send()
-//         .await
-//         .unwrap();
-//     let parts = r.parts.unwrap();
-//     assert_eq!(parts.len(), 3);
-//     assert!(parts[0].checksum_crc32.is_none());
-//     assert!(parts[0].checksum_crc32_c.is_none());
-//     assert!(parts[0].checksum_sha256.is_none());
-//     assert_eq!(parts[0].checksum_sha1.as_deref().unwrap(), ck1);
-//     assert_eq!(parts[1].checksum_sha1.as_deref().unwrap(), ck2);
-//     assert_eq!(parts[2].checksum_sha1.as_deref().unwrap(), ck3);
-// }
+    {
+        let r = ctx
+            .client
+            .list_parts()
+            .bucket(&bucket)
+            .key("a")
+            .upload_id(uid)
+            .send()
+            .await
+            .unwrap();
+        let parts = r.parts.unwrap();
+        dbg!(&parts);
+        assert_eq!(parts.len(), 3);
+        assert!(parts[0].checksum_crc32.is_none());
+        assert!(parts[0].checksum_crc32_c.is_none());
+        assert!(parts[0].checksum_sha256.is_none());
+        assert_eq!(parts[0].checksum_sha1.as_deref().unwrap(), ck1);
+        assert_eq!(parts[1].checksum_sha1.as_deref().unwrap(), ck2);
+        assert_eq!(parts[2].checksum_sha1.as_deref().unwrap(), ck3);
+    }
 
-// let cmp = CompletedMultipartUpload::builder()
-//     .parts(
-//         CompletedPart::builder()
-//             .part_number(1)
-//             .checksum_sha1(&ck1)
-//             .e_tag(p1.e_tag.unwrap())
-//             .build(),
-//     )
-//     .parts(
-//         CompletedPart::builder()
-//             .part_number(2)
-//             .checksum_sha1(&ck2)
-//             .e_tag(p2.e_tag.unwrap())
-//             .build(),
-//     )
-//     .parts(
-//         CompletedPart::builder()
-//             .part_number(3)
-//             .checksum_sha1(&ck3)
-//             .e_tag(p3.e_tag.unwrap())
-//             .build(),
-//     )
-//     .build();
+    let cmp = CompletedMultipartUpload::builder()
+        .parts(
+            CompletedPart::builder()
+                .part_number(1)
+                .checksum_sha1(&ck1)
+                .e_tag(p1.e_tag.unwrap())
+                .build(),
+        )
+        .parts(
+            CompletedPart::builder()
+                .part_number(2)
+                .checksum_sha1(&ck2)
+                .e_tag(p2.e_tag.unwrap())
+                .build(),
+        )
+        .parts(
+            CompletedPart::builder()
+                .part_number(3)
+                .checksum_sha1(&ck3)
+                .e_tag(p3.e_tag.unwrap())
+                .build(),
+        )
+        .build();
 
-// let expected_checksum = calculate_sha1(
-//     &vec![
-//         BASE64_STANDARD.decode(&ck1).unwrap(),
-//         BASE64_STANDARD.decode(&ck2).unwrap(),
-//         BASE64_STANDARD.decode(&ck3).unwrap(),
-//     ]
-//     .concat(),
-// );
+    let expected_checksum = calculate_sha1(
+        &vec![
+            BASE64_STANDARD.decode(&ck1).unwrap(),
+            BASE64_STANDARD.decode(&ck2).unwrap(),
+            BASE64_STANDARD.decode(&ck3).unwrap(),
+        ]
+        .concat(),
+    );
 
-// let res = ctx
-//     .client
-//     .complete_multipart_upload()
-//     .bucket(&bucket)
-//     .key("a")
-//     .upload_id(uid)
-//     .checksum_sha1(expected_checksum.clone())
-//     .multipart_upload(cmp)
-//     .send()
-//     .await
-//     .unwrap();
+    let _res = ctx
+        .client
+        .complete_multipart_upload()
+        .bucket(&bucket)
+        .key("a")
+        .upload_id(uid)
+        .checksum_sha1(expected_checksum.clone())
+        .multipart_upload(cmp)
+        .send()
+        .await
+        .unwrap();
 
-// assert_eq!(res.checksum_sha1, Some(expected_checksum));
-// }
+    // FIXME: assert_eq!(res.checksum_sha1, Some(expected_checksum));
+}
 
 // #[tokio::test]
 // async fn test_uploadlistpart() {
@@ -783,10 +785,10 @@ async fn test_multipart_upload() {
 // assert_eq!(real_obj, exp_obj);
 // }
 
-// fn calculate_sha1(bytes: &[u8]) -> String {
-// use sha1::{Digest, Sha1};
+fn calculate_sha1(bytes: &[u8]) -> String {
+    use sha1::{Digest, Sha1};
 
-// let mut hasher = Sha1::new();
-// hasher.update(bytes);
-// BASE64_STANDARD.encode(&hasher.finalize()[..])
-// }
+    let mut hasher = Sha1::new();
+    hasher.update(bytes);
+    BASE64_STANDARD.encode(&hasher.finalize()[..])
+}
