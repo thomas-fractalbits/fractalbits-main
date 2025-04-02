@@ -128,7 +128,7 @@ pub async fn list_objects_handler(
                 Err(e) => Err(e.into()),
                 Ok(obj) => {
                     let mut key = x.key.clone();
-                    key.pop(); // removing nss's trailing '\0'
+                    assert_eq!(Some('\0'), key.pop()); // removing nss's trailing '\0'
                     Object::from_layout_and_key(obj, key)
                 }
             }

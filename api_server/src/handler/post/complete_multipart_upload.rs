@@ -300,7 +300,7 @@ pub async fn complete_multipart_upload_handler(
             return Err(S3Error::InternalError);
         }
     };
-    key.pop(); // remove trailing '\0'
+    assert_eq!(Some('\0'), key.pop()); // removing nss's trailing '\0'
 
     let resp = CompleteMultipartUploadResult::default()
         .bucket(bucket.bucket_name.clone())

@@ -59,7 +59,7 @@ pub async fn create_multipart_upload_handler(
             object_layout_bytes.into(),
         )
         .await?;
-    key.pop();
+    assert_eq!(Some('\0'), key.pop());
     let init_mpu_res = InitiateMultipartUploadResult {
         bucket: bucket.bucket_name.clone(),
         key,
