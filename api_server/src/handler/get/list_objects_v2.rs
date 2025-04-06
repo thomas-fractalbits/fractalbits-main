@@ -36,7 +36,7 @@ struct ListBucketResult {
     is_truncated: bool,
     contents: Vec<Object>,
     name: String,
-    prefix: String,
+    prefix: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     delimiter: Option<String>,
     max_keys: u32,
@@ -90,7 +90,7 @@ impl ListBucketResult {
         }
     }
 
-    fn prefix(self, prefix: String) -> Self {
+    fn prefix(self, prefix: Option<String>) -> Self {
         Self { prefix, ..self }
     }
 
@@ -214,7 +214,7 @@ pub async fn list_objects_v2_handler(
     }
 
     let max_keys = opts.max_keys.unwrap_or(1000);
-    let prefix = format!("/{}", opts.prefix.unwrap_or_default());
+    let prefix = format!("/{}", opts.prefix.clone().unwrap_or_default());
     let delimiter = opts.delimiter.clone().unwrap_or("".into());
     if !delimiter.is_empty() && delimiter != "/" {
         tracing::warn!("Got delimiter: {delimiter}, which is not supported.");
@@ -239,7 +239,7 @@ pub async fn list_objects_v2_handler(
         .key_count(objs.len())
         .contents(objs)
         .bucket_name(bucket.bucket_name.clone())
-        .prefix(prefix)
+        .prefix(opts.prefix)
         .start_after(opts.start_after)
         .delimiter(opts.delimiter)
         .max_keys(max_keys)
