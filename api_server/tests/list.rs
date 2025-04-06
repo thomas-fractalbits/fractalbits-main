@@ -100,8 +100,7 @@ async fn test_listobjectsv2() {
         assert_eq!(r.common_prefixes.unwrap().len(), 1);
     }
 
-    // FIXME
-    if false {
+    {
         // With a delimiter and pagination
         let mut cnt_pfx = 0;
         let mut cnt_key = 0;
@@ -123,6 +122,7 @@ async fn test_listobjectsv2() {
             match (r.contents, r.common_prefixes) {
                 (Some(k), None) if k.len() == 1 => cnt_key += 1,
                 (None, Some(pfx)) if pfx.len() == 1 => cnt_pfx += 1,
+                (None, None) => {}
                 _ => unreachable!("logic error"),
             };
             if next.is_none() {
