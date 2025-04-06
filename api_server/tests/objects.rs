@@ -1,5 +1,5 @@
 mod common;
-use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::primitives::{ByteStream, DateTime, DateTimeFormat};
 use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 
 const STD_KEY: &str = "hello world";
@@ -177,8 +177,8 @@ async fn test_metadata() {
     let ctx = common::context();
     let bucket = ctx.create_bucket("testmetadata").await;
 
-    let exp = aws_sdk_s3::primitives::DateTime::from_secs(10000000000);
-    let exp2 = aws_sdk_s3::primitives::DateTime::from_secs(10000500000);
+    let exp = DateTime::from_secs(10000000000);
+    let exp2 = DateTime::from_secs(10000500000);
 
     {
         // Note. The AWS client SDK adds a Content-Type header
@@ -211,7 +211,7 @@ async fn test_metadata() {
         assert_eq!(o.content_disposition, None);
         assert_eq!(o.content_encoding, None);
         assert_eq!(o.content_language, None);
-        assert_eq!(o.expires, None);
+        assert_eq!(o.expires_string, None);
         assert_eq!(o.metadata.unwrap_or_default().len(), 0);
 
         let o = ctx
@@ -234,7 +234,10 @@ async fn test_metadata() {
         assert_eq!(o.content_disposition.unwrap().as_str(), "cddummy");
         assert_eq!(o.content_encoding.unwrap().as_str(), "cedummy");
         assert_eq!(o.content_language.unwrap().as_str(), "cldummy");
-        assert_eq!(o.expires.unwrap(), exp);
+        assert_eq!(
+            o.expires_string.unwrap(),
+            exp.fmt(DateTimeFormat::HttpDate).unwrap()
+        );
     }
 
     {
@@ -272,7 +275,10 @@ async fn test_metadata() {
         assert_eq!(o.content_disposition.unwrap().as_str(), "cdtest");
         assert_eq!(o.content_encoding.unwrap().as_str(), "cetest");
         assert_eq!(o.content_language.unwrap().as_str(), "cltest");
-        assert_eq!(o.expires.unwrap(), exp2);
+        assert_eq!(
+            o.expires_string.unwrap(),
+            exp2.fmt(DateTimeFormat::HttpDate).unwrap()
+        );
         let mut meta = o.metadata.unwrap();
         assert_eq!(meta.remove("testmeta").unwrap(), "hello people");
         assert_eq!(meta.remove("nice-unicode-meta").unwrap(), "宅配便");
@@ -298,7 +304,10 @@ async fn test_metadata() {
         assert_eq!(o.content_disposition.unwrap().as_str(), "cddummy");
         assert_eq!(o.content_encoding.unwrap().as_str(), "cedummy");
         assert_eq!(o.content_language.unwrap().as_str(), "cldummy");
-        assert_eq!(o.expires.unwrap(), exp);
+        assert_eq!(
+            o.expires_string.unwrap(),
+            exp.fmt(DateTimeFormat::HttpDate).unwrap()
+        );
     }
 }
 
