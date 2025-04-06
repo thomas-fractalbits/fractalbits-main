@@ -58,6 +58,12 @@ where
             // Path-style request
             None => Self::get_bucket_and_key_from_path(&full_key),
         };
+
+        // Get the original key from the URL encoded key
+        let key = percent_encoding::percent_decode_str(&key)
+            .decode_utf8()?
+            .into_owned();
+
         Ok(Self { bucket_name, key })
     }
 }

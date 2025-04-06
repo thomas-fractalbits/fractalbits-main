@@ -278,18 +278,6 @@ async fn fetch_objects(
         }
     };
 
-    let next_continuation_token = if inodes.len() < max_keys as usize {
-        None
-    } else {
-        inodes.last().map(|inode| {
-            let mut key = inode.key.clone();
-            if key.ends_with('\0') {
-                key.pop();
-            }
-            key
-        })
-    };
-
     let mut objs = Vec::new();
     let mut common_prefixes = Vec::new();
     for inode_with_key in inodes.iter() {
@@ -309,6 +297,14 @@ async fn fetch_objects(
             }
         }
     }
+
+    let next_continuation_token = if inodes.len() < max_keys as usize {
+        None
+    } else {
+        inodes
+            .last()
+            .map(|inode| inode.key.trim_end_matches('\0').to_owned())
+    };
 
     Ok((objs, common_prefixes, next_continuation_token))
 }

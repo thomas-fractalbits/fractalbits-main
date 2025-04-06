@@ -164,8 +164,7 @@ async fn test_listobjectsv2() {
         assert_eq!(r.common_prefixes.unwrap().len(), 1);
     }
 
-    // FIXME: key sorting issue (a/%C3%A9 was returned)
-    if false {
+    {
         // With a prefix, a delimiter and max_key
         let r = ctx
             .client
