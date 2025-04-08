@@ -10,7 +10,7 @@ mod put;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{AppState, BlobId};
+use crate::{AppState, BlobClient, BlobId};
 use axum::{
     body::Body,
     extract::{ConnectInfo, State},
@@ -33,7 +33,6 @@ use get::GetEndpoint;
 use head::HeadEndpoint;
 use post::PostEndpoint;
 use put::PutEndpoint;
-use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::{ArcRpcClientRss, RpcErrorRss};
 use tokio::sync::mpsc::Sender;
@@ -100,7 +99,7 @@ async fn any_handler_inner(
     }
 
     let rpc_client_nss = app.get_rpc_client_nss(addr);
-    let rpc_client_bss = app.get_rpc_client_bss(addr);
+    let blob_client = app.get_blob_client(addr);
     let blob_deletion = app.blob_deletion.clone();
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
@@ -126,7 +125,7 @@ async fn any_handler_inner(
                 &bucket,
                 key,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 get_endpoint,
             )
             .await
@@ -139,7 +138,7 @@ async fn any_handler_inner(
                 &bucket,
                 key,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 rpc_client_rss,
                 blob_deletion,
                 put_endpoint,
@@ -165,7 +164,7 @@ async fn any_handler_inner(
                 &bucket,
                 key,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 blob_deletion,
                 delete_endpoint,
             )
@@ -228,12 +227,12 @@ async fn get_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     endpoint: GetEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
         GetEndpoint::GetObject => {
-            get::get_object_handler(request, bucket, key, rpc_client_nss, rpc_client_bss).await
+            get::get_object_handler(request, bucket, key, rpc_client_nss, blob_client).await
         }
         GetEndpoint::GetObjectAttributes => {
             get::get_object_attributes_handler(request, bucket, key, rpc_client_nss).await
@@ -260,7 +259,7 @@ async fn put_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     rpc_client_rss: ArcRpcClientRss,
     blob_deletion: Sender<(BlobId, usize)>,
     endpoint: PutEndpoint,
@@ -272,7 +271,7 @@ async fn put_handler(
                 bucket,
                 key,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 blob_deletion,
             )
             .await
@@ -285,7 +284,7 @@ async fn put_handler(
                 part_number,
                 upload_id,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 blob_deletion,
             )
             .await
@@ -297,7 +296,7 @@ async fn put_handler(
                 bucket,
                 key,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
                 rpc_client_rss,
                 blob_deletion,
             )
@@ -340,7 +339,7 @@ async fn delete_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     blob_deletion: Sender<(BlobId, usize)>,
     endpoint: DeleteEndpoint,
 ) -> Result<Response, S3Error> {
@@ -352,7 +351,7 @@ async fn delete_handler(
                 key,
                 upload_id,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
             )
             .await
         }

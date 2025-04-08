@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::{body::Body, response::Response};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::{
     rpc::{get_inode_response, put_inode_response},
     RpcClientNss,
@@ -11,6 +10,7 @@ use rpc_client_nss::{
 use crate::{
     handler::{common::s3_error::S3Error, Request},
     object_layout::{MpuState, ObjectLayout, ObjectState},
+    BlobClient,
 };
 use bucket_tables::bucket_table::Bucket;
 
@@ -20,7 +20,7 @@ pub async fn abort_multipart_upload_handler(
     key: String,
     _upload_id: String,
     rpc_client_nss: &RpcClientNss,
-    _rpc_client_bss: Arc<RpcClientBss>,
+    _blob_client: Arc<BlobClient>,
 ) -> Result<Response, S3Error> {
     let resp = rpc_client_nss
         .get_inode(bucket.root_blob_name.clone(), key.clone())

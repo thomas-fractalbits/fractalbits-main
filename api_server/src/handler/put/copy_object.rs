@@ -16,7 +16,7 @@ use crate::{
         Request,
     },
     object_layout::*,
-    BlobId,
+    BlobClient, BlobId,
 };
 use axum::{
     body::Body,
@@ -25,7 +25,6 @@ use axum::{
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, table::Versioned};
-use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::ArcRpcClientRss;
 use serde::Serialize;
@@ -202,7 +201,7 @@ pub async fn copy_object_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     rpc_client_rss: ArcRpcClientRss,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
@@ -211,7 +210,7 @@ pub async fn copy_object_handler(
         api_key,
         &header_opts.x_amz_copy_source,
         rpc_client_nss,
-        rpc_client_bss.clone(),
+        blob_client.clone(),
         rpc_client_rss,
     )
     .await?;
@@ -221,7 +220,7 @@ pub async fn copy_object_handler(
         bucket,
         key,
         rpc_client_nss,
-        rpc_client_bss,
+        blob_client,
         blob_deletion,
     )
     .await?;
@@ -237,7 +236,7 @@ async fn get_copy_source_object(
     api_key: Versioned<ApiKey>,
     copy_source: &str,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     rpc_client_rss: ArcRpcClientRss,
 ) -> Result<(ObjectLayout, Body), S3Error> {
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;
@@ -262,7 +261,7 @@ async fn get_copy_source_object(
         source_key,
         None,
         rpc_client_nss,
-        rpc_client_bss,
+        blob_client,
     )
     .await?;
     Ok((source_obj, source_obj_content))

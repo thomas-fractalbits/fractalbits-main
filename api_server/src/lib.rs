@@ -2,7 +2,12 @@ pub mod config;
 pub mod handler;
 mod object_layout;
 
+use aws_sdk_s3::{
+    config::{BehaviorVersion, Credentials, Region},
+    Client as S3Client, Config as S3Config,
+};
 use axum::extract::FromRef;
+use bytes::Bytes;
 use config::ArcConfig;
 use futures::stream::{self, StreamExt};
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};
@@ -12,6 +17,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::mpsc::{self, Receiver, Sender};
+use uuid::Uuid;
 
 pub type BlobId = uuid::Uuid;
 
@@ -20,7 +26,7 @@ pub struct AppState {
 
     pub rpc_clients_nss: Vec<RpcClientNss>,
 
-    pub rpc_clients_bss: Vec<Arc<RpcClientBss>>,
+    pub blob_clients: Vec<Arc<BlobClient>>,
     pub blob_deletion: Sender<(BlobId, usize)>,
 
     pub rpc_client_rss: ArcRpcClientRss,
@@ -34,7 +40,7 @@ impl FromRef<Arc<AppState>> for ArcConfig {
 
 impl AppState {
     const MAX_NSS_CONNECTION: usize = 8;
-    const MAX_BSS_CONNECTION: usize = 8;
+    const MAX_BLOB_IO_CONNECTION: usize = 8;
 
     pub async fn new(config: ArcConfig) -> Self {
         let mut rpc_clients_nss = Vec::with_capacity(Self::MAX_NSS_CONNECTION);
@@ -45,12 +51,10 @@ impl AppState {
             rpc_clients_nss.push(rpc_client_nss);
         }
 
-        let mut rpc_clients_bss = Vec::with_capacity(Self::MAX_BSS_CONNECTION);
-        for _i in 0..AppState::MAX_BSS_CONNECTION {
-            let rpc_client_bss = RpcClientBss::new(&config.bss_addr)
-                .await
-                .expect("rpc client bss failure");
-            rpc_clients_bss.push(Arc::new(rpc_client_bss));
+        let mut blob_clients = Vec::with_capacity(Self::MAX_BLOB_IO_CONNECTION);
+        for _i in 0..AppState::MAX_BLOB_IO_CONNECTION {
+            let blob_client = BlobClient::new(&config.bss_addr).await;
+            blob_clients.push(Arc::new(blob_client));
         }
 
         let (tx, rx) = mpsc::channel(1024 * 1024);
@@ -66,11 +70,10 @@ impl AppState {
                 .await
                 .expect("rpc client rss failure"),
         ));
-
         Self {
             config,
             rpc_clients_nss,
-            rpc_clients_bss,
+            blob_clients,
             blob_deletion: tx,
             rpc_client_rss,
         }
@@ -81,9 +84,9 @@ impl AppState {
         &self.rpc_clients_nss[hash]
     }
 
-    pub fn get_rpc_client_bss(&self, addr: SocketAddr) -> Arc<RpcClientBss> {
-        let hash = Self::calculate_hash(&addr) % Self::MAX_BSS_CONNECTION;
-        self.rpc_clients_bss[hash].clone()
+    pub fn get_blob_client(&self, addr: SocketAddr) -> Arc<BlobClient> {
+        let hash = Self::calculate_hash(&addr) % Self::MAX_BLOB_IO_CONNECTION;
+        self.blob_clients[hash].clone()
     }
 
     pub fn get_rpc_client_rss(&self) -> ArcRpcClientRss {
@@ -125,5 +128,54 @@ impl AppState {
             }
         }
         Ok(())
+    }
+}
+
+pub struct BlobClient {
+    pub client_bss: RpcClientBss,
+    pub client_s3: S3Client,
+}
+
+impl BlobClient {
+    pub async fn new(bss_url: &str) -> Self {
+        let client_bss = RpcClientBss::new(bss_url)
+            .await
+            .expect("rpc client bss failure");
+
+        let credentials = Credentials::new("minioadmin", "minioadmin", None, None, "minio");
+        let s3_config = S3Config::builder()
+            .endpoint_url("http://127.0.0.1:9000")
+            .region(Region::from_static("us-east-1"))
+            .credentials_provider(credentials)
+            .behavior_version(BehaviorVersion::v2024_03_28())
+            .build();
+
+        let client_s3 = S3Client::from_conf(s3_config);
+        Self {
+            client_bss,
+            client_s3,
+        }
+    }
+
+    pub async fn put_blob(
+        &self,
+        blob_id: Uuid,
+        block_number: u32,
+        body: Bytes,
+    ) -> Result<usize, RpcErrorBss> {
+        self.client_bss.put_blob(blob_id, block_number, body).await
+    }
+
+    pub async fn get_blob(
+        &self,
+        blob_id: Uuid,
+        block_number: u32,
+        body: &mut Bytes,
+    ) -> Result<usize, RpcErrorBss> {
+        self.client_bss.get_blob(blob_id, block_number, body).await
+    }
+
+    pub async fn delete_blob(&self, blob_id: Uuid, block_number: u32) -> Result<(), RpcErrorBss> {
+        self.client_bss.delete_blob(blob_id, block_number).await
     }
 }

@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use axum::response::Response;
 use axum::{http::HeaderValue, response};
-use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
@@ -10,7 +9,7 @@ use tokio::sync::mpsc::Sender;
 use crate::handler::common::{mpu_get_part_prefix, s3_error::S3Error};
 use crate::handler::put::put_object_handler;
 use crate::handler::Request;
-use crate::BlobId;
+use crate::{BlobClient, BlobId};
 use bucket_tables::bucket_table::Bucket;
 
 #[allow(dead_code)]
@@ -40,7 +39,7 @@ pub async fn upload_part_handler(
     part_number: u64,
     upload_id: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     if !(1..=10_000).contains(&part_number) {
@@ -54,7 +53,7 @@ pub async fn upload_part_handler(
         bucket,
         key,
         rpc_client_nss,
-        rpc_client_bss,
+        blob_client,
         blob_deletion,
     )
     .await?;

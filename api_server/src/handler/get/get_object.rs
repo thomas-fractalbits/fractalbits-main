@@ -9,11 +9,9 @@ use axum::{
 };
 use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt};
-use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
-use crate::object_layout::{MpuState, ObjectState};
 use crate::BlobId;
 use crate::{
     handler::{
@@ -24,6 +22,10 @@ use crate::{
         Request,
     },
     object_layout::ObjectLayout,
+};
+use crate::{
+    object_layout::{MpuState, ObjectState},
+    BlobClient,
 };
 use bucket_tables::bucket_table::Bucket;
 
@@ -88,7 +90,7 @@ pub async fn get_object_handler(
     bucket: &Bucket,
     key: String,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
 ) -> Result<Response, S3Error> {
     let mut parts = request.into_parts().0;
     let Query(query_opts): Query<QueryOpts> = parts.extract().await?;
@@ -105,7 +107,7 @@ pub async fn get_object_handler(
                 key,
                 query_opts.part_number,
                 rpc_client_nss,
-                rpc_client_bss,
+                blob_client,
             )
             .await?;
 
@@ -121,15 +123,9 @@ pub async fn get_object_handler(
         }
 
         (None, Some(range)) => {
-            let body = get_object_range_content(
-                bucket,
-                &object,
-                key,
-                &range,
-                rpc_client_nss,
-                rpc_client_bss,
-            )
-            .await?;
+            let body =
+                get_object_range_content(bucket, &object, key, &range, rpc_client_nss, blob_client)
+                    .await?;
 
             let mut resp = Response::new(body);
             resp.headers_mut().insert(
@@ -189,14 +185,14 @@ pub async fn get_object_content(
     key: String,
     part_number: Option<u32>,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
 ) -> Result<(Body, u64), S3Error> {
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
             let blob_id = object.blob_id()?;
             let num_blocks = object.num_blocks()?;
             let size = object.size()?;
-            let body_stream = get_full_blob_stream(rpc_client_bss, blob_id, num_blocks).await;
+            let body_stream = get_full_blob_stream(blob_client, blob_id, num_blocks).await;
             Ok((Body::from_stream(body_stream), size))
         }
         ObjectState::Mpu(ref mpu_state) => match mpu_state {
@@ -231,7 +227,7 @@ pub async fn get_object_content(
                 };
                 let body_stream = futures::stream::iter(mpus_iter)
                     .then(move |(_key, mpu_obj)| {
-                        let rpc_client_bss = rpc_client_bss.clone();
+                        let blob_client = blob_client.clone();
                         async move {
                             let blob_id = match mpu_obj.blob_id() {
                                 Ok(blob_id) => blob_id,
@@ -241,7 +237,7 @@ pub async fn get_object_content(
                                 Ok(num_blocks) => num_blocks,
                                 Err(e) => return Err(axum::Error::new(e)),
                             };
-                            Ok(get_full_blob_stream(rpc_client_bss, blob_id, num_blocks).await)
+                            Ok(get_full_blob_stream(blob_client, blob_id, num_blocks).await)
                         }
                     })
                     .try_flatten();
@@ -257,14 +253,14 @@ async fn get_object_range_content(
     key: String,
     range: &std::ops::Range<usize>,
     rpc_client_nss: &RpcClientNss,
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
 ) -> Result<Body, S3Error> {
     let block_size = object.block_size as usize;
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
             let blob_id = object.blob_id()?;
             let body_stream =
-                get_range_blob_stream(rpc_client_bss, blob_id, block_size, range.start, range.end)
+                get_range_blob_stream(blob_client, blob_id, block_size, range.start, range.end)
                     .await;
             Ok(Body::from_stream(body_stream))
         }
@@ -316,10 +312,10 @@ async fn get_object_range_content(
 
                 let body_stream = futures::stream::iter(mpu_blobs.into_iter())
                     .then(move |(blob_id, blob_start, blob_end)| {
-                        let rpc_client_bss = rpc_client_bss.clone();
+                        let blob_client = blob_client.clone();
                         async move {
                             Ok(get_range_blob_stream(
-                                rpc_client_bss,
+                                blob_client,
                                 blob_id,
                                 block_size,
                                 blob_start,
@@ -336,16 +332,16 @@ async fn get_object_range_content(
 }
 
 async fn get_full_blob_stream(
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     blob_id: BlobId,
     num_blocks: usize,
 ) -> BodyDataStream {
     let body_stream = futures::stream::iter(0..num_blocks)
         .then(move |i| {
-            let rpc_client_bss = rpc_client_bss.clone();
+            let blob_client = blob_client.clone();
             async move {
                 let mut block = Bytes::new();
-                match rpc_client_bss.get_blob(blob_id, i as u32, &mut block).await {
+                match blob_client.get_blob(blob_id, i as u32, &mut block).await {
                     Err(e) => Err(axum::Error::new(e)),
                     Ok(_) => Ok(Body::from(block).into_data_stream()),
                 }
@@ -357,7 +353,7 @@ async fn get_full_blob_stream(
 }
 
 async fn get_range_blob_stream(
-    rpc_client_bss: Arc<RpcClientBss>,
+    blob_client: Arc<BlobClient>,
     blob_id: BlobId,
     block_size: usize,
     start: usize,
@@ -367,10 +363,10 @@ async fn get_range_blob_stream(
     let blob_offset: usize = block_size * start_block_i;
     let body_stream = futures::stream::iter(start_block_i..)
         .then(move |i| {
-            let rpc_client_bss = rpc_client_bss.clone();
+            let blob_client = blob_client.clone();
             async move {
                 let mut block = Bytes::new();
-                match rpc_client_bss.get_blob(blob_id, i as u32, &mut block).await {
+                match blob_client.get_blob(blob_id, i as u32, &mut block).await {
                     Err(e) => Err(axum::Error::new(e)),
                     Ok(_) => Ok(Body::from(block).into_data_stream()),
                 }
