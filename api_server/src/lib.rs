@@ -160,7 +160,7 @@ impl BlobClient {
 
         let (access_key_id, secret_access_key, session_token) =
             if config.s3_host.ends_with("amazonaws.com") {
-                let path = "/latest/meta-data/iam/security-credentials/ec2_to_access_s3";
+                let path = "/latest/meta-data/iam/security-credentials/FractalbitsInstanceRole";
                 let client = aws_config::imds::client::Client::builder().build();
                 let security_token = client
                     .get(path)

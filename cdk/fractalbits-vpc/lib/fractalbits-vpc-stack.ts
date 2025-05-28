@@ -53,6 +53,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // IAM role for EC2 with SSM + S3
     const ec2Role = new iam.Role(this, 'InstanceRole', {
+      roleName: 'FractalbitsInstanceRole',
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
     });
     ec2Role.addManagedPolicy(
@@ -65,6 +66,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     // Security Group (no inbound rules; all outbound allowed)
     const sg = new ec2.SecurityGroup(this, 'InstanceSG', {
       vpc,
+      securityGroupName: 'FractalbitsInstanceSG',
       description: 'Allow outbound only for SSM and S3 access',
       allowAllOutbound: true,
     });
