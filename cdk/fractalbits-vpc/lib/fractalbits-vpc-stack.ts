@@ -74,6 +74,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8888), 'Allow port 8888 from anywhere');
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9224), 'Allow port 9224 from anywhere');
     sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9225), 'Allow port 9225 from anywhere');
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(3000), 'Allow port 3000 from anywhere');
 
     // Amazon Linux 2023 AMI
     const ami = ec2.MachineImage.latestAmazonLinux2023();
