@@ -9,6 +9,7 @@ members = [
     "api_server/bucket_tables",
     "root_server",
     "root_server/admin",
+    "cdk/fractalbits-bootstrap",
     "xtask",
 ]
 resolver = "2"

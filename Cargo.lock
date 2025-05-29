@@ -1622,6 +1622,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "fractalbits-bootstrap"
+version = "0.1.0"
+dependencies = [
+ "clap 4.5.27",
+ "cmd_lib",
+]
+
+[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

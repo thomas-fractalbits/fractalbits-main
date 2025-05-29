@@ -2,7 +2,6 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 
 export class FractalbitsVpcStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -88,6 +87,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
       role: ec2Role,
       privateIpAddress: "10.0.0.11",
     });
+    apiServerInstance.userData.addCommands(
+      'set -ex',
+      'mkdir -p /opt/fractalbits/bin',
+      'aws s3 cp s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin',
+      'chmod +x /opt/fractalbits/bin/fractalbits-bootstrap',
+      '/opt/fractalbits/bin/fractalbits-bootstrap api-server',
+    );
 
     const rootServerInstance = new ec2.Instance(this, 'root_server', {
       vpc,
@@ -98,6 +104,14 @@ export class FractalbitsVpcStack extends cdk.Stack {
       role: ec2Role,
       privateIpAddress: "10.0.1.254",
     });
+    rootServerInstance.userData.addCommands(
+      'set -ex',
+      'mkdir -p /opt/fractalbits/bin',
+      'aws s3 cp s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin',
+      'chmod +x /opt/fractalbits/bin/fractalbits-bootstrap',
+      '/opt/fractalbits/bin/fractalbits-bootstrap root-server',
+    );
+
 
     const bssServerInstance = new ec2.Instance(this, 'bss_server', {
       vpc,
@@ -108,6 +122,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
       role: ec2Role,
       privateIpAddress: "10.0.1.10",
     });
+    bssServerInstance.userData.addCommands(
+      'set -ex',
+      'mkdir -p /opt/fractalbits/bin',
+      'aws s3 cp s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin',
+      'chmod +x /opt/fractalbits/bin/fractalbits-bootstrap',
+      '/opt/fractalbits/bin/fractalbits-bootstrap bss-server',
+    );
 
     const nssServerInstance = new ec2.Instance(this, 'nss_server', {
       vpc,
@@ -118,6 +139,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
       role: ec2Role,
       privateIpAddress: "10.0.1.100",
     });
+    nssServerInstance.userData.addCommands(
+      'set -ex',
+      'mkdir -p /opt/fractalbits/bin',
+      'aws s3 cp s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin',
+      'chmod +x /opt/fractalbits/bin/fractalbits-bootstrap',
+      '/opt/fractalbits/bin/fractalbits-bootstrap nss-server',
+    );
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiServerId', {
@@ -138,6 +166,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'NssServerId', {
       value: nssServerInstance.instanceId,
       description: 'EC2 instance nss server ID',
+    });
+
+   new cdk.CfnOutput(this, 'ServicePublicIP', {
+      value: apiServerInstance.instancePublicIp,
+      description: 'Public IP of the API server',
     });
   }
 }
