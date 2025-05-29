@@ -71,6 +71,9 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: 'Allow outbound only for SSM and S3 access',
       allowAllOutbound: true,
     });
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8888), 'Allow port 8888 from anywhere');
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9224), 'Allow port 9224 from anywhere');
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(9225), 'Allow port 9225 from anywhere');
 
     // Amazon Linux 2023 AMI
     const ami = ec2.MachineImage.latestAmazonLinux2023();
@@ -82,6 +85,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
       securityGroup: sg,
       role: ec2Role,
+      privateIpAddress: "10.0.0.11",
     });
 
     const rootServerInstance = new ec2.Instance(this, 'root_server', {
@@ -91,6 +95,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroup: sg,
       role: ec2Role,
+      privateIpAddress: "10.0.1.254",
     });
 
     const bssServerInstance = new ec2.Instance(this, 'bss_server', {
@@ -100,25 +105,18 @@ export class FractalbitsVpcStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroup: sg,
       role: ec2Role,
+      privateIpAddress: "10.0.1.10",
     });
 
-    const nssLaunchTemplate = new ec2.LaunchTemplate(this, 'NssLaunchTemplate', {
+    const nssServerInstance = new ec2.Instance(this, 'nss_server', {
+      vpc,
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
       machineImage: ami,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroup: sg,
       role: ec2Role,
-      httpTokens: ec2.LaunchTemplateHttpTokens.OPTIONAL,
-      httpEndpoint: true,
+      privateIpAddress: "10.0.1.100",
     });
-    const nssASG = new autoscaling.AutoScalingGroup(this, 'nssASG', {
-      vpc,
-      minCapacity: 1,
-      maxCapacity: 1,
-      desiredCapacity: 1,
-      launchTemplate: nssLaunchTemplate,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-    });
-    cdk.Tags.of(nssASG).add('Name', `${cdk.Stack.of(this).stackName}/nss_server/ASG`);
 
     // Outputs
     new cdk.CfnOutput(this, 'ApiServerId', {
@@ -134,6 +132,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BssServerId', {
       value: bssServerInstance.instanceId,
       description: 'EC2 instance bss server ID',
+    });
+
+    new cdk.CfnOutput(this, 'NssServerId', {
+      value: nssServerInstance.instanceId,
+      description: 'EC2 instance nss server ID',
     });
   }
 }
