@@ -58,8 +58,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       const userData = ec2.UserData.forLinux();
       userData.addCommands(
         'set -ex',
-        'mkdir -p /opt/fractalbits/bin',
-        'aws s3 cp s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin',
+        'aws s3 cp --no-progress s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin/',
         'chmod +x /opt/fractalbits/bin/fractalbits-bootstrap',
         `/opt/fractalbits/bin/fractalbits-bootstrap ${serverName}`,
       );
