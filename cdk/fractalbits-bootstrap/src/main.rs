@@ -51,7 +51,7 @@ fn bootstrap_api_server() -> CmdResult {
     info!("Bootstrapping api_server ...");
     let service = ServiceName::ApiServer;
     download_binary(service.as_ref())?;
-    download_config(API_SERVER_CONFIG)?;
+    create_api_server_cloud_config()?;
     create_systemd_unit_file(service)?;
     run_cmd! {
         info "Sleep 10s to wait for other ec2 instances";
@@ -86,7 +86,7 @@ fn bootstrap_nss_server() -> CmdResult {
 
     let service = ServiceName::NssServer;
     download_binary(service.as_ref())?;
-    download_config(NSS_SERVER_CONFIG)?;
+    create_nss_server_cloud_config()?;
     create_systemd_unit_file(service)?;
     run_cmd! {
         info "Starting nss_server.service";
@@ -120,14 +120,6 @@ fn download_binary(file_name: &str) -> CmdResult {
         info "Downloading $file_name from $BUILDS_BUCKET to $BIN_PATH ...";
         aws s3 cp --no-progress $BUILDS_BUCKET/$file_name $BIN_PATH;
         chmod +x $BIN_PATH/$file_name
-    }?;
-    Ok(())
-}
-
-fn download_config(file_name: &str) -> CmdResult {
-    run_cmd! {
-        info "Downloading $file_name from $BUILDS_BUCKET to $ETC_PATH ...";
-        aws s3 cp --no-progress $BUILDS_BUCKET/$file_name $ETC_PATH;
     }?;
     Ok(())
 }
@@ -201,5 +193,40 @@ WorkingDirectory=/var/data
         systemctl start etcd.service;
     }?;
 
+    Ok(())
+}
+
+fn create_api_server_cloud_config() -> CmdResult {
+    let config_content = r##"bss_addr = "10.0.1.10:9225"
+nss_addr = "10.0.1.100:9224"
+rss_addr = "10.0.1.254:8888"
+region = "us-west-1"
+port = 3000
+root_domain = ".localhost"
+
+[s3_cache]
+s3_host = "http://s3.us-west-1.amazonaws.com"
+s3_port = 80
+s3_region = "us-west-1"
+s3_bucket = "fractalbits-bucket"
+"##;
+    run_cmd! {
+        mkdir -p $ETC_PATH;
+        echo $config_content > $ETC_PATH/$API_SERVER_CONFIG
+    }?;
+    Ok(())
+}
+
+fn create_nss_server_cloud_config() -> CmdResult {
+    let config_content = r##"[s3_cache]
+s3_host = "s3.us-west-1.amazonaws.com"
+s3_port = 80
+s3_region = "us-west-1"
+s3_bucket = "fractalbits-bucket"
+"##;
+    run_cmd! {
+        mkdir -p $ETC_PATH;
+        echo $config_content > $ETC_PATH/$NSS_SERVER_CONFIG
+    }?;
     Ok(())
 }
