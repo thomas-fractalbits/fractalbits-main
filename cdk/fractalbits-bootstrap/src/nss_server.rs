@@ -23,11 +23,12 @@ pub fn bootstrap(bucket_name: &str) -> CmdResult {
 }
 
 fn create_config(bucket_name: &str) -> CmdResult {
+    let aws_region = get_current_aws_region()?;
     let config_content = format!(
         r##"[s3_cache]
-s3_host = "s3.us-west-1.amazonaws.com"
+s3_host = "s3.{aws_region}.amazonaws.com"
 s3_port = 80
-s3_region = "us-west-1"
+s3_region = "{aws_region}"
 s3_bucket = "{bucket_name}"
 "##
     );

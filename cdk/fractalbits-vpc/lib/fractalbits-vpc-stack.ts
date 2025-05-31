@@ -54,6 +54,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(port), `Allow port ${port}`);
     });
 
+    const region = cdk.Stack.of(this).region;
     const bucket = new s3.Bucket(this, 'Bucket', {
       // No bucketName provided – name will be auto-generated
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Delete bucket on stack delete
@@ -65,7 +66,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       const userData = ec2.UserData.forLinux();
       userData.addCommands(
         'set -e',
-        'aws s3 cp --no-progress s3://fractalbits-builds/fractalbits-bootstrap /opt/fractalbits/bin/',
+        `aws s3 cp --no-progress s3://fractalbits-builds-${region}/fractalbits-bootstrap /opt/fractalbits/bin/`,
         'chmod -v +x /opt/fractalbits/bin/fractalbits-bootstrap',
         `/opt/fractalbits/bin/fractalbits-bootstrap --bucket=${bucket.bucketName} ${serverName}`,
       );
