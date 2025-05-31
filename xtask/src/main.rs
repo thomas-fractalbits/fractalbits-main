@@ -1,5 +1,6 @@
 mod build;
 mod cmd_bench;
+mod cmd_deploy;
 mod cmd_nightly;
 mod cmd_precheckin;
 mod cmd_service;
@@ -54,6 +55,9 @@ enum Cmd {
     #[clap(about = "Run tool related commands (gen_uuids only for now)")]
     #[command(subcommand)]
     Tool(ToolKind),
+
+    #[clap(about = "Deploy binaries to s3 builds bucket")]
+    Deploy,
 }
 
 #[derive(Clone, AsRefStr, EnumString)]
@@ -137,6 +141,7 @@ fn main() -> CmdResult {
             cmd_service::run_cmd_service(BuildMode::Debug, action, service)?
         }
         Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
+        Cmd::Deploy => cmd_deploy::run_cmd_deploy()?,
     }
     Ok(())
 }
