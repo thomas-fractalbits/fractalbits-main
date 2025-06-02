@@ -46,6 +46,7 @@ WantedBy=multi-user.target
         echo $systemd_unit_content > ${ETC_PATH}${service_file};
         info "Linking ${ETC_PATH}${service_file} into /etc/systemd/system";
         systemctl link ${ETC_PATH}${service_file} --force --quiet;
+        systemctl enable $service_name;
     }?;
     Ok(())
 }
