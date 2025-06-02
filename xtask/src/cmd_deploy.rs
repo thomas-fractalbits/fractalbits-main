@@ -16,9 +16,10 @@ pub fn run_cmd_deploy() -> CmdResult {
         }?;
     }
 
+    const BUILD_MODE: &str = "release";
     run_cmd! {
         info "Building with zigbuild";
-        cargo zigbuild --target x86_64-unknown-linux-gnu;
+        cargo zigbuild --target x86_64-unknown-linux-gnu --$BUILD_MODE;
     }?;
 
     info!("Uploading Rust-built binaries");
@@ -29,9 +30,10 @@ pub fn run_cmd_deploy() -> CmdResult {
         "fractalbits-bootstrap",
     ];
     for bin in &rust_bins {
-        run_cmd!(aws s3 cp target/x86_64-unknown-linux-gnu/release/$bin $bucket)?;
+        run_cmd!(aws s3 cp target/x86_64-unknown-linux-gnu/$BUILD_MODE/$bin $bucket)?;
     }
 
+    // TODO: zig build in release safe mode
     run_cmd! {
         info "Building Zig project";
         zig build -Dcpu=x86_64_v3 2>&1;
