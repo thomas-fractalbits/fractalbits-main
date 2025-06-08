@@ -92,11 +92,14 @@ pub fn start_nss_service(build_mode: BuildMode) -> CmdResult {
 
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
-    if run_cmd!(test -f ./ebs/fbs.state).is_err() {
+    let pwd = run_fun!(pwd)?;
+    if run_cmd!(test -f ./data/ebs/fbs.state).is_err() {
         run_cmd! {
             info "Could not find state log, formatting at first ...";
-            ./zig-out/bin/mkfs;
-            ./zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME;
+            mkdir -p data/local/meta_cache;
+            cd data;
+            ${pwd}/zig-out/bin/mkfs;
+            ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME;
         }?;
     }
 
@@ -178,6 +181,8 @@ fn start_ddb_local_service() -> CmdResult {
     let pwd = run_fun!(pwd)?;
     let service_file = "etc/ddb_local.service";
     let java = run_fun!(bash -c "command -v java")?;
+    let java_lib = format!("{pwd}/dynamodb_local/DynamoDBLocal_lib");
+    let working_dir = format!("{pwd}/data/rss");
     let service_file_content = format!(
         r##"[Unit]
 Description=dynamodb local service for root_server
@@ -187,18 +192,18 @@ WantedBy=default.target
 
 [Service]
 Type=simple
-ExecStart={java} -Djava.library.path={pwd}/dynamodb_local/DynamoDBLocal_lib -jar {pwd}/dynamodb_local/DynamoDBLocal.jar -sharedDb -dbPath {pwd}/rss
+ExecStart={java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath {working_dir}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-WorkingDirectory={pwd}/rss
+WorkingDirectory={working_dir}
 "##
     );
 
     let ddb_local_wait_secs = 5;
     run_cmd! {
-        mkdir -p rss;
+        mkdir -p $working_dir;
         mkdir -p etc;
         echo $service_file_content > $service_file;
         info "Linking $service_file into ~/.config/systemd/user";
@@ -240,7 +245,7 @@ WantedBy=default.target
 Type=simple
 ExecStart=/home/linuxbrew/.linuxbrew/opt/minio/bin/minio server s3/
 Restart=always
-WorkingDirectory={pwd}
+WorkingDirectory={pwd}/data
 "##
     );
     let minio_wait_secs = 5;
@@ -249,7 +254,7 @@ WorkingDirectory={pwd}
     let my_bucket = format!("s3://{bucket_name}");
     run_cmd! {
         mkdir -p etc;
-        mkdir -p s3;
+        mkdir -p data/s3;
         echo $service_file_content > $service_file;
         info "Linking $service_file into ~/.config/systemd/user";
         systemctl --user link $service_file --force --quiet;
@@ -286,7 +291,9 @@ fn create_systemd_unit_file(service: ServiceName, build_mode: BuildMode) -> CmdR
     let mut env_settings = String::new();
     let exec_start = match service {
         ServiceName::Bss => format!("{pwd}/zig-out/bin/bss_server"),
-        ServiceName::Nss => format!("{pwd}/zig-out/bin/nss_server"),
+        ServiceName::Nss => {
+            format!("{pwd}/zig-out/bin/nss_server -c {pwd}/etc/nss_server_dev_config.toml")
+        }
         ServiceName::Rss => {
             env_settings = format!(
                 r##"
@@ -310,7 +317,7 @@ Environment="RUST_LOG=info""##
 Environment="RUST_LOG=debug""##
                 );
             }
-            format!("{pwd}/target/{build}/api_server")
+            format!("{pwd}/target/{build}/api_server -c {pwd}/etc/api_server_dev_config.toml")
         }
         ServiceName::All => unreachable!(),
     };
@@ -321,7 +328,7 @@ Description={service_name} Service
 [Service]
 LimitNOFILE=1000000
 LimitCORE=infinity
-WorkingDirectory={pwd}{env_settings}
+WorkingDirectory={pwd}/data{env_settings}
 ExecStart={exec_start}
 
 [Install]
@@ -331,6 +338,7 @@ WantedBy=multi-user.target
     let service_file = format!("{service_name}.service");
 
     run_cmd! {
+        mkdir -p $pwd/data;
         mkdir -p etc;
         echo $systemd_unit_content > etc/$service_file;
         info "Linking ./etc/$service_file into ~/.config/systemd/user";

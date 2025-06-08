@@ -14,12 +14,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[derive(Parser)]
 #[clap(name = "api_server", about = "API server")]
 struct Opt {
-    #[clap(
-        short = 'c',
-        long = "config",
-        long_help = "Config file path",
-        default_value = "etc/api_server_dev_config.toml"
-    )]
+    #[clap(short = 'c', long = "config", long_help = "Config file path")]
     pub config_file: PathBuf,
 }
 
