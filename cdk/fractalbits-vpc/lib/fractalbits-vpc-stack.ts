@@ -108,6 +108,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     // Define instance metadata
     const t2_micro = ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO);
     const nss_instance_type = ec2.InstanceType.of(ec2.InstanceClass.M5D, ec2.InstanceSize.XLARGE4);
+    const nss_num_nvme_disks = 2;
     const bucket_name = bucket.bucketName;
     const instanceConfigs = [
       { id: 'api_server', subnet: ec2.SubnetType.PUBLIC, instanceType: t2_micro },
@@ -165,11 +166,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
         bootstrapOptions: `bss_server` },
       {
         id: 'nss_server_primary',
-        bootstrapOptions: `nss_server --bucket=${bucket_name} --volume_id=${ebs_volume_id}`
+        bootstrapOptions: `nss_server --bucket=${bucket_name} --volume_id=${ebs_volume_id} --num_nvme_disks=${nss_num_nvme_disks}`
       },
       {
         id: 'nss_server_secondary',
-        bootstrapOptions: `nss_server --bucket=${bucket_name} --volume_id=${ebs_volume_id}`
+        bootstrapOptions: `nss_server --bucket=${bucket_name} --volume_id=${ebs_volume_id} --num_nvme_disks=${nss_num_nvme_disks}`
       },
     ];
     instanceBootstrapOptions.forEach(({id, bootstrapOptions}) => {
