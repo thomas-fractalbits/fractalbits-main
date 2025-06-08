@@ -2,7 +2,9 @@ use super::common::*;
 use cmd_lib::*;
 
 pub fn bootstrap(bucket_name: &str, volume_id: &str, num_nvme_disks: u32) -> CmdResult {
-    format_local_nvme_disks(num_nvme_disks)?;
+    if num_nvme_disks != 0 {
+        format_local_nvme_disks(num_nvme_disks)?;
+    }
 
     // Sanitize: convert vol-07451bc901d5e1e09 → vol07451bc901d5e1e09
     let volume_id = &volume_id.replace("-", "");
