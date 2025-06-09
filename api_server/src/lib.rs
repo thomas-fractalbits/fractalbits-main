@@ -42,13 +42,23 @@ impl FromRef<Arc<AppState>> for ArcConfig {
 impl AppState {
     const MAX_NSS_CONNECTION: usize = 8;
     const MAX_BLOB_IO_CONNECTION: usize = 8;
+    const RPC_CLIENT_MAX_WAIT: usize = 300;
 
     pub async fn new(config: ArcConfig) -> Self {
         let mut rpc_clients_nss = Vec::with_capacity(Self::MAX_NSS_CONNECTION);
         for _i in 0..AppState::MAX_NSS_CONNECTION {
-            let rpc_client_nss = RpcClientNss::new(&config.nss_addr)
-                .await
-                .expect("rpc client nss failure");
+            let mut wait_secs = 0;
+            let rpc_client_nss = loop {
+                if let Ok(client) = RpcClientNss::new(&config.nss_addr).await {
+                    break client;
+                }
+                wait_secs += 1;
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                if wait_secs >= Self::RPC_CLIENT_MAX_WAIT {
+                    tracing::error!("Could not create NSS RPC client");
+                    std::process::exit(1);
+                }
+            };
             rpc_clients_nss.push(rpc_client_nss);
         }
 
@@ -66,17 +76,24 @@ impl AppState {
             }
         });
 
-        let rpc_client_rss = ArcRpcClientRss(Arc::new(
-            RpcClientRss::new(&config.rss_addr)
-                .await
-                .expect("rpc client rss failure"),
-        ));
+        let mut wait_secs = 0;
+        let rpc_client_rss = loop {
+            if let Ok(client) = RpcClientRss::new(&config.rss_addr).await {
+                break client;
+            }
+            wait_secs += 1;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if wait_secs >= Self::RPC_CLIENT_MAX_WAIT {
+                tracing::error!("Could not create NSS RPC client");
+                std::process::exit(1);
+            }
+        };
         Self {
             config,
             rpc_clients_nss,
             blob_clients,
             blob_deletion: tx,
-            rpc_client_rss,
+            rpc_client_rss: ArcRpcClientRss(Arc::new(rpc_client_rss)),
         }
     }
 

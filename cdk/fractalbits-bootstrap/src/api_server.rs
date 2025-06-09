@@ -7,8 +7,6 @@ pub fn bootstrap(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) ->
     create_config(bucket_name, bss_ip, nss_ip, rss_ip)?;
     create_systemd_unit_file(service_name)?;
     run_cmd! {
-        info "Sleep 20s to wait for other ec2 instances";
-        sleep 20;
         info "Starting api_server.service";
         systemctl enable --now api_server.service;
     }?;

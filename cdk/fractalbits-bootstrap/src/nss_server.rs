@@ -44,11 +44,11 @@ s3_bucket = "{bucket_name}"
 fn create_ebs_mount_unit(volume_id: &str) -> CmdResult {
     let content = format!(
         r##"[Unit]
-Description=Mount EBS Volume at /data
+Description=Mount EBS Volume at /data/ebs
 
 [Mount]
 What=/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_{volume_id}
-Where=/data
+Where=/data/ebs
 Type=xfs
 Options=defaults,nofail
 
@@ -57,7 +57,7 @@ WantedBy=multi-user.target
 "##
     );
     run_cmd! {
-        echo $content > /etc/systemd/system/data.mount;
+        echo $content > /etc/systemd/system/data-ebs.mount;
     }?;
 
     Ok(())
@@ -92,7 +92,7 @@ fn format_local_nvme_disks(num_nvme_disks: usize) -> CmdResult {
         cmd_die!("Found $num local nvme disks, expected: $num_nvme_disks");
     }
 
-    const DATA_CACHE_MNT: &str = "/data2/cache";
+    const DATA_LOCAL_MNT: &str = "/data/local";
     run_cmd! {
         info "Zeroing superblocks";
         mdadm -q --zero-superblock $[nvme_disks];
@@ -103,9 +103,9 @@ fn format_local_nvme_disks(num_nvme_disks: usize) -> CmdResult {
         info "Creating XFS on /dev/md0";
         mkfs.xfs -q /dev/md0;
 
-        info "Mounting to $DATA_CACHE_MNT";
-        mkdir -p $DATA_CACHE_MNT;
-        mount /dev/md0 $DATA_CACHE_MNT;
+        info "Mounting to $DATA_LOCAL_MNT";
+        mkdir -p $DATA_LOCAL_MNT;
+        mount /dev/md0 $DATA_LOCAL_MNT;
 
         info "Updating /etc/mdadm/mdadm.conf";
         mkdir -p /etc/mdadm;
@@ -115,7 +115,7 @@ fn format_local_nvme_disks(num_nvme_disks: usize) -> CmdResult {
     let md0_uuid = run_fun!(blkid -s UUID -o value /dev/md0)?;
     run_cmd! {
         info "Updating /etc/fstab (md0 uuid=$md0_uuid)";
-        echo "UUID=$md0_uuid $DATA_CACHE_MNT xfs defaults,nofail 0 0" >> /etc/fstab;
+        echo "UUID=$md0_uuid $DATA_LOCAL_MNT xfs defaults,nofail 0 0" >> /etc/fstab;
     }?;
 
     Ok(())

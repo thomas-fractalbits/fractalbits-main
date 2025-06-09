@@ -20,7 +20,7 @@ pub fn create_systemd_unit_file(service_name: &str) -> CmdResult {
     let exec_start = match service_name {
         "api_server" => format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG}"),
         "nss_server" => {
-            requires = "data.mount";
+            requires = "data-ebs.mount";
             format!("{BIN_PATH}{service_name} -c {ETC_PATH}{NSS_SERVER_CONFIG}")
         }
         "bss_server" | "root_server" | "ebs-failover" => format!("{BIN_PATH}{service_name}"),

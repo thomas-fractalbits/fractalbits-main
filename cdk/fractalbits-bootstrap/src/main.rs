@@ -62,8 +62,6 @@ fn main() -> CmdResult {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .format_target(false)
         .init();
-    let args: Vec<String> = std::env::args().collect();
-    info!("Bootstrapping: {args:?}");
 
     let service = Service::parse();
     match service {
