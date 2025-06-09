@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::build::BuildMode;
 use crate::TEST_BUCKET_ROOT_BLOB_NAME;
 use crate::{ServiceAction, ServiceName};
@@ -10,17 +9,17 @@ pub fn run_cmd_service(
     service: ServiceName,
 ) -> CmdResult {
     match action {
-        ServiceAction::Stop => stop_services(service),
+        ServiceAction::Stop => stop_service(service),
         ServiceAction::Start => start_services(build_mode, service),
         ServiceAction::Restart => {
-            stop_services(service)?;
+            stop_service(service)?;
             start_services(build_mode, service)
         }
     }
 }
 
-pub fn stop_services(service: ServiceName) -> CmdResult {
-    info!("Killing previous services (if any) ...");
+pub fn stop_service(service: ServiceName) -> CmdResult {
+    info!("Killing previous service(s) (if any) ...");
     run_cmd!(sync)?;
 
     let services: Vec<String> = match service {
@@ -29,8 +28,8 @@ pub fn stop_services(service: ServiceName) -> CmdResult {
             ServiceName::Nss.as_ref().to_owned(),
             ServiceName::Bss.as_ref().to_owned(),
             ServiceName::Rss.as_ref().to_owned(),
-            "ddb_local".to_owned(),
-            "minio".to_owned(),
+            ServiceName::Minio.as_ref().to_owned(),
+            ServiceName::DdbLocal.as_ref().to_owned(),
         ],
         single_service => vec![single_service.as_ref().to_owned()],
     };
@@ -63,6 +62,8 @@ pub fn start_services(build_mode: BuildMode, service: ServiceName) -> CmdResult 
             start_nss_service(build_mode)?;
             start_api_server(build_mode)?;
         }
+        ServiceName::Minio => start_minio_service()?,
+        ServiceName::DdbLocal => start_ddb_local_service()?,
     }
     Ok(())
 }
@@ -143,8 +144,10 @@ pub fn start_rss_service(build_mode: BuildMode) -> CmdResult {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn start_etcd_service() -> CmdResult {
     let pwd = run_fun!(pwd)?;
+    let working_dir = format!("{pwd}/data/rss");
     let service_file = "etc/etcd.service";
     let service_file_content = format!(
         r##"[Unit]
@@ -157,14 +160,14 @@ WantedBy=default.target
 Type=simple
 ExecStart="/home/linuxbrew/.linuxbrew/opt/etcd/bin/etcd"
 Restart=always
-WorkingDirectory={pwd}/ebs
+WorkingDirectory={pwd}/data/rss
 "##
     );
 
     let etcd_wait_secs = 5;
     run_cmd! {
         mkdir -p etc;
-        mkdir -p ebs;
+        mkdir -p $working_dir;
         echo $service_file_content > $service_file;
         info "Linking $service_file into ~/.config/systemd/user";
         systemctl --user link $service_file --force --quiet;
@@ -231,7 +234,7 @@ WorkingDirectory={working_dir}
     Ok(())
 }
 
-fn start_minio_service() -> CmdResult {
+pub fn start_minio_service() -> CmdResult {
     let pwd = run_fun!(pwd)?;
     let service_file = "etc/minio.service";
     let service_file_content = format!(
@@ -262,7 +265,7 @@ WorkingDirectory={pwd}/data
         info "Waiting ${minio_wait_secs}s for minio up";
         sleep $minio_wait_secs;
         info "Creating s3 bucket (\"$bucket_name\") in minio ...";
-        AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
+        ignore AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
             aws s3 mb $my_bucket >/dev/null;
     }?;
 
@@ -319,7 +322,7 @@ Environment="RUST_LOG=debug""##
             }
             format!("{pwd}/target/{build}/api_server -c {pwd}/etc/api_server_dev_config.toml")
         }
-        ServiceName::All => unreachable!(),
+        _ => unreachable!(),
     };
     let systemd_unit_content = format!(
         r##"[Unit]
@@ -350,7 +353,7 @@ WantedBy=multi-user.target
 fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
     if pids.split_whitespace().count() > 1 {
         error!("Multiple processes were found: {pids}, stopping services ...");
-        stop_services(service)?;
+        stop_service(service)?;
         cmd_die!("Multiple processes were found: {pids}");
     }
     Ok(())

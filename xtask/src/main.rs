@@ -3,7 +3,7 @@ mod cmd_bench;
 mod cmd_deploy;
 mod cmd_nightly;
 mod cmd_precheckin;
-mod cmd_service;
+pub mod cmd_service;
 mod cmd_tool;
 
 use build::BuildMode;
@@ -77,7 +77,7 @@ enum BenchService {
 
 #[derive(Clone, EnumString, PartialEq)]
 #[strum(serialize_all = "snake_case")]
-enum ServiceAction {
+pub enum ServiceAction {
     Stop,
     Start,
     Restart,
@@ -85,12 +85,14 @@ enum ServiceAction {
 
 #[derive(AsRefStr, EnumString, Copy, Clone)]
 #[strum(serialize_all = "snake_case")]
-enum ServiceName {
+pub enum ServiceName {
     ApiServer,
     Bss,
     Nss,
     Rss,
     All,
+    Minio,
+    DdbLocal,
 }
 
 #[derive(Parser, Clone)]

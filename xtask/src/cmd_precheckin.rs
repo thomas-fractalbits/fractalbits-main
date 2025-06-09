@@ -1,7 +1,15 @@
-use crate::TEST_BUCKET_ROOT_BLOB_NAME;
+use crate::{ServiceName, TEST_BUCKET_ROOT_BLOB_NAME};
 use cmd_lib::*;
 
 pub fn run_cmd_precheckin() -> CmdResult {
+    crate::cmd_service::stop_service(ServiceName::All)?;
+    crate::cmd_service::start_minio_service()?;
+
+    run_cmd! {
+        info "Running cargo unit tests ...";
+        cargo test --lib --workspace --exclude rewrk --exclude rewrk_rpc --exclude xtask;
+    }?;
+
     run_cmd! {
         info "Building ...";
         zig build 2>&1;
@@ -13,11 +21,6 @@ pub fn run_cmd_precheckin() -> CmdResult {
         cd data;
         ../zig-out/bin/mkfs;
         zig build test --summary all 2>&1;
-    }?;
-
-    run_cmd! {
-        info "Running cargo unit tests ...";
-        cargo test --lib --workspace --exclude rewrk --exclude rewrk_rpc --exclude xtask;
     }?;
 
     let rand_log = "test_art_random.log";
@@ -62,7 +65,6 @@ pub fn run_cmd_precheckin() -> CmdResult {
         info "Running async art tests with log $async_art_log ...";
         cd data;
         ../zig-out/bin/mkfs;
-        ../zig-out/bin/mkfs;
         ../zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME;
         ../zig-out/bin/test_async_art -p 20 &> $async_art_log;
         ../zig-out/bin/test_async_art -p 20 &>> $async_art_log;
@@ -74,5 +76,6 @@ pub fn run_cmd_precheckin() -> CmdResult {
     })?;
 
     info!("Precheckin is OK");
+    crate::cmd_service::stop_service(ServiceName::Minio)?;
     Ok(())
 }
