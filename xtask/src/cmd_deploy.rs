@@ -29,7 +29,7 @@ pub fn run_cmd_deploy(use_s3_backend: bool) -> CmdResult {
 
     run_cmd! {
         info "Building Zig project";
-        zig build -Dcpu=x86_64_v3 -Duse_s3_backend=$use_s3_backend --release=safe 2>&1;
+        zig build -Duse_s3_backend=$use_s3_backend --release=safe 2>&1;
     }?;
 
     info!("Uploading Zig-built binaries");
