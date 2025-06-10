@@ -1,10 +1,10 @@
 use cmd_lib::*;
 
+const TARGET_ACCOUNT_ID: &str = "ACCOUNT_ID_TARGET"; // TARGET_EMAIL@example.com
+const BUCKET_OWNER_ACCOUNT_ID: &str = "ACCOUNT_ID_OWNER";
+
 pub fn run_cmd_deploy(use_s3_backend: bool) -> CmdResult {
-    // Get AWS region
-    let awk_opts = r#"{{print $2}}"#;
-    let region = run_fun!(aws configure list | grep region | awk $awk_opts)?;
-    let bucket_name = format!("fractalbits-builds-{}", region);
+    let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
 
     // Check if the bucket exists; create if it doesn't
@@ -15,7 +15,6 @@ pub fn run_cmd_deploy(use_s3_backend: bool) -> CmdResult {
             aws s3 mb $bucket
         }?;
     }
-    update_builds_bucket_access_policy(&bucket_name)?;
 
     const BUILD_MODE: &str = "release";
     run_cmd! {
@@ -57,7 +56,20 @@ pub fn run_cmd_deploy(use_s3_backend: bool) -> CmdResult {
     Ok(())
 }
 
-fn update_builds_bucket_access_policy(bucket_name: &str) -> CmdResult {
+fn get_build_bucket_name() -> FunResult {
+    let awk_opts = r#"{{print $2}}"#;
+    let region = run_fun!(aws configure list | grep region | awk $awk_opts)?;
+    Ok(format!("fractalbits-builds-{}", region))
+}
+
+pub fn update_builds_bucket_access_policy() -> CmdResult {
+    let current_aws_account = run_fun!(aws sts get-caller-identity --query Account --output text)?;
+    if current_aws_account != BUCKET_OWNER_ACCOUNT_ID {
+        cmd_die!("Only bucket owner could update s3 build bucket policy!");
+    }
+
+    let bucket_name = get_build_bucket_name()?;
+
     // Remove Block Public Access
     let new_public_access_conf = r##"{
 "BlockPublicAcls": false,
@@ -99,15 +111,26 @@ fn update_builds_bucket_access_policy(bucket_name: &str) -> CmdResult {
         "aws:PrincipalType": "Anonymous"
       }}
     }}
+  }},
+  {{
+    "Sid": "AllowPutObjectToTargetAccount",
+    "Effect": "Allow",
+    "Principal": {{
+      "AWS": "arn:aws:iam::{TARGET_ACCOUNT_ID}:root"
+    }},
+    "Action": "s3:PutObject",
+    "Resource": "arn:aws:s3:::{bucket_name}/*"
   }}
 ]
 }}"##
     );
 
     run_cmd! {
-          aws s3api put-bucket-policy
+        info "Updating bucket policy for ${bucket_name}";
+        aws s3api put-bucket-policy
             --bucket $bucket_name
-            --policy $new_policy
+            --policy $new_policy;
+        info "Updating bucket policy for ${bucket_name} is done";
     }?;
 
     Ok(())
