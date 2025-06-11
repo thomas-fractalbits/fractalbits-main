@@ -65,6 +65,9 @@ enum Cmd {
 
         #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
         release: bool,
+
+        #[clap(long, action=ArgAction::Set, default_value = "false", num_args = 0..=1)]
+        target_arm: bool,
     },
 
     #[clap(about = "Grant S3 build bucket policy")]
@@ -160,7 +163,8 @@ fn main() -> CmdResult {
         Cmd::Deploy {
             use_s3_backend,
             release,
-        } => cmd_deploy::run_cmd_deploy(use_s3_backend, release)?,
+            target_arm,
+        } => cmd_deploy::run_cmd_deploy(use_s3_backend, release, target_arm)?,
         Cmd::GrantBuildBucket => cmd_deploy::update_builds_bucket_access_policy()?,
     }
     Ok(())
