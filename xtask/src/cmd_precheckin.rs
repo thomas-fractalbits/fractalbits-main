@@ -6,12 +6,8 @@ pub fn run_cmd_precheckin() -> CmdResult {
     crate::cmd_service::start_minio_service()?;
 
     run_cmd! {
-        info "Running cargo unit tests ...";
-        cargo test --lib --workspace --exclude rewrk --exclude rewrk_rpc --exclude xtask;
-    }?;
-
-    run_cmd! {
         info "Building ...";
+        cargo build;
         zig build 2>&1;
         mkdir -p data/local/meta_cache;
     }?;
@@ -75,7 +71,27 @@ pub fn run_cmd_precheckin() -> CmdResult {
         e
     })?;
 
+    run_s3_api_tests()?;
+
     info!("Precheckin is OK");
-    crate::cmd_service::stop_service(ServiceName::Minio)?;
     Ok(())
+}
+
+fn run_s3_api_tests() -> CmdResult {
+    run_cmd! {
+        info "Stopping previous service(s)";
+        ignore cargo xtask service stop;
+
+        info "Removing previous buckets (ddb_local) data";
+        rm -f data/rss/shared-local-instance.db;
+
+        info "Starting services";
+        cargo xtask service start;
+
+        info "Run cargo tests (s3 api tests)";
+        cargo test;
+
+        info "Stopping services";
+        ignore cargo xtask service stop;
+    }
 }
