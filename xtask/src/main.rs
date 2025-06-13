@@ -66,7 +66,7 @@ enum Cmd {
         #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
         release: bool,
 
-        #[clap(long, action=ArgAction::Set, default_value = "false", num_args = 0..=1)]
+        #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
         target_arm: bool,
     },
 
