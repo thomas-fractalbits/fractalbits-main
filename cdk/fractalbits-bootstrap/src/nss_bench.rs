@@ -49,7 +49,7 @@ pub fn bootstrap(bucket_name: &str, volume_id: &str, num_nvme_disks: usize) -> C
 }
 
 fn install_rpms() -> CmdResult {
-    let rpms = ["nvme-cli", "mdadm", "gdb", "perf"];
+    let rpms = ["nvme-cli", "mdadm", "gdb", "lldb", "perf"];
     run_cmd! {
         info "Installing ${rpms:?}";
         yum install -y -q $[rpms] >/dev/null;
