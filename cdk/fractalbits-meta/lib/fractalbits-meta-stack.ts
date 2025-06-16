@@ -33,7 +33,7 @@ export class FractalbitsMetaStack extends cdk.Stack {
 
     // IAM Role for EC2
     const ec2Role = new iam.Role(this, 'InstanceRole', {
-      roleName: 'FractalbitsMetaInstanceRole',
+      roleName: 'FractalbitsInstanceRole',
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
@@ -44,7 +44,7 @@ export class FractalbitsMetaStack extends cdk.Stack {
     // Security Group
     const sg = new ec2.SecurityGroup(this, 'InstanceSG', {
       vpc,
-      securityGroupName: 'FractalbitsMetaInstanceSG',
+      securityGroupName: 'FractalbitsInstanceSG',
       description: 'Allow outbound only for SSM and S3 access',
       allowAllOutbound: true,
     });
