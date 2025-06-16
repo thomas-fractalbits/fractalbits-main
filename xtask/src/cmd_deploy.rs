@@ -16,9 +16,9 @@ pub fn run_cmd_deploy(use_s3_backend: bool, release_mode: bool, target_arm: bool
         "x86_64-unknown-linux-gnu"
     };
     let zig_build_target = if target_arm {
-        "target=aarch64-linux-gnu"
+        ["-Dtarget=aarch64-linux-gnu", "-Dcpu=neoverse_v1"]
     } else {
-        "cpu=cascadelake"
+        ["-Dtarget=x86_64-linux-gnu", "-Dcpu=cascadelake"]
     };
 
     run_cmd! {
@@ -26,7 +26,7 @@ pub fn run_cmd_deploy(use_s3_backend: bool, release_mode: bool, target_arm: bool
         cargo zigbuild --target $rust_build_target $rust_build_opt;
 
         info "Building Zig projects";
-        zig build -Duse_s3_backend=$use_s3_backend -D$zig_build_target $zig_build_opt 2>&1;
+        zig build -Duse_s3_backend=$use_s3_backend $[zig_build_target] $zig_build_opt 2>&1;
     }?;
 
     let prefix = if target_arm { "aarch64" } else { "x86_64" };
