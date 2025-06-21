@@ -30,7 +30,7 @@ pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResu
         "api_server" => format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG}"),
         "nss_server" => {
             requires = "data-ebs.mount data-local.mount";
-            format!("{BIN_PATH}nss_server -c {ETC_PATH}{NSS_SERVER_CONFIG}")
+            format!("{BIN_PATH}nss_server serve -c {ETC_PATH}{NSS_SERVER_CONFIG}")
         }
         "bss_server" => {
             requires = "data-local.mount";

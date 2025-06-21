@@ -97,11 +97,11 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
 
     let pwd = run_fun!(pwd)?;
     if run_cmd!(test -f ./data/ebs/fbs.state).is_err() {
+        create_dirs_for_nss_server()?;
         run_cmd! {
             info "Could not find state log, formatting at first ...";
-            mkdir -p data/local/meta_cache;
             cd data;
-            ${pwd}/zig-out/bin/mkfs;
+            ${pwd}/zig-out/bin/nss_server format;
             ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME;
         }?;
     }
@@ -297,7 +297,7 @@ fn create_systemd_unit_file(service: ServiceName, build_mode: BuildMode) -> CmdR
     let exec_start = match service {
         ServiceName::Bss => format!("{pwd}/zig-out/bin/bss_server"),
         ServiceName::Nss => {
-            format!("{pwd}/zig-out/bin/nss_server -c {pwd}/etc/nss_server_dev_config.toml")
+            format!("{pwd}/zig-out/bin/nss_server serve -c {pwd}/etc/nss_server_dev_config.toml")
         }
         ServiceName::Rss => {
             env_settings = format!(
@@ -358,5 +358,18 @@ fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
         stop_service(service)?;
         cmd_die!("Multiple processes were found: {pids}");
     }
+    Ok(())
+}
+
+pub fn create_dirs_for_nss_server() -> CmdResult {
+    info!("Creating necessary directories for nss_server");
+    run_cmd! {
+        mkdir -p data/ebs;
+        mkdir -p data/local/meta_cache/blobs;
+    }?;
+    for i in 0..256 {
+        run_cmd!(mkdir -p data/local/meta_cache/blobs/dir$i)?;
+    }
+
     Ok(())
 }

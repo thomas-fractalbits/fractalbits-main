@@ -51,7 +51,6 @@ pub fn run_cmd_deploy(use_s3_backend: bool, release_mode: bool, target_arm: bool
     let zig_bins = [
         "bss_server",
         "nss_server",
-        "mkfs",
         "fbs",      // to create test art tree for benchmarking nss_rpc
         "test_art", // to create test.data for benchmarking nss_rpc
         "s3_blob_client",

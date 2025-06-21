@@ -11,7 +11,7 @@ pub fn bootstrap(
 
     install_rpms(&["nvme-cli", "mdadm", "perf", "lldb"])?;
     format_local_nvme_disks(num_nvme_disks)?;
-    download_binaries(&["nss_server", "mkfs", "format-nss"])?;
+    download_binaries(&["nss_server", "format-nss"])?;
     setup_configs(bucket_name, volume_id, "nss_server")?;
 
     // Note for normal deployment, the nss_server service is not started
