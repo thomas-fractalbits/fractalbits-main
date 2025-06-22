@@ -57,6 +57,10 @@ http-range.workspace = true
 aws-sdk-s3.workspace = true
 aws-config.workspace = true
 openssl.workspace = true
+bb8.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+backoff.workspace = true
 
 [dev-dependencies]
 cmd_lib.workspace = true
