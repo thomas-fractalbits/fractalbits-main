@@ -13,6 +13,7 @@ use tokio::{
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
     net::TcpStream,
     sync::{oneshot, RwLock},
+    task::JoinHandle,
 };
 use tokio_stream::StreamExt;
 use tokio_util::codec::FramedRead;
@@ -52,6 +53,8 @@ pub struct RpcClient {
     requests: Arc<RwLock<HashMap<u32, oneshot::Sender<MessageFrame>>>>,
     sender: Sender<Message>,
     next_id: AtomicU32,
+    send_task: JoinHandle<()>,
+    recv_task: JoinHandle<()>,
 }
 
 impl RpcClient {
@@ -61,30 +64,32 @@ impl RpcClient {
 
         // Start message receiver task, for rpc responses
         let requests = Arc::new(RwLock::new(HashMap::new()));
-        {
+        let recv_task = {
             let requests_clone = requests.clone();
             tokio::spawn(async move {
                 if let Err(e) = Self::receive_message_task(receiver, requests_clone).await {
                     tracing::error!("FATAL: receive message task error: {e}");
                 }
-            });
-        }
+            })
+        };
 
         // Start message sender task, to send rpc requests. We are launching a dedicated task here
         // to reduce lock contention on the sender socket itself.
         let (tx, rx) = mpsc::channel(1024 * 1024);
-        {
+        let send_task = {
             tokio::spawn(async move {
                 if let Err(e) = Self::send_message_task(sender, rx).await {
                     tracing::error!("FATAL: receive message task error: {e}");
                 }
-            });
-        }
+            })
+        };
 
         Ok(Self {
             requests,
             sender: tx,
             next_id: AtomicU32::new(1),
+            send_task,
+            recv_task,
         })
     }
 
@@ -147,6 +152,10 @@ impl RpcClient {
     pub fn gen_request_id(&self) -> u32 {
         self.next_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    pub fn tasks_running(&self) -> bool {
+        !self.send_task.is_finished() && !self.recv_task.is_finished()
     }
 }
 

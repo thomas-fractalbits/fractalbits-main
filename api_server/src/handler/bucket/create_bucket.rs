@@ -70,7 +70,7 @@ pub async fn create_bucket_handler(
         }
     }
 
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .create_root_inode(bucket_name.clone())
         .await?;

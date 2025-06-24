@@ -18,7 +18,7 @@ pub async fn delete_object_handler(
     key: String,
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .delete_inode(bucket.root_blob_name.clone(), key.clone())
         .await?;
@@ -58,7 +58,7 @@ pub async fn delete_object_handler(
                 let mpu_prefix = mpu_get_part_prefix(key, 0);
                 let mpus = list_raw_objects(
                     bucket.root_blob_name.clone(),
-                    rpc_client_nss,
+                    &rpc_client_nss,
                     10000,
                     mpu_prefix,
                     "".into(),

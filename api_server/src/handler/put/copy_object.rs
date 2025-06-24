@@ -25,7 +25,6 @@ use axum::{
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, table::Versioned};
-use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::ArcRpcClientRss;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
@@ -203,13 +202,12 @@ pub async fn copy_object_handler(
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let header_opts = HeaderOpts::from_headers(request.headers())?;
-    let rpc_client_nss = app.get_rpc_client_nss();
     let blob_client = app.get_blob_client();
     let rpc_client_rss = app.get_rpc_client_rss();
     let (source_obj, body) = get_copy_source_object(
+        app.clone(),
         api_key,
         &header_opts.x_amz_copy_source,
-        rpc_client_nss,
         blob_client.clone(),
         rpc_client_rss,
     )
@@ -232,9 +230,9 @@ pub async fn copy_object_handler(
 }
 
 async fn get_copy_source_object(
+    app: Arc<AppState>,
     api_key: Versioned<ApiKey>,
     copy_source: &str,
-    rpc_client_nss: &RpcClientNss,
     blob_client: Arc<BlobClient>,
     rpc_client_rss: ArcRpcClientRss,
 ) -> Result<(ObjectLayout, Body), S3Error> {
@@ -248,8 +246,9 @@ async fn get_copy_source_object(
     }
 
     let source_bucket = bucket::resolve_bucket(source_bucket_name, rpc_client_rss).await?;
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let source_obj = get_raw_object(
-        rpc_client_nss,
+        &rpc_client_nss,
         source_bucket.root_blob_name.clone(),
         source_key.clone(),
     )
@@ -259,7 +258,7 @@ async fn get_copy_source_object(
         &source_obj,
         source_key,
         None,
-        rpc_client_nss,
+        &rpc_client_nss,
         blob_client,
     )
     .await?;

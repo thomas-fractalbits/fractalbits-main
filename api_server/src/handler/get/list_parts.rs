@@ -97,8 +97,9 @@ pub async fn list_parts_handler(
 ) -> Result<Response, S3Error> {
     let Query(query_opts): Query<QueryOpts> = request.into_parts().0.extract().await?;
     let max_parts = query_opts.max_parts.unwrap_or(1000);
-    let rpc_client_nss = app.get_rpc_client_nss();
-    let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let object =
+        get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != query_opts.upload_id {
         return Err(S3Error::NoSuchUpload);
     }
@@ -107,7 +108,7 @@ pub async fn list_parts_handler(
     }
 
     let (parts, next_part_number_marker) =
-        fetch_mpu_parts(bucket, key.clone(), &query_opts, max_parts, rpc_client_nss).await?;
+        fetch_mpu_parts(bucket, key.clone(), &query_opts, max_parts, &rpc_client_nss).await?;
 
     let resp = ListPartsResult {
         bucket: bucket.bucket_name.to_string(),

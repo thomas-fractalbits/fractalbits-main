@@ -29,7 +29,7 @@ pub async fn delete_bucket_handler(
         api_key.data.key_id.clone()
     };
 
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .delete_root_inode(bucket.root_blob_name.clone())
         .await?;

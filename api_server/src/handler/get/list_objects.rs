@@ -138,10 +138,10 @@ pub async fn list_objects_handler(
         None => "".into(),
     };
 
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let (objs, common_prefixes, next_continuation_token) = list_objects(
         bucket,
-        rpc_client_nss,
+        &rpc_client_nss,
         max_keys,
         prefix.clone(),
         delimiter.clone(),

@@ -103,7 +103,7 @@ pub async fn put_object_handler(
         }),
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new())?;
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .put_inode(
             bucket.root_blob_name.clone(),

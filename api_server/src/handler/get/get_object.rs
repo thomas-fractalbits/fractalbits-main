@@ -94,8 +94,9 @@ pub async fn get_object_handler(
     let mut parts = request.into_parts().0;
     let Query(query_opts): Query<QueryOpts> = parts.extract().await?;
     let header_opts = HeaderOpts::from_headers(&parts.headers)?;
-    let rpc_client_nss = app.get_rpc_client_nss();
-    let object = get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let object =
+        get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     let total_size = object.size()?;
     let range = parse_range_header(header_opts.range, total_size)?;
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
@@ -107,7 +108,7 @@ pub async fn get_object_handler(
                 &object,
                 key,
                 query_opts.part_number,
-                rpc_client_nss,
+                &rpc_client_nss,
                 blob_client,
             )
             .await?;
@@ -124,9 +125,15 @@ pub async fn get_object_handler(
         }
 
         (None, Some(range)) => {
-            let body =
-                get_object_range_content(bucket, &object, key, &range, rpc_client_nss, blob_client)
-                    .await?;
+            let body = get_object_range_content(
+                bucket,
+                &object,
+                key,
+                &range,
+                &rpc_client_nss,
+                blob_client,
+            )
+            .await?;
 
             let mut resp = Response::new(body);
             resp.headers_mut().insert(

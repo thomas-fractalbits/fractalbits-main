@@ -228,9 +228,9 @@ pub async fn complete_multipart_upload_handler(
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let rpc_client_nss = app.get_rpc_client_nss();
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let mut object =
-        get_raw_object(rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+        get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchVersion);
     }
@@ -242,7 +242,7 @@ pub async fn complete_multipart_upload_handler(
     let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
     let mpu_objs = list_raw_objects(
         bucket.root_blob_name.clone(),
-        rpc_client_nss,
+        &rpc_client_nss,
         max_parts,
         mpu_prefix.clone(),
         "".into(),

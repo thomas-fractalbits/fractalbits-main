@@ -7,19 +7,21 @@ use aws_sdk_s3::{
     Client as S3Client, Config as S3Config,
 };
 use axum::extract::FromRef;
+use bb8::{Pool, PooledConnection};
 use bytes::Bytes;
 use config::{ArcConfig, S3CacheConfig};
 use futures::stream::{self, StreamExt};
 use object_layout::ObjectLayout;
 use rand::Rng;
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};
-use rpc_client_nss::RpcClientNss;
+use rpc_client_nss::RpcConnManagerNss;
 use rpc_client_rss::{ArcRpcClientRss, RpcClientRss};
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::{
     net::TcpStream,
     sync::mpsc::{self, Receiver, Sender},
 };
+use tracing::info;
 use uuid::Uuid;
 
 pub type BlobId = uuid::Uuid;
@@ -27,7 +29,7 @@ pub type BlobId = uuid::Uuid;
 pub struct AppState {
     pub config: ArcConfig,
 
-    pub rpc_clients_nss: Vec<RpcClientNss>,
+    pub rpc_clients_nss: Pool<RpcConnManagerNss>,
 
     pub blob_clients: Vec<Arc<BlobClient>>,
     pub blob_deletion: Sender<(BlobId, usize)>,
@@ -42,29 +44,12 @@ impl FromRef<Arc<AppState>> for ArcConfig {
 }
 
 impl AppState {
-    const MAX_NSS_CONNECTION: usize = 8;
+    const NSS_CONNECTION_POOL_SIZE: u32 = 16;
     const MAX_BLOB_IO_CONNECTION: usize = 8;
     const RPC_CLIENT_MAX_WAIT: usize = 300;
 
     pub async fn new(config: ArcConfig) -> Self {
-        let mut rpc_clients_nss = Vec::with_capacity(Self::MAX_NSS_CONNECTION);
-        for _i in 0..AppState::MAX_NSS_CONNECTION {
-            let mut wait_secs = 0;
-            let rpc_client_nss = loop {
-                if let Ok(stream) = TcpStream::connect(&config.nss_addr).await {
-                    if let Ok(client) = RpcClientNss::new(stream).await {
-                        break client;
-                    }
-                }
-                wait_secs += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                if wait_secs >= Self::RPC_CLIENT_MAX_WAIT {
-                    tracing::error!("Could not create NSS RPC client");
-                    std::process::exit(1);
-                }
-            };
-            rpc_clients_nss.push(rpc_client_nss);
-        }
+        let rpc_clients_nss = Self::new_rpc_clients_pool_nss(&config.nss_addr).await;
 
         let mut blob_clients = Vec::with_capacity(Self::MAX_BLOB_IO_CONNECTION);
         for _i in 0..AppState::MAX_BLOB_IO_CONNECTION {
@@ -103,9 +88,30 @@ impl AppState {
         }
     }
 
-    pub fn get_rpc_client_nss(&self) -> &RpcClientNss {
-        let hash = rand::thread_rng().gen_range(0..Self::MAX_NSS_CONNECTION);
-        &self.rpc_clients_nss[hash]
+    async fn new_rpc_clients_pool_nss(nss_addr: &str) -> Pool<RpcConnManagerNss> {
+        let resolved_addrs: Vec<SocketAddr> = tokio::net::lookup_host(nss_addr)
+            .await
+            .expect("Failed to resolve RPC server address")
+            .collect();
+
+        assert!(!resolved_addrs.is_empty());
+        let manager = RpcConnManagerNss::new(resolved_addrs);
+        let rpc_clients_nss = Pool::builder()
+            .max_size(Self::NSS_CONNECTION_POOL_SIZE)
+            .min_idle(Some(2))
+            .build(manager)
+            .await
+            .expect("Failed to build nss rpc clients pool");
+
+        info!(
+            "NSS RPC client pool initialized with {} connections.",
+            Self::NSS_CONNECTION_POOL_SIZE
+        );
+        rpc_clients_nss
+    }
+
+    pub async fn get_rpc_client_nss(&self) -> PooledConnection<RpcConnManagerNss> {
+        self.rpc_clients_nss.get().await.unwrap()
     }
 
     pub fn get_blob_client(&self) -> Arc<BlobClient> {
