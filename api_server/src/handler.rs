@@ -180,7 +180,6 @@ async fn get_handler(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn put_handler(
     app: Arc<AppState>,
     request: Request,

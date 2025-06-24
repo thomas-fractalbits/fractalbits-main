@@ -30,7 +30,6 @@ struct ResponseHeaders {
     x_amz_request_charged: String,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub async fn upload_part_handler(
     app: Arc<AppState>,
     request: Request,
