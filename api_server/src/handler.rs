@@ -48,14 +48,14 @@ pub async fn any_handler(
     api_sig: ApiSignature,
     request: http::Request<Body>,
 ) -> Response {
-    tracing::debug!(%bucket_name, %key);
+    tracing::debug!(%bucket_name, %key, %addr);
 
     let resource = format!("/{bucket_name}{key}");
     let endpoint = match Endpoint::from_extractors(&request, &bucket_name, &key, api_cmd, api_sig) {
         Err(e) => return e.into_response_with_resource(&resource),
         Ok(endpoint) => endpoint,
     };
-    match any_handler_inner(app, addr, bucket_name, key, auth, request, endpoint).await {
+    match any_handler_inner(app, bucket_name, key, auth, request, endpoint).await {
         Err(e) => e.into_response_with_resource(&resource),
         Ok(response) => response,
     }
@@ -63,7 +63,6 @@ pub async fn any_handler(
 
 async fn any_handler_inner(
     app: Arc<AppState>,
-    addr: SocketAddr,
     bucket_name: String,
     key: String,
     auth: Authentication,
@@ -91,8 +90,8 @@ async fn any_handler_inner(
         return Err(S3Error::AccessDenied);
     }
 
-    let rpc_client_nss = app.get_rpc_client_nss(addr);
-    let blob_client = app.get_blob_client(addr);
+    let rpc_client_nss = app.get_rpc_client_nss();
+    let blob_client = app.get_blob_client();
     let blob_deletion = app.blob_deletion.clone();
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {

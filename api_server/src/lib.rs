@@ -11,11 +11,10 @@ use bytes::Bytes;
 use config::{ArcConfig, S3CacheConfig};
 use futures::stream::{self, StreamExt};
 use object_layout::ObjectLayout;
+use rand::Rng;
 use rpc_client_bss::{RpcClientBss, RpcErrorBss};
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::{ArcRpcClientRss, RpcClientRss};
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::{
     net::TcpStream,
@@ -104,25 +103,18 @@ impl AppState {
         }
     }
 
-    pub fn get_rpc_client_nss(&self, addr: SocketAddr) -> &RpcClientNss {
-        let hash = Self::calculate_hash(&addr) % Self::MAX_NSS_CONNECTION;
+    pub fn get_rpc_client_nss(&self) -> &RpcClientNss {
+        let hash = rand::thread_rng().gen_range(0..Self::MAX_NSS_CONNECTION);
         &self.rpc_clients_nss[hash]
     }
 
-    pub fn get_blob_client(&self, addr: SocketAddr) -> Arc<BlobClient> {
-        let hash = Self::calculate_hash(&addr) % Self::MAX_BLOB_IO_CONNECTION;
+    pub fn get_blob_client(&self) -> Arc<BlobClient> {
+        let hash = rand::thread_rng().gen_range(0..Self::MAX_BLOB_IO_CONNECTION);
         self.blob_clients[hash].clone()
     }
 
     pub fn get_rpc_client_rss(&self) -> ArcRpcClientRss {
         ArcRpcClientRss(Arc::clone(&self.rpc_client_rss.0))
-    }
-
-    #[inline]
-    fn calculate_hash<T: Hash>(t: &T) -> usize {
-        let mut s = DefaultHasher::new();
-        t.hash(&mut s);
-        s.finish() as usize
     }
 
     async fn blob_deletion_task(
