@@ -57,8 +57,8 @@ pub async fn delete_object_handler(
             MpuState::Completed { .. } => {
                 let mpu_prefix = mpu_get_part_prefix(key, 0);
                 let mpus = list_raw_objects(
+                    &app,
                     bucket.root_blob_name.clone(),
-                    &rpc_client_nss,
                     10000,
                     mpu_prefix,
                     "".into(),

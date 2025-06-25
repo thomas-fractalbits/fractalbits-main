@@ -28,10 +28,9 @@ pub struct CheckedSignature {
 }
 
 pub async fn check_payload_signature(
+    app: &AppState,
     auth: &Authentication,
     request: &mut Request<Body>,
-    rpc_client_rss: &RpcClientRss,
-    region: &str,
 ) -> Result<CheckedSignature, Error> {
     let Query(mut query): Query<BTreeMap<String, String>> = request.extract_parts().await?;
 
@@ -39,9 +38,9 @@ pub async fn check_payload_signature(
         // We check for presigned-URL-style authentication first, because
         // the browser or something else could inject an Authorization header
         // that is totally unrelated to AWS signatures.
-        check_presigned_signature(auth, request, &mut query, rpc_client_rss, region).await
+        check_presigned_signature(app, auth, request, &mut query).await
     } else if request.headers().contains_key(AUTHORIZATION) {
-        check_standard_signature(auth, request, rpc_client_rss, region).await
+        check_standard_signature(app, auth, request).await
     } else {
         // Unsigned (anonymous) request
         let content_sha256 = request
@@ -90,10 +89,9 @@ fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Heade
 }
 
 pub async fn check_standard_signature(
+    app: &AppState,
     authentication: &Authentication,
     request: &mut Request<Body>,
-    rpc_client_rss: &RpcClientRss,
-    region: &str,
 ) -> Result<CheckedSignature, Error> {
     let query_params: Query<BTreeMap<String, String>> = request.extract_parts().await?;
     let canonical_request = canonical_request(
@@ -113,13 +111,7 @@ pub async fn check_standard_signature(
     tracing::trace!("canonical request:\n{}", canonical_request);
     tracing::trace!("string to sign:\n{}", string_to_sign);
 
-    let key = verify_v4(
-        authentication,
-        string_to_sign.as_bytes(),
-        rpc_client_rss,
-        region,
-    )
-    .await?;
+    let key = verify_v4(app, authentication, string_to_sign.as_bytes()).await?;
 
     let content_sha256_header = parse_x_amz_content_sha256(Some(&authentication.content_sha256))?;
 
@@ -131,11 +123,10 @@ pub async fn check_standard_signature(
 }
 
 async fn check_presigned_signature(
+    app: &AppState,
     authentication: &Authentication,
     request: &mut Request<Body>,
     query: &mut BTreeMap<String, String>,
-    rpc_client_rss: &RpcClientRss,
-    region: &str,
 ) -> Result<CheckedSignature, Error> {
     let signed_headers = &authentication.signed_headers;
     // Verify that all necessary request headers are included in signed_headers
@@ -166,13 +157,7 @@ async fn check_presigned_signature(
     tracing::trace!("canonical request (presigned url):\n{}", canonical_request);
     tracing::trace!("string to sign (presigned url):\n{}", string_to_sign);
 
-    let key = verify_v4(
-        authentication,
-        string_to_sign.as_bytes(),
-        rpc_client_rss,
-        region,
-    )
-    .await?;
+    let key = verify_v4(app, authentication, string_to_sign.as_bytes()).await?;
 
     // In the page on presigned URLs, AWS specifies that if a signed query
     // parameter and a signed header of the same name have different values,
@@ -283,15 +268,16 @@ pub fn canonical_request(
 }
 
 pub async fn verify_v4(
+    app: &AppState,
     auth: &Authentication,
     payload: &[u8],
-    rpc_client_rss: &RpcClientRss,
-    region: &str,
 ) -> Result<Option<Versioned<ApiKey>>, Error> {
-    let api_key_table: Table<RpcClientRss, ApiKeyTable> = Table::new(rpc_client_rss);
+    let rpc_client_rss = app.get_rpc_client_rss().await;
+    let api_key_table: Table<RpcClientRss, ApiKeyTable> = Table::new(&rpc_client_rss);
     let key = api_key_table.get(auth.key_id.clone()).await?;
+    drop(rpc_client_rss);
 
-    let mut hmac = signing_hmac(&auth.date, &key.data.secret_key, region)
+    let mut hmac = signing_hmac(&auth.date, &key.data.secret_key, &app.config.region)
         .map_err(|_| Error::Other("Unable to build signing HMAC".into()))?;
     hmac.update(payload);
     let signature = hex::decode(&auth.signature)?;

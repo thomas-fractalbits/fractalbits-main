@@ -228,9 +228,7 @@ pub async fn complete_multipart_upload_handler(
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let rpc_client_nss = app.get_rpc_client_nss().await;
-    let mut object =
-        get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let mut object = get_raw_object(&app, bucket.root_blob_name.clone(), key.clone()).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchVersion);
     }
@@ -241,8 +239,8 @@ pub async fn complete_multipart_upload_handler(
     let max_parts = 10000;
     let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
     let mpu_objs = list_raw_objects(
+        &app,
         bucket.root_blob_name.clone(),
-        &rpc_client_nss,
         max_parts,
         mpu_prefix.clone(),
         "".into(),
@@ -285,6 +283,7 @@ pub async fn complete_multipart_upload_handler(
         checksum: expected_checksum,
     }));
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new())?;
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .put_inode(
             bucket.root_blob_name.clone(),
@@ -292,6 +291,7 @@ pub async fn complete_multipart_upload_handler(
             new_object_bytes.into(),
         )
         .await?;
+    drop(rpc_client_nss);
     match resp.result.unwrap() {
         put_inode_response::Result::Ok(_) => {}
         put_inode_response::Result::Err(e) => {

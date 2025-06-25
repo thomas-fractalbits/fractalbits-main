@@ -61,10 +61,7 @@ pub async fn verify_request(
     mut req: Request<Body>,
     auth: &Authentication,
 ) -> Result<VerifiedRequest, Error> {
-    let rpc_client_rss = app.get_rpc_client_rss().await;
-    let checked_signature =
-        payload::check_payload_signature(auth, &mut req, &rpc_client_rss, &app.config.region)
-            .await?;
+    let checked_signature = payload::check_payload_signature(app, auth, &mut req).await?;
 
     let request =
         streaming::parse_streaming_body(req, &checked_signature, &app.config.region, "s3")?;

@@ -49,7 +49,6 @@ pub async fn delete_bucket_handler(
         let rpc_client_rss = app.get_rpc_client_rss().await;
         let bucket_table: Table<RpcClientRss, BucketTable> = Table::new(&rpc_client_rss);
 
-        let rpc_client_rss = app.get_rpc_client_rss().await;
         let api_key_table: Table<RpcClientRss, ApiKeyTable> = Table::new(&rpc_client_rss);
         let mut api_key = api_key_table.get(api_key_id.clone()).await?;
         api_key.data.authorized_buckets.remove(&bucket.bucket_name);

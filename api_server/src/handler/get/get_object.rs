@@ -9,7 +9,6 @@ use axum::{
 };
 use bytes::Bytes;
 use futures::{StreamExt, TryStreamExt};
-use rpc_client_nss::RpcClientNss;
 use serde::Deserialize;
 
 use crate::{
@@ -94,24 +93,14 @@ pub async fn get_object_handler(
     let mut parts = request.into_parts().0;
     let Query(query_opts): Query<QueryOpts> = parts.extract().await?;
     let header_opts = HeaderOpts::from_headers(&parts.headers)?;
-    let rpc_client_nss = app.get_rpc_client_nss().await;
-    let object =
-        get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key.clone()).await?;
+    let object = get_raw_object(&app, bucket.root_blob_name.clone(), key.clone()).await?;
     let total_size = object.size()?;
     let range = parse_range_header(header_opts.range, total_size)?;
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
-    let blob_client = app.get_blob_client();
     match (query_opts.part_number, range) {
         (_, None) => {
-            let (body, body_size) = get_object_content(
-                bucket,
-                &object,
-                key,
-                query_opts.part_number,
-                &rpc_client_nss,
-                blob_client,
-            )
-            .await?;
+            let (body, body_size) =
+                get_object_content(app, bucket, &object, key, query_opts.part_number).await?;
 
             let mut resp = Response::new(body);
             object_headers(&mut resp, &object, checksum_mode_enabled)?;
@@ -125,15 +114,7 @@ pub async fn get_object_handler(
         }
 
         (None, Some(range)) => {
-            let body = get_object_range_content(
-                bucket,
-                &object,
-                key,
-                &range,
-                &rpc_client_nss,
-                blob_client,
-            )
-            .await?;
+            let body = get_object_range_content(app, bucket, &object, key, &range).await?;
 
             let mut resp = Response::new(body);
             resp.headers_mut().insert(
@@ -188,13 +169,13 @@ pub fn override_headers(resp: &mut Response, query_opts: &QueryOpts) -> Result<(
 }
 
 pub async fn get_object_content(
+    app: Arc<AppState>,
     bucket: &Bucket,
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
-    rpc_client_nss: &RpcClientNss,
-    blob_client: Arc<BlobClient>,
 ) -> Result<(Body, u64), S3Error> {
+    let blob_client = app.get_blob_client();
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
             let blob_id = object.blob_id()?;
@@ -215,8 +196,8 @@ pub async fn get_object_content(
             MpuState::Completed(core_meta_data) => {
                 let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
                 let mut mpus = list_raw_objects(
+                    &app,
                     bucket.root_blob_name.clone(),
-                    rpc_client_nss,
                     10000,
                     mpu_prefix,
                     "".into(),
@@ -256,13 +237,13 @@ pub async fn get_object_content(
 }
 
 async fn get_object_range_content(
+    app: Arc<AppState>,
     bucket: &Bucket,
     object: &ObjectLayout,
     key: String,
     range: &std::ops::Range<usize>,
-    rpc_client_nss: &RpcClientNss,
-    blob_client: Arc<BlobClient>,
 ) -> Result<Body, S3Error> {
+    let blob_client = app.get_blob_client();
     let block_size = object.block_size as usize;
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
@@ -284,8 +265,8 @@ async fn get_object_range_content(
             MpuState::Completed { .. } => {
                 let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
                 let mpus = list_raw_objects(
+                    &app,
                     bucket.root_blob_name.clone(),
-                    rpc_client_nss,
                     10000,
                     mpu_prefix,
                     "".into(),

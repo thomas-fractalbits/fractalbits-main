@@ -16,7 +16,7 @@ use crate::{
         Request,
     },
     object_layout::*,
-    AppState, BlobClient, BlobId,
+    AppState, BlobId,
 };
 use axum::{
     body::Body,
@@ -25,7 +25,6 @@ use axum::{
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, table::Versioned};
-use rpc_client_rss::RpcClientRss;
 use serde::Serialize;
 use tokio::sync::mpsc::Sender;
 
@@ -202,17 +201,8 @@ pub async fn copy_object_handler(
     blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let header_opts = HeaderOpts::from_headers(request.headers())?;
-    let blob_client = app.get_blob_client();
-    let app_clone = app.clone();
-    let rpc_client_rss = app_clone.get_rpc_client_rss().await;
-    let (source_obj, body) = get_copy_source_object(
-        app.clone(),
-        api_key,
-        &header_opts.x_amz_copy_source,
-        blob_client.clone(),
-        &rpc_client_rss,
-    )
-    .await?;
+    let (source_obj, body) =
+        get_copy_source_object(app.clone(), api_key, &header_opts.x_amz_copy_source).await?;
 
     put_object_handler(
         app,
@@ -234,8 +224,6 @@ async fn get_copy_source_object(
     app: Arc<AppState>,
     api_key: Versioned<ApiKey>,
     copy_source: &str,
-    blob_client: Arc<BlobClient>,
-    rpc_client_rss: &RpcClientRss,
 ) -> Result<(ObjectLayout, Body), S3Error> {
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;
 
@@ -246,22 +234,14 @@ async fn get_copy_source_object(
         return Err(S3Error::AccessDenied);
     }
 
-    let source_bucket = bucket::resolve_bucket(source_bucket_name, rpc_client_rss).await?;
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let source_bucket = bucket::resolve_bucket(&app, source_bucket_name).await?;
     let source_obj = get_raw_object(
-        &rpc_client_nss,
+        &app,
         source_bucket.root_blob_name.clone(),
         source_key.clone(),
     )
     .await?;
-    let (source_obj_content, _) = get_object_content(
-        &source_bucket,
-        &source_obj,
-        source_key,
-        None,
-        &rpc_client_nss,
-        blob_client,
-    )
-    .await?;
+    let (source_obj_content, _) =
+        get_object_content(app, &source_bucket, &source_obj, source_key, None).await?;
     Ok((source_obj, source_obj_content))
 }

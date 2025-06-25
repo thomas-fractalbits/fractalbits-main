@@ -89,22 +89,20 @@ async fn any_handler_inner(
     }
 
     let blob_deletion = app.blob_deletion.clone();
-    let app_clone = app.clone();
-    let rpc_client_rss = app_clone.get_rpc_client_rss().await;
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
             bucket_handler(app, request, api_key, bucket_name, bucket_endpoint).await
         }
         Endpoint::Head(head_endpoint) => {
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             head_handler(app, request, &bucket, key, head_endpoint).await
         }
         Endpoint::Get(get_endpoint) => {
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             get_handler(app, request, &bucket, key, get_endpoint).await
         }
         Endpoint::Put(put_endpoint) => {
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             put_handler(
                 app,
                 request,
@@ -117,11 +115,11 @@ async fn any_handler_inner(
             .await
         }
         Endpoint::Post(post_endpoint) => {
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             post_handler(app, request, &bucket, key, blob_deletion, post_endpoint).await
         }
         Endpoint::Delete(delete_endpoint) => {
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             delete_handler(app, request, &bucket, key, blob_deletion, delete_endpoint).await
         }
     }
@@ -139,9 +137,7 @@ async fn bucket_handler(
             bucket::create_bucket_handler(app, api_key, bucket_name, request).await
         }
         BucketEndpoint::DeleteBucket => {
-            let app_clone = app.clone();
-            let rpc_client_rss = app_clone.get_rpc_client_rss().await;
-            let bucket = bucket::resolve_bucket(bucket_name, &rpc_client_rss).await?;
+            let bucket = bucket::resolve_bucket(&app, bucket_name).await?;
             bucket::delete_bucket_handler(app, api_key, &bucket, request).await
         }
         BucketEndpoint::HeadBucket => bucket::head_bucket_handler(app, api_key, bucket_name).await,

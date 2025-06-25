@@ -10,23 +10,28 @@ pub mod xheader;
 
 use std::collections::BTreeMap;
 
-use crate::object_layout::{HeaderList, ObjectLayout};
+use crate::{
+    object_layout::{HeaderList, ObjectLayout},
+    AppState,
+};
 use axum::{
     http::{header, HeaderMap, HeaderName, HeaderValue},
     response::Response,
 };
 use rand::{rngs::OsRng, RngCore};
 use rkyv::{self, rancor::Error};
-use rpc_client_nss::{rpc::get_inode_response, rpc::list_inodes_response, RpcClientNss};
+use rpc_client_nss::{rpc::get_inode_response, rpc::list_inodes_response};
 use s3_error::S3Error;
 use signature::checksum::add_checksum_response_headers;
 
 pub async fn get_raw_object(
-    rpc_client_nss: &RpcClientNss,
+    app: &AppState,
     root_blob_name: String,
     key: String,
 ) -> Result<ObjectLayout, S3Error> {
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss.get_inode(root_blob_name, key).await?;
+    drop(rpc_client_nss);
 
     let object_bytes = match resp.result.unwrap() {
         get_inode_response::Result::Ok(res) => res,
@@ -44,14 +49,15 @@ pub async fn get_raw_object(
 }
 
 pub async fn list_raw_objects(
+    app: &AppState,
     root_blob_name: String,
-    rpc_client_nss: &RpcClientNss,
     max_parts: u32,
     prefix: String,
     delimiter: String,
     start_after: String,
     skip_mpu_parts: bool,
 ) -> Result<Vec<(String, ObjectLayout)>, S3Error> {
+    let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss
         .list_inodes(
             root_blob_name,
@@ -62,6 +68,7 @@ pub async fn list_raw_objects(
             skip_mpu_parts,
         )
         .await?;
+    drop(rpc_client_nss);
 
     // Process results
     let inodes = match resp.result.unwrap() {

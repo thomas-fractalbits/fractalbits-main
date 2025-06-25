@@ -28,8 +28,7 @@ pub async fn head_object_handler(
     let Query(query_opts): Query<GetObjectQueryOpts> = parts.extract().await?;
     let header_opts = GetObjectHeaderOpts::from_headers(&parts.headers)?;
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
-    let rpc_client_nss = app.get_rpc_client_nss().await;
-    let obj = get_raw_object(&rpc_client_nss, bucket.root_blob_name.clone(), key).await?;
+    let obj = get_raw_object(&app, bucket.root_blob_name.clone(), key).await?;
 
     let mut resp = Response::new(Body::empty());
     resp.headers_mut().insert(

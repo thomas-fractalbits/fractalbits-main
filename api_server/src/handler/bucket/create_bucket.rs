@@ -98,7 +98,6 @@ pub async fn create_bucket_handler(
             .authorized_keys
             .insert(api_key_id.clone(), bucket_key_perm);
 
-        let rpc_client_rss = app.get_rpc_client_rss().await;
         let api_key_table: Table<RpcClientRss, ApiKeyTable> = Table::new(&rpc_client_rss);
         let mut api_key = api_key_table.get(api_key_id.clone()).await?;
         api_key
