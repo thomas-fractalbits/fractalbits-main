@@ -75,7 +75,7 @@ WantedBy=multi-user.target
     Ok(())
 }
 
-// TODO: use imds sdk
+// Note using imds sdk would need to use async apis, we'd rather keep it simple as it is for now
 pub fn get_current_aws_region() -> FunResult {
     const HDR_TOKEN_TTL: &str = "X-aws-ec2-metadata-token-ttl-seconds";
     const HDR_TOKEN: &str = "X-aws-ec2-metadata-token";
@@ -89,8 +89,7 @@ pub fn get_current_aws_region() -> FunResult {
 
 pub fn format_local_nvme_disks(num_nvme_disks: usize) -> CmdResult {
     let nvme_disks = run_fun! {
-        nvme list
-            | grep -v "Amazon Elastic Block Store"
+        nvme list | grep -v "Amazon Elastic Block Store"
             | awk r##"/nvme[0-9]n[0-9]/ {print $1}"##
     }?;
     let nvme_disks: &Vec<&str> = &nvme_disks.split("\n").collect();

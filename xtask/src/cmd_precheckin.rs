@@ -24,8 +24,8 @@ pub fn run_cmd_precheckin() -> CmdResult {
     run_art_tests()?;
 
     if let Ok(core_file) = run_fun!(ls data | grep ^core) {
-        let core_file = core_file.replace('\n', " ");
-        cmd_die!("Found core file(s) in data/: $core_file");
+        let core_files: Vec<&str> = core_file.split("\n").collect();
+        cmd_die!("Found core file(s) in directory ./data: ${core_files:?}");
     }
 
     info!("Precheckin is OK");
