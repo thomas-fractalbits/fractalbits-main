@@ -32,7 +32,7 @@ impl Default for S3CacheConfig {
     fn default() -> Self {
         Self {
             s3_host: "http://127.0.0.1".into(),
-            s3_port: 9000,
+            s3_port: 9000, // local minio port
             s3_region: "us-east-1".into(),
             s3_bucket: "fractalbits-bucket".into(),
         }
@@ -42,11 +42,11 @@ impl Default for S3CacheConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            bss_addr: "127.0.0.1:9225".into(),
-            nss_addr: "127.0.0.1:9224".into(),
-            rss_addr: "127.0.0.1:8888".into(),
-            port: 3000,
-            region: "us-east-1".into(),
+            bss_addr: "127.0.0.1:8088".into(),
+            nss_addr: "127.0.0.1:8087".into(),
+            rss_addr: "127.0.0.1:8086".into(),
+            port: 8080,
+            region: "us-west-1".into(),
             root_domain: ".localhost".into(),
             s3_cache: S3CacheConfig::default(),
         }

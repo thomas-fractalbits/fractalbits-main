@@ -13,6 +13,7 @@ pub fn bootstrap(
     download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
     run_cmd!($BIN_PATH/rss_admin api-key init-test)?;
 
+    create_rss_config()?;
     create_systemd_unit_file("root_server", true)?;
 
     // Format EBS with SSM
@@ -37,6 +38,7 @@ fn wait_for_ssm_ready(instance_id: &str) {
         let result = run_fun! {
             aws ssm describe-instance-information
                 --filters "Key=InstanceIds,Values=$instance_id"
+
                 --output json | jq -r ".InstanceInformationList[0].PingStatus"
         };
         info!("Ping {instance_id} status: {result:?}");
@@ -144,5 +146,14 @@ fencing_timeout_seconds = 300                  # Max time to wait for instance t
     }?;
 
     create_systemd_unit_file(service_name, true)?;
+    Ok(())
+}
+
+fn create_rss_config() -> CmdResult {
+    let config_content = r##"server_port = 8088"##.to_string();
+    run_cmd! {
+        mkdir -p $ETC_PATH;
+        echo $config_content > $ETC_PATH/$ROOT_SERVER_CONFIG;
+    }?;
     Ok(())
 }

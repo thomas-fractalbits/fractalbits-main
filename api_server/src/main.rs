@@ -64,7 +64,7 @@ async fn main() {
             }
         });
 
-    tracing::info!("Server started");
+    tracing::info!("Server started at port {port}");
     if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("Server stopped: {e}");
     }

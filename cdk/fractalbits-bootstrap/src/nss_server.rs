@@ -44,7 +44,8 @@ fn create_nss_config(bucket_name: &str) -> CmdResult {
     let blob_dram_kilo_bytes = 256 * 1024 * 1024;
     let art_journal_segment_size: usize = 16 * 1024 * 1024 * 1024;
     let config_content = format!(
-        r##"blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
+        r##"server_port = 8088
+blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 
 [s3_cache]

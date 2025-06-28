@@ -4,6 +4,7 @@ pub const BIN_PATH: &str = "/opt/fractalbits/bin/";
 pub const ETC_PATH: &str = "/opt/fractalbits/etc/";
 pub const NSS_SERVER_CONFIG: &str = "nss_server_cloud_config.toml";
 pub const API_SERVER_CONFIG: &str = "api_server_cloud_config.toml";
+pub const ROOT_SERVER_CONFIG: &str = "root_server_cloud_config.toml";
 pub const CLOUD_INIT_DONE_FILE: &str = "/opt/fractalbits/.cloud_init_done";
 
 pub fn download_binaries(file_list: &[&str]) -> CmdResult {
@@ -39,12 +40,18 @@ Environment="RUST_LOG=info""##
             requires = "data-ebs.mount data-local.mount";
             format!("{BIN_PATH}nss_server serve -c {ETC_PATH}{NSS_SERVER_CONFIG}")
         }
+        "root_server" => {
+            env_settings = r##"
+Environment="RUST_LOG=info""##
+                .to_string();
+            format!("{BIN_PATH}{service_name} -c {ETC_PATH}{ROOT_SERVER_CONFIG}")
+        }
         "bss_server" => {
             requires = "data-local.mount";
             working_dir = "/data/local";
             format!("{BIN_PATH}{service_name}")
         }
-        "root_server" | "ebs-failover" => {
+        "ebs-failover" => {
             env_settings = r##"
 Environment="RUST_LOG=info""##
                 .to_string();

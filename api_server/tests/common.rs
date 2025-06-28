@@ -3,7 +3,7 @@ use aws_sdk_s3::operation::list_buckets::ListBucketsOutput;
 use aws_sdk_s3::{Client, Config};
 use cmd_lib::*;
 
-const DEFAULT_PORT: u16 = 3000;
+const DEFAULT_PORT: u16 = 8080;
 const TEST_KEY: &'static str = "test_api_key";
 const TEST_SECRET: &'static str = "test_api_secret";
 
@@ -67,7 +67,7 @@ pub fn build_client() -> Client {
     #[allow(deprecated)]
     let config = Config::builder()
         .endpoint_url(format!("http://127.0.0.1:{}", DEFAULT_PORT))
-        .region(Region::from_static("us-east-1"))
+        .region(Region::from_static("us-west-1"))
         .credentials_provider(credentials)
         .behavior_version(BehaviorVersion::v2024_03_28())
         .build();

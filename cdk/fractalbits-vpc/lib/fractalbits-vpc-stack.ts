@@ -50,17 +50,21 @@ export class FractalbitsVpcStack extends cdk.Stack {
       ],
     });
 
-    // Security Group
-    const sg = new ec2.SecurityGroup(this, 'InstanceSG', {
+    const publicSg = new ec2.SecurityGroup(this, 'PublicInstanceSG', {
       vpc,
-      securityGroupName: 'FractalbitsInstanceSG',
-      description: 'Allow outbound only for SSM, DDB and S3 access',
+      securityGroupName: 'FractalbitsPublicInstanceSG',
+      description: 'Allow inbound on port 80 for public access, and outbound for SSM, DDB, S3',
       allowAllOutbound: true,
     });
+    publicSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP access from anywhere');
 
-    [8888, 9224, 9225, 3000].forEach(port => {
-      sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(port), `Allow port ${port}`);
+    const privateSg = new ec2.SecurityGroup(this, 'PrivateInstanceSG', {
+      vpc,
+      securityGroupName: 'FractalbitsPrivateInstanceSG',
+      description: 'Allow inbound on port 8088 (e.g., from internal sources), and outbound for SSM, DDB, S3',
+      allowAllOutbound: true,
     });
+    privateSg.addIngressRule(ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.tcp(8088), 'Allow access to port 8088 from within VPC');
 
     const bucket = new s3.Bucket(this, 'Bucket', {
       // No bucketName provided – name will be auto-generated
@@ -93,6 +97,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       id: string,
       subnetType: ec2.SubnetType,
       instanceType: ec2.InstanceType,
+      sg: ec2.SecurityGroup,
     ): ec2.Instance => {
       return new ec2.Instance(this, id, {
         vpc,
@@ -126,16 +131,16 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const bssNumNvmeDisks = 1;
     const bucketName = bucket.bucketName;
     const instanceConfigs = [
-      { id: 'api_server', subnet: ec2.SubnetType.PUBLIC, instanceType: apiInstanceType },
-      { id: 'root_server', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: rssInstanceType },
-      { id: 'bss_server', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: bssInstanceType },
-      { id: 'nss_server_primary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nssInstanceType },
-      // { id: 'nss_server_secondary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nss_instance_type },
+      { id: 'api_server', subnet: ec2.SubnetType.PUBLIC, instanceType: apiInstanceType, sg: publicSg},
+      { id: 'root_server', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: rssInstanceType, sg: privateSg },
+      { id: 'bss_server', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: bssInstanceType, sg: privateSg },
+      { id: 'nss_server_primary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nssInstanceType, sg: privateSg },
+      // { id: 'nss_server_secondary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nss_instance_type, sg: privateSg },
     ];
 
     const instances: Record<string, ec2.Instance> = {};
-    instanceConfigs.forEach(({ id, subnet, instanceType}) => {
-      instances[id] = createInstance(id, subnet, instanceType);
+    instanceConfigs.forEach(({ id, subnet, instanceType, sg}) => {
+      instances[id] = createInstance(id, subnet, instanceType, sg);
     });
 
     // Create EBS Volume with Multi-Attach for nss_server

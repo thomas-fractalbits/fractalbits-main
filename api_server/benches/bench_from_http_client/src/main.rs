@@ -4,7 +4,7 @@ use std::time::Instant;
 
 #[tokio::main]
 async fn main() {
-    let url = "http://localhost:3000";
+    let url = "http://localhost:8080";
     let client = reqwest::Client::new();
     let total = 2 * 1024 * 1024;
     let mut kvs = HashMap::with_capacity(total);

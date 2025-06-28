@@ -14,11 +14,11 @@ pub fn bootstrap(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) ->
 fn create_config(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
     let aws_region = get_current_aws_region()?;
     let config_content = format!(
-        r##"bss_addr = "{bss_ip}:9225"
-nss_addr = "{nss_ip}:9224"
-rss_addr = "{rss_ip}:8888"
+        r##"bss_addr = "{bss_ip}:8088"
+nss_addr = "{nss_ip}:8088"
+rss_addr = "{rss_ip}:8088"
 region = "{aws_region}"
-port = 3000
+port = 80
 root_domain = ".localhost"
 
 [s3_cache]

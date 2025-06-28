@@ -41,7 +41,7 @@ pub fn run_cmd_bench(
             build_rss_api_server(build_mode)?;
             build_rewrk()?;
             run_cmd_service(*service_name, ServiceAction::Restart, BuildMode::Release)?;
-            uri = "http://mybucket.localhost:3000";
+            uri = "http://mybucket.localhost:8080";
             bench_exe = "./target/release/rewrk";
             bench_opts.extend_from_slice(&[
                 "-t",
@@ -58,7 +58,7 @@ pub fn run_cmd_bench(
             *service_name = ServiceName::Nss;
             build_rewrk_rpc()?;
             start_nss_service(build_mode, nss_data_on_local, keep_data)?;
-            uri = "127.0.0.1:9224";
+            uri = "127.0.0.1:8087";
             bench_exe = "./target/release/rewrk_rpc";
             bench_opts.extend_from_slice(&[
                 "-t",
@@ -75,7 +75,7 @@ pub fn run_cmd_bench(
             *service_name = ServiceName::Bss;
             build_rewrk_rpc()?;
             start_bss_service(build_mode)?;
-            uri = "127.0.0.1:9225";
+            uri = "127.0.0.1:8088";
             bench_exe = "./target/release/rewrk_rpc";
             bench_opts.extend_from_slice(&[
                 "-t",
