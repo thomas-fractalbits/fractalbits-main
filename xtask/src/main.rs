@@ -37,6 +37,13 @@ enum Cmd {
         #[clap(long, long_help = "Keep using old data, without formatting")]
         keep_data: bool,
 
+        #[clap(
+            long,
+            long_help = "set max number of keys for benchmark",
+            default_value = "5000000"
+        )]
+        keys_limit: usize,
+
         #[clap(long_help = "api_server/nss_rpc/bss_rpc")]
         service: BenchService,
     },
@@ -141,6 +148,7 @@ fn main() -> CmdResult {
             with_flame_graph,
             nss_data_on_local,
             keep_data,
+            keys_limit,
         } => {
             let mut service_name = ServiceName::All;
             cmd_bench::prepare_bench(with_flame_graph)?;
@@ -150,6 +158,7 @@ fn main() -> CmdResult {
                 with_flame_graph,
                 nss_data_on_local,
                 keep_data,
+                keys_limit,
                 &mut service_name,
             )
             .inspect_err(|_| {

@@ -20,6 +20,7 @@ pub fn run_cmd_bench(
     with_flame_graph: bool,
     nss_data_on_local: bool,
     mut keep_data: bool,
+    keys_limit: usize,
     service_name: &mut ServiceName,
 ) -> CmdResult {
     let http_method = match workload {
@@ -34,7 +35,7 @@ pub fn run_cmd_bench(
     let bench_exe;
     let workload = workload.as_ref();
     let mut bench_opts = Vec::new();
-    let mut keys_limit = 10_000_000.to_string();
+    let keys_limit = keys_limit.to_string();
 
     build_bss_nss_server(build_mode)?;
     match service {
@@ -45,7 +46,6 @@ pub fn run_cmd_bench(
             run_cmd_service(build_mode, ServiceAction::Restart, *service_name)?;
             uri = "http://mybucket.localhost:3000";
             bench_exe = "./target/release/rewrk";
-            keys_limit = 1_500_000.to_string(); // api server is slower
             bench_opts.extend_from_slice(&[
                 "-t",
                 "24",
@@ -80,7 +80,6 @@ pub fn run_cmd_bench(
             start_bss_service(build_mode)?;
             uri = "127.0.0.1:9225";
             bench_exe = "./target/release/rewrk_rpc";
-            keys_limit = 1_000_000.to_string();
             bench_opts.extend_from_slice(&[
                 "-t",
                 "24",

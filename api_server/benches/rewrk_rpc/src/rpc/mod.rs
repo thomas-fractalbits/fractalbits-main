@@ -8,6 +8,7 @@ use bytes::Bytes;
 use futures::future::join_all;
 use futures_util::stream::FuturesUnordered;
 use rpc_client_bss::RpcClientBss;
+use rpc_client_nss::rpc::get_inode_response;
 use rpc_client_nss::RpcClientNss;
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
@@ -138,9 +139,12 @@ async fn benchmark_nss_read(
             };
 
             let future = async {
-                rpc_client
-                    .get_inode(TEST_BUCKET_ROOT_BLOB_NAME.into(), key)
-                    .await
+                (
+                    key.clone(),
+                    rpc_client
+                        .get_inode(TEST_BUCKET_ROOT_BLOB_NAME.into(), key)
+                        .await,
+                )
             };
             futures.push(future);
         }
@@ -151,7 +155,24 @@ async fn benchmark_nss_read(
 
         // Try to resolve future before benchmark deadline is elapsed.
         if let Ok(results) = timeout_at(deadline, join_all(futures)).await {
-            for result in results.iter() {
+            for (key, result) in results.iter() {
+                match result {
+                    Err(e) => panic!("nss read ({key}) result error: {e:?}"),
+                    Ok(resp) => {
+                        if let Some(ref resp) = resp.result {
+                            let object_bytes = match resp {
+                                get_inode_response::Result::Ok(res) => res,
+                                get_inode_response::Result::ErrNotFound(()) => {
+                                    panic!("nss key ({key}) not found");
+                                }
+                                get_inode_response::Result::ErrOthers(e) => {
+                                    panic!("nss read key ({key}) error: {e}");
+                                }
+                            };
+                            assert_eq!(object_bytes, &Bytes::from(key.to_owned()));
+                        }
+                    }
+                }
                 if let Err(e) = result {
                     let error = e.to_string();
 
@@ -338,9 +359,12 @@ async fn benchmark_nss_write(
 
             let value = Bytes::from(key.clone());
             let future = async {
-                rpc_client
-                    .put_inode(TEST_BUCKET_ROOT_BLOB_NAME.into(), key, value)
-                    .await
+                (
+                    key.clone(),
+                    rpc_client
+                        .put_inode(TEST_BUCKET_ROOT_BLOB_NAME.into(), key, value)
+                        .await,
+                )
             };
             futures.push(future);
         }
@@ -351,7 +375,10 @@ async fn benchmark_nss_write(
 
         // Try to resolve future before benchmark deadline is elapsed.
         if let Ok(results) = timeout_at(deadline, join_all(futures)).await {
-            for result in results.iter() {
+            for (key, result) in results.iter() {
+                if result.is_err() {
+                    panic!("nss write (key: {key}) error: {result:?}");
+                }
                 if let Err(e) = result {
                     let error = e.to_string();
 
