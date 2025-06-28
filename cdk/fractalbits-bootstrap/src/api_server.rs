@@ -2,7 +2,10 @@ use super::common::*;
 use cmd_lib::*;
 
 pub fn bootstrap(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
-    download_binaries(&["api_server"])?;
+    download_binaries(&[
+        "api_server",
+        "warp", // for e2e benchmark testing
+    ])?;
     create_config(bucket_name, bss_ip, nss_ip, rss_ip)?;
     create_systemd_unit_file("api_server", true)?;
     Ok(())
