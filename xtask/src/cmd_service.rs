@@ -94,20 +94,26 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool, keep_data: 
     create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
     let pwd = run_fun!(pwd)?;
+    let format_log = "data/format.log";
+    let fbs_log = "data/fbs.log";
     if !keep_data {
         create_dirs_for_nss_server()?;
         match build_mode {
             BuildMode::Debug => run_cmd! {
                 cd data;
                 info "formatting nss_server with default configs";
-                ${pwd}/zig-out/bin/nss_server format;
-                ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME;
+                ${pwd}/zig-out/bin/nss_server format
+                    |& ts -m $TS_FMT >$format_log;
+                ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME
+                    |& ts -m $TS_FMT >$fbs_log;
             }?,
             BuildMode::Release => run_cmd! {
                 cd data;
                 info "formatting nss_server for benchmarking";
-                ${pwd}/zig-out/bin/nss_server format -c ../$NSS_SERVER_BENCH_CONFIG;
-                ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME -c ../$NSS_SERVER_BENCH_CONFIG;
+                ${pwd}/zig-out/bin/nss_server format -c ../$NSS_SERVER_BENCH_CONFIG
+                    |& ts -m $TS_FMT >$format_log;
+                ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME
+                    -c ../$NSS_SERVER_BENCH_CONFIG |& ts -m $TS_FMT >$fbs_log;
             }?,
         }
     }
