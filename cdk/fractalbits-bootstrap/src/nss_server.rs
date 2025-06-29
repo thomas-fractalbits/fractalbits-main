@@ -47,6 +47,7 @@ fn create_nss_config(bucket_name: &str) -> CmdResult {
         r##"server_port = 8088
 blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
+log_level = "info"
 
 [s3_cache]
 s3_host = "s3.{aws_region}.amazonaws.com"
