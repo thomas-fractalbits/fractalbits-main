@@ -3,7 +3,12 @@ use crate::*;
 const TARGET_ACCOUNT_ID: &str = "ACCOUNT_ID_TARGET"; // TARGET_EMAIL@example.com
 const BUCKET_OWNER_ACCOUNT_ID: &str = "ACCOUNT_ID_OWNER";
 
-pub fn run_cmd_deploy(use_s3_backend: bool, release_mode: bool, target_arm: bool) -> CmdResult {
+pub fn run_cmd_deploy(
+    use_s3_backend: bool,
+    enable_dev_mode: bool,
+    release_mode: bool,
+    target_arm: bool,
+) -> CmdResult {
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
 
@@ -25,7 +30,8 @@ pub fn run_cmd_deploy(use_s3_backend: bool, release_mode: bool, target_arm: bool
         cargo zigbuild --target $rust_build_target --release;
 
         info "Building Zig projects";
-        zig build -Duse_s3_backend=$use_s3_backend $[zig_build_target] $zig_build_opt 2>&1;
+        zig build -Duse_s3_backend=$use_s3_backend
+            -Denable_dev_mode=$enable_dev_mode $[zig_build_target] $zig_build_opt 2>&1;
     }?;
 
     info!("Uploading Rust-built binaries");
