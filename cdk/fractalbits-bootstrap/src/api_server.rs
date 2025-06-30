@@ -2,11 +2,18 @@ use super::common::*;
 use cmd_lib::*;
 
 pub fn bootstrap(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
+    install_rpms(&["nmap-ncat"])?;
     download_binaries(&[
         "api_server",
         "warp", // for e2e benchmark testing
     ])?;
     create_config(bucket_name, bss_ip, nss_ip, rss_ip)?;
+    for ip in [bss_ip, rss_ip, nss_ip] {
+        info!("Waiting for node with ip {ip} to be ready");
+        while run_cmd!(nc -z $ip 8088).is_err() {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    }
     create_systemd_unit_file("api_server", true)?;
     Ok(())
 }
