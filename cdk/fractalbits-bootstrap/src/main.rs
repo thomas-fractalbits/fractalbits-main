@@ -73,6 +73,9 @@ enum Service {
     BenchServer {
         #[clap(long, long_help = "Service endpoint for benchmark")]
         service_endpoint: String,
+
+        #[clap(long, value_delimiter = ',', long_help = "Comma separated list of client IPs")]
+        clients_ips: Vec<String>,
     },
 
     #[clap(about = "Run on bench_client instance to benchmark fractalbits service(s)")]
@@ -108,7 +111,7 @@ fn main() -> CmdResult {
             secondary_instance_id,
             volume_id,
         } => root_server::bootstrap(&primary_instance_id, &secondary_instance_id, &volume_id)?,
-        Service::BenchServer { service_endpoint } => bench_server::bootstrap(&service_endpoint)?,
+        Service::BenchServer { service_endpoint, clients_ips } => bench_server::bootstrap(&service_endpoint, clients_ips)?,
         Service::BenchClient {} => bench_client::bootstrap()?,
     }
 
