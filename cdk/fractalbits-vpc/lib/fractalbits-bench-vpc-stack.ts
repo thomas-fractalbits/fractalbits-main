@@ -60,6 +60,7 @@ export class FractalbitsBenchVpcStack extends cdk.Stack {
     privateSg.addIngressRule(ec2.Peer.ipv4(this.vpc.vpcCidrBlock), ec2.Port.tcp(7761), 'Allow incoming on port 7761 from VPC');
 
     // Bench Server Instance
+    const cpuArch = "aarch64";
     const benchServerInstance = createInstance(this, this.vpc, 'BenchServerInstance', ec2.SubnetType.PRIVATE_ISOLATED, ec2.InstanceType.of(ec2.InstanceClass.C7G, ec2.InstanceSize.MEDIUM), privateSg, ec2Role);
 
     // Bench Client Instances
@@ -67,13 +68,13 @@ export class FractalbitsBenchVpcStack extends cdk.Stack {
     const benchClientInstances: ec2.Instance[] = [];
     for (let i = 0; i < benchClientCount; i++) {
       const clientInstance = createInstance(this, this.vpc, `BenchClientInstance${i + 1}`, ec2.SubnetType.PRIVATE_ISOLATED, ec2.InstanceType.of(ec2.InstanceClass.C7G, ec2.InstanceSize.MEDIUM), privateSg, ec2Role);
+      clientInstance.addUserData(createUserData(this, cpuArch, 'bench_client').render());
       benchClientInstances.push(clientInstance);
     }
 
     // Get private IP addresses of bench client instances
     const benchClientIps = cdk.Fn.join(',', benchClientInstances.map(instance => instance.instancePrivateIp));
 
-    const cpuArch = "aarch64";
     const bootstrapOptions = `bench_server --service_endpoint=${props.serviceEndpoint} --client_ips=${benchClientIps}`;
     benchServerInstance.addUserData(createUserData(this, cpuArch, bootstrapOptions).render());
 
