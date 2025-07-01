@@ -59,7 +59,7 @@ aws-config.workspace = true
 openssl.workspace = true
 bb8.workspace = true
 metrics.workspace = true
-metrics-exporter-prometheus.workspace = true
+metrics-exporter-statsd.workspace = true
 tokio-retry.workspace = true
 moka.workspace = true
 

@@ -15,7 +15,7 @@ uuid.workspace = true
 fake.workspace = true
 bb8.workspace = true
 metrics.workspace = true
-metrics-exporter-prometheus.workspace = true
+metrics-exporter-statsd.workspace = true
 tokio-retry.workspace = true
 
 [features]
