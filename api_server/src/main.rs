@@ -29,10 +29,10 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
-    // Initialize metrics exporter
     #[cfg(feature = "metrics_statsd")]
     {
         use metrics_exporter_statsd::StatsdBuilder;
+        // Initialize StatsD metrics exporter
         let recorder = StatsdBuilder::from("127.0.0.1", 8125)
             .build(None)
             .expect("Could not build StatsD recorder");

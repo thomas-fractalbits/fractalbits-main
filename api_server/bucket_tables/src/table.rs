@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use metrics::counter;
 use moka::future::Cache;
 use std::{marker::PhantomData, sync::Arc};
 
@@ -134,6 +135,7 @@ impl<'a, C: KvClient, F: TableSchema> Table<'a, C, F> {
         if try_cache {
             if let Some(ref cache) = self.cache {
                 if let Some(json) = cache.get(&full_key).await {
+                    counter!("table_cache_hit", "table_name" => F::TABLE_NAME).increment(1);
                     tracing::debug!("get cached data with full_key: {full_key}");
                     return Ok((
                         json.version,
@@ -141,6 +143,8 @@ impl<'a, C: KvClient, F: TableSchema> Table<'a, C, F> {
                     )
                         .into());
                 }
+            } else {
+                counter!("table_cache_miss", "table_name" => F::TABLE_NAME).increment(1);
             }
         }
 

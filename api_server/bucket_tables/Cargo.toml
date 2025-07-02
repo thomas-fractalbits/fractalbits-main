@@ -12,3 +12,4 @@ hex.workspace = true
 rand.workspace = true
 moka.workspace = true
 tracing.workspace = true
+metrics.workspace = true

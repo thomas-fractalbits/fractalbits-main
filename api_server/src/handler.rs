@@ -64,15 +64,13 @@ pub async fn any_handler(
     let duration = start.elapsed();
     match result {
         Ok(response) => {
-            let histogram =
-                histogram!("request_duration_nanos", "status" => format!("{endpoint_name}_Ok"));
-            histogram.record(duration.as_nanos() as f64);
+            histogram!("request_duration_nanos", "status" => format!("{endpoint_name}_Ok"))
+                .record(duration.as_nanos() as f64);
             response
         }
         Err(e) => {
-            let histogram =
-                histogram!("request_duration_nanos", "status" => format!("{endpoint_name}_Fail"));
-            histogram.record(duration.as_nanos() as f64);
+            histogram!("request_duration_nanos", "status" => format!("{endpoint_name}_Err"))
+                .record(duration.as_nanos() as f64);
             e.into_response_with_resource(&resource)
         }
     }
@@ -96,9 +94,8 @@ async fn any_handler_inner(
         }
         Err(_e) => return Err(S3Error::InvalidSignature),
     };
-    let duration = start.elapsed();
-    let histogram = histogram!("verify_request_duration_nanos", "endpoint" => endpoint.as_str());
-    histogram.record(duration.as_nanos() as f64);
+    histogram!("verify_request_duration_nanos", "endpoint" => endpoint.as_str())
+        .record(start.elapsed().as_nanos() as f64);
 
     let allowed = match endpoint.authorization_type() {
         Authorization::Read => api_key.data.allow_read(&bucket_name),
