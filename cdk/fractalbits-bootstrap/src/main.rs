@@ -76,7 +76,7 @@ enum Service {
     BenchServer {
         #[clap(
             long,
-            default_value = "localhost",
+            default_value = "local-service-endpoint",
             long_help = "Service endpoint for benchmark"
         )]
         service_endpoint: String,
