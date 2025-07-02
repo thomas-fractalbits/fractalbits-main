@@ -8,7 +8,6 @@ use api_server::{
 };
 use axum::{extract::Request, routing, serve::ListenerExt};
 use clap::Parser;
-use metrics_exporter_statsd::StatsdBuilder;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -30,11 +29,25 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer().without_time())
         .init();
 
-    // Initialize StatsD metrics exporter
-    let recorder = StatsdBuilder::from("127.0.0.1", 8125)
-        .build(None)
-        .expect("Could not build StatsD recorder");
-    metrics::set_global_recorder(Box::new(recorder)).expect("Could not install StatsD exporter");
+    // Initialize metrics exporter
+    #[cfg(feature = "metrics_statsd")]
+    {
+        use metrics_exporter_statsd::StatsdBuilder;
+        let recorder = StatsdBuilder::from("127.0.0.1", 8125)
+            .build(None)
+            .expect("Could not build StatsD recorder");
+        metrics::set_global_recorder(Box::new(recorder))
+            .expect("Could not install StatsD exporter");
+    }
+    #[cfg(feature = "metrics_prometheus")]
+    {
+        use metrics_exporter_prometheus::PrometheusBuilder;
+        // Initialize Prometheus metrics exporter
+        PrometheusBuilder::new()
+            .with_http_listener("0.0.0.0:8085".parse::<SocketAddr>().unwrap())
+            .install()
+            .expect("Could not build Prometheus recorder");
+    }
 
     let opt = Opt::parse();
     let config = match opt.config_file {

@@ -59,7 +59,8 @@ aws-config.workspace = true
 openssl.workspace = true
 bb8.workspace = true
 metrics.workspace = true
-metrics-exporter-statsd.workspace = true
+metrics-exporter-statsd = { workspace = true, optional = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
 tokio-retry.workspace = true
 moka.workspace = true
 
@@ -68,3 +69,8 @@ cmd_lib.workspace = true
 sha1.workspace = true
 tempfile.workspace = true
 rstest.workspace = true
+
+[features]
+default = ["metrics_prometheus"]
+metrics_statsd = ["dep:metrics-exporter-statsd"]
+metrics_prometheus = ["dep:metrics-exporter-prometheus"]
