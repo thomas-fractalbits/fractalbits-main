@@ -6,7 +6,7 @@ import { PeeringStack } from '../lib/fractalbits-peering-stack';
 
 const app = new cdk.App();
 
-const numApiServers = app.node.tryGetContext('numApiServers') ?? 2;
+const numApiServers = app.node.tryGetContext('numApiServers') ?? 1;
 const benchType = app.node.tryGetContext('benchType') ?? null;
 
 const vpcStack = new FractalbitsVpcStack(app, 'FractalbitsVpcStack', {
@@ -16,7 +16,7 @@ const vpcStack = new FractalbitsVpcStack(app, 'FractalbitsVpcStack', {
 });
 
 if (benchType === "service_endpoint") {
-  const benchClientCount = app.node.tryGetContext('benchClientCount') ?? 2;
+  const benchClientCount = app.node.tryGetContext('benchClientCount') ?? 1;
 
   const benchVpcStack = new FractalbitsBenchVpcStack(app, 'FractalbitsBenchVpcStack', {
     env: {},
