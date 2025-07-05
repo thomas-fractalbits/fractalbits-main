@@ -7,6 +7,7 @@ members = [
     "api_server/rpc_client/bss",
     "api_server/rpc_client/nss",
     "api_server/rpc_client/rss",
+    "api_server/slotmap_conn_pool",
     "cdk/fractalbits-bootstrap",
     "root_server",
     "root_server/admin",
@@ -21,6 +22,7 @@ resolver = "2"
 rpc_client_bss = { path = "api_server/rpc_client/bss" }
 rpc_client_nss = { path = "api_server/rpc_client/nss" }
 rpc_client_rss = { path = "api_server/rpc_client/rss" }
+slotmap_conn_pool = { path = "api_server/slotmap_conn_pool" }
 bucket_tables = { path = "api_server/bucket_tables" }
 xtask_tools = { path = "xtask/tools" }
 
