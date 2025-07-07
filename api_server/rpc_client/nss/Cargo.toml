@@ -17,6 +17,7 @@ bb8.workspace = true
 metrics.workspace = true
 metrics-exporter-statsd.workspace = true
 tokio-retry.workspace = true
+slotmap_conn_pool.workspace = true
 
 [build-dependencies]
 prost-build.workspace = true

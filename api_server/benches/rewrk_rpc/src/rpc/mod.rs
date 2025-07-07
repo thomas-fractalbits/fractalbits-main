@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 use std::time::Duration;
 
 // use anyhow::{anyhow, Result};
@@ -116,7 +117,7 @@ pub async fn start_tasks_for_bss(
 // Futures must not be awaited without timeout.
 async fn benchmark_nss_read(
     deadline: Instant,
-    rpc_client: RpcClientNss,
+    rpc_client: Arc<RpcClientNss>,
     mut keys: VecDeque<String>,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -203,7 +204,7 @@ async fn benchmark_nss_read(
 // Futures must not be awaited without timeout.
 async fn benchmark_bss_write(
     deadline: Instant,
-    rpc_client: RpcClientBss,
+    rpc_client: Arc<RpcClientBss>,
     mut uuids: VecDeque<String>,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -270,7 +271,7 @@ async fn benchmark_bss_write(
 // Futures must not be awaited without timeout.
 async fn benchmark_bss_read(
     deadline: Instant,
-    rpc_client: RpcClientBss,
+    rpc_client: Arc<RpcClientBss>,
     mut uuids: VecDeque<String>,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -335,7 +336,7 @@ async fn benchmark_bss_read(
 }
 async fn benchmark_nss_write(
     deadline: Instant,
-    rpc_client: RpcClientNss,
+    rpc_client: Arc<RpcClientNss>,
     mut keys: VecDeque<String>,
     io_depth: usize,
 ) -> anyhow::Result<WorkerResult> {
@@ -425,14 +426,14 @@ impl RewrkConnector {
         }
     }
 
-    async fn connect_nss(&self) -> anyhow::Result<RpcClientNss> {
+    async fn connect_nss(&self) -> anyhow::Result<Arc<RpcClientNss>> {
         let stream = TcpStream::connect(&self.host).await?;
-        Ok(RpcClientNss::new(stream).await.unwrap())
+        Ok(RpcClientNss::new(stream).await.unwrap().into())
     }
 
-    async fn connect_bss(&self) -> anyhow::Result<RpcClientBss> {
+    async fn connect_bss(&self) -> anyhow::Result<Arc<RpcClientBss>> {
         let stream = TcpStream::connect(&self.host).await?;
-        Ok(RpcClientBss::new(stream).await.unwrap())
+        Ok(RpcClientBss::new(stream).await.unwrap().into())
     }
 
     #[allow(dead_code)]

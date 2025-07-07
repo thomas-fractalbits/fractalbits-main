@@ -32,7 +32,7 @@ impl RpcConnectionManager {
 }
 
 impl bb8::ManageConnection for RpcConnectionManager {
-    type Connection = RpcClient;
+    type Connection = Arc<RpcClient>;
     type Error = Box<dyn std::error::Error + Send + Sync>; // Using Box<dyn Error> for simplicity
 
     #[instrument(skip(self), fields(peer_addrs = ?self.remote_addrs))]
@@ -75,7 +75,7 @@ impl bb8::ManageConnection for RpcConnectionManager {
         })
         .await?; // Await the result of the retry attempts.
 
-        Self::Connection::new(stream).await.map_err(|e| e.into())
+        Ok(RpcClient::new(stream).await.unwrap().into())
     }
 
     #[instrument(skip(self, _conn))]

@@ -31,7 +31,6 @@ pub async fn get_raw_object(
 ) -> Result<ObjectLayout, S3Error> {
     let rpc_client_nss = app.get_rpc_client_nss().await;
     let resp = rpc_client_nss.get_inode(root_blob_name, key).await?;
-    drop(rpc_client_nss);
 
     let object_bytes = match resp.result.unwrap() {
         get_inode_response::Result::Ok(res) => res,
@@ -68,7 +67,6 @@ pub async fn list_raw_objects(
             skip_mpu_parts,
         )
         .await?;
-    drop(rpc_client_nss);
 
     // Process results
     let inodes = match resp.result.unwrap() {

@@ -18,6 +18,7 @@ use tokio_util::codec::FramedRead;
 
 use crate::codec::{MessageFrame, MesssageCodec};
 use crate::message::MessageHeader;
+use slotmap_conn_pool::Poolable;
 
 #[derive(Error, Debug)]
 pub enum RpcError {
@@ -154,5 +155,11 @@ impl RpcClient {
 
     pub fn tasks_running(&self) -> bool {
         !self.send_task.is_finished() && !self.recv_task.is_finished()
+    }
+}
+
+impl Poolable for RpcClient {
+    fn is_open(&self) -> bool {
+        self.tasks_running()
     }
 }

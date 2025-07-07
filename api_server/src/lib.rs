@@ -15,15 +15,18 @@ use futures::stream::{self, StreamExt};
 use metrics::histogram;
 use moka::future::Cache;
 use object_layout::ObjectLayout;
-use rpc_client_bss::{RpcConnManagerBss, RpcErrorBss};
-use rpc_client_nss::RpcConnManagerNss;
+use rpc_client_bss::{RpcClientBss, RpcErrorBss};
+use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcConnManagerRss;
+use slotmap_conn_pool::ConnPool;
 use std::{
     net::SocketAddr,
+    ops::Deref,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
+    net::TcpStream,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
 };
@@ -36,7 +39,7 @@ pub struct AppState {
     pub config: ArcConfig,
     pub cache: Arc<Cache<String, Versioned<String>>>,
 
-    rpc_clients_nss: Pool<RpcConnManagerNss>,
+    rpc_clients_nss: ConnPool<Arc<RpcClientNss>, SocketAddr>,
     rpc_clients_rss: Pool<RpcConnManagerRss>,
 
     blob_client: Arc<BlobClient>,
@@ -76,21 +79,21 @@ impl AppState {
         }
     }
 
-    async fn new_rpc_clients_pool_nss(nss_addr: &str) -> Pool<RpcConnManagerNss> {
+    async fn new_rpc_clients_pool_nss(nss_addr: &str) -> ConnPool<Arc<RpcClientNss>, SocketAddr> {
         let resolved_addrs: Vec<SocketAddr> = tokio::net::lookup_host(nss_addr)
             .await
             .expect("Failed to resolve NSS RPC server address")
             .collect();
 
         assert!(!resolved_addrs.is_empty());
-        let manager = RpcConnManagerNss::new(resolved_addrs);
-        let rpc_clients_nss = Pool::builder()
-            .max_size(Self::NSS_CONNECTION_POOL_SIZE)
-            .min_idle(Some(32))
-            .max_lifetime(None)
-            .build(manager)
-            .await
-            .expect("Failed to build nss rpc clients pool");
+        let rpc_clients_nss = ConnPool::new(Self::NSS_CONNECTION_POOL_SIZE as usize, None);
+        for addr in resolved_addrs {
+            if let Some(connecting) = rpc_clients_nss.connecting(&addr) {
+                let stream = TcpStream::connect(addr).await.unwrap();
+                let client = Arc::new(RpcClientNss::new(stream).await.unwrap());
+                rpc_clients_nss.pooled(connecting, client);
+            }
+        }
 
         info!(
             "NSS RPC client pool initialized with {} connections.",
@@ -122,9 +125,21 @@ impl AppState {
         rpc_clients_rss
     }
 
-    pub async fn get_rpc_client_nss(&self) -> PooledConnection<RpcConnManagerNss> {
+    pub async fn get_rpc_client_nss(&self) -> impl Deref<Target = Arc<RpcClientNss>> {
         let start = Instant::now();
-        let res = self.rpc_clients_nss.get().await.unwrap();
+        let res = self
+            .rpc_clients_nss
+            .checkout(
+                self.config
+                    .nss_addr
+                    .split(',')
+                    .next()
+                    .unwrap()
+                    .parse()
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         histogram!("get_rpc_client_nanos", "type" => "nss")
             .record(start.elapsed().as_nanos() as f64);
         res
@@ -144,11 +159,12 @@ impl AppState {
 }
 
 pub struct BlobClient {
-    clients_bss: Arc<Pool<RpcConnManagerBss>>,
+    clients_bss: ConnPool<Arc<RpcClientBss>, SocketAddr>,
     client_s3: S3Client,
     s3_cache_bucket: String,
     #[allow(dead_code)]
     blob_deletion_task_handle: JoinHandle<()>,
+    bss_addr: String,
 }
 
 impl BlobClient {
@@ -165,16 +181,14 @@ impl BlobClient {
             .collect();
 
         assert!(!resolved_addrs.is_empty());
-        let manager = RpcConnManagerBss::new(resolved_addrs);
-        let clients_bss = Arc::new(
-            Pool::builder()
-                .max_size(Self::BSS_CONNECTION_POOL_SIZE)
-                .min_idle(Some(32))
-                .max_lifetime(None)
-                .build(manager)
-                .await
-                .expect("Failed to build bss rpc clients pool"),
-        );
+        let clients_bss = ConnPool::new(Self::BSS_CONNECTION_POOL_SIZE as usize, None);
+        for addr in resolved_addrs {
+            if let Some(connecting) = clients_bss.connecting(&addr) {
+                let stream = TcpStream::connect(addr).await.unwrap();
+                let client = Arc::new(RpcClientBss::new(stream).await.unwrap());
+                clients_bss.pooled(connecting, client);
+            }
+        }
 
         info!(
             "BSS RPC client pool initialized with {} connections.",
@@ -198,8 +212,9 @@ impl BlobClient {
 
         let blob_deletion_task_handle = tokio::spawn({
             let clients_bss = clients_bss.clone();
+            let bss_addr = bss_addr.to_string();
             async move {
-                if let Err(e) = Self::blob_deletion_task(clients_bss, rx).await {
+                if let Err(e) = Self::blob_deletion_task(clients_bss, rx, bss_addr).await {
                     tracing::error!("FATAL: blob deletion task error: {e}");
                 }
             }
@@ -210,19 +225,25 @@ impl BlobClient {
             client_s3,
             s3_cache_bucket: config.s3_bucket.clone(),
             blob_deletion_task_handle,
+            bss_addr: bss_addr.to_string(),
         }
     }
 
     async fn blob_deletion_task(
-        clients_bss: Arc<Pool<RpcConnManagerBss>>,
+        clients_bss: ConnPool<Arc<RpcClientBss>, SocketAddr>,
         mut input: Receiver<(BlobId, usize)>,
+        bss_addr: String,
     ) -> Result<(), RpcErrorBss> {
         while let Some((blob_id, block_numbers)) = input.recv().await {
             let deleted = stream::iter(0..block_numbers)
                 .map(|block_number| {
                     let clients_bss = clients_bss.clone();
+                    let bss_addr = bss_addr.clone();
                     async move {
-                        let rpc_client_bss = clients_bss.get().await.unwrap();
+                        let rpc_client_bss = clients_bss
+                            .checkout(bss_addr.parse().unwrap())
+                            .await
+                            .unwrap();
                         let res = rpc_client_bss
                             .delete_blob(blob_id, block_number as u32)
                             .await;
@@ -253,7 +274,11 @@ impl BlobClient {
         body: Bytes,
     ) -> Result<usize, RpcErrorBss> {
         let start = Instant::now();
-        let rpc_client_bss = self.clients_bss.get().await.unwrap();
+        let rpc_client_bss = self
+            .clients_bss
+            .checkout(self.bss_addr.parse().unwrap())
+            .await
+            .unwrap();
         histogram!("get_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         if block_number == 0 && body.len() < ObjectLayout::DEFAULT_BLOCK_SIZE as usize {
@@ -281,7 +306,11 @@ impl BlobClient {
         body: &mut Bytes,
     ) -> Result<usize, RpcErrorBss> {
         let start = Instant::now();
-        let rpc_client_bss = self.clients_bss.get().await.unwrap();
+        let rpc_client_bss = self
+            .clients_bss
+            .checkout(self.bss_addr.parse().unwrap())
+            .await
+            .unwrap();
         histogram!("get_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         rpc_client_bss.get_blob(blob_id, block_number, body).await
@@ -290,7 +319,11 @@ impl BlobClient {
     pub async fn delete_blob(&self, blob_id: Uuid, block_number: u32) -> Result<(), RpcErrorBss> {
         let start = Instant::now();
         let s3_key = format!("{blob_id}-{block_number}");
-        let rpc_client_bss = self.clients_bss.get().await.unwrap();
+        let rpc_client_bss = self
+            .clients_bss
+            .checkout(self.bss_addr.parse().unwrap())
+            .await
+            .unwrap();
         histogram!("get_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         let (res_s3, res_bss) = tokio::join!(

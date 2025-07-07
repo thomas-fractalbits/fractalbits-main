@@ -56,6 +56,7 @@ chrono = "0.4.39"
 httpdate = "1.0.3"
 futures = "0.3.31"
 pin-project-lite = "0.2.15"
+async-trait = "0.1.81"
 etcd-client = "0.14.0"
 serde_json = "1.0.138"
 toml = { version = "0.8", default-features = false, features = ["parse"] }
