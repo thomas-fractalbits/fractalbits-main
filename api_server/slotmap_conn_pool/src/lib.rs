@@ -1,11 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt::{self, Debug};
 use std::future::Future;
 use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 use std::task::{self, Poll};
 
 use slotmap::{new_key_type, SlotMap};
@@ -27,13 +27,11 @@ impl<T> Key for T where T: Eq + Hash + Clone + Debug + Unpin + Send + 'static {}
 
 struct ConnPoolInner<T, K: Key> {
     connections: SlotMap<ConnectionKey, T>,
-    host_to_conn_keys: HashMap<K, (Vec<ConnectionKey>, usize)>,
-    max_connections_per_host: usize,
-    connecting: HashSet<K>,
+    host_to_conn_keys: HashMap<K, (Vec<ConnectionKey>, usize /* current idx */)>,
 }
 
 pub struct ConnPool<T, K: Key> {
-    inner: Option<Arc<Mutex<ConnPoolInner<T, K>>>>,
+    inner: Arc<Mutex<ConnPoolInner<T, K>>>,
 }
 
 impl<T, K: Key> Clone for ConnPool<T, K> {
@@ -44,18 +42,13 @@ impl<T, K: Key> Clone for ConnPool<T, K> {
     }
 }
 
+#[allow(clippy::new_without_default)]
 impl<T: Poolable, K: Key> ConnPool<T, K> {
-    pub fn new(max_connections_per_host: usize) -> Self {
-        let inner = if max_connections_per_host > 0 {
-            Some(Arc::new(Mutex::new(ConnPoolInner {
-                connections: SlotMap::with_key(),
-                host_to_conn_keys: HashMap::new(),
-                max_connections_per_host,
-                connecting: HashSet::new(),
-            })))
-        } else {
-            None
-        };
+    pub fn new() -> Self {
+        let inner = Arc::new(Mutex::new(ConnPoolInner {
+            connections: SlotMap::with_key(),
+            host_to_conn_keys: HashMap::new(),
+        }));
         ConnPool { inner }
     }
 
@@ -66,89 +59,14 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
         }
     }
 
-    pub fn connecting(&self, key: &K) -> Option<Connecting<T, K>> {
-        if let Some(ref pool_arc) = self.inner {
-            let mut inner_guard = pool_arc.lock().unwrap();
-            if inner_guard
-                .host_to_conn_keys
-                .get(key)
-                .map_or(0, |(v, _)| v.len())
-                < inner_guard.max_connections_per_host
-                && inner_guard.connecting.insert(key.clone())
-            {
-                return Some(Connecting {
-                    key: key.clone(),
-                    pool: Arc::downgrade(pool_arc),
-                });
-            }
-        }
-        None
-    }
-
-    pub fn pooled(&self, connecting: Connecting<T, K>, value: T)
+    pub fn pooled(&self, key: K, value: T)
     where
         T: Clone,
     {
-        if let Some(pool) = connecting.pool.upgrade() {
-            let mut inner = pool.lock().unwrap();
-            let key = connecting.key.clone();
-            let conn_key = inner.connections.insert(value.clone());
-            let (keys, _) = inner.host_to_conn_keys.entry(key.clone()).or_default();
-            keys.push(conn_key);
-        }
-    }
-}
-
-pub struct Connecting<T: Poolable, K: Key> {
-    key: K,
-    pool: Weak<Mutex<ConnPoolInner<T, K>>>,
-}
-
-impl<T: Poolable, K: Key> Drop for Connecting<T, K> {
-    fn drop(&mut self) {
-        if let Some(pool) = self.pool.upgrade() {
-            if let Ok(mut inner) = pool.lock() {
-                inner.connecting.remove(&self.key);
-            }
-        }
-    }
-}
-
-pub struct Pooled<T: Poolable, K: Key> {
-    value: Option<T>,
-    key: K,
-    pool: Weak<Mutex<ConnPoolInner<T, K>>>,
-}
-
-impl<T: Poolable, K: Key> Deref for Pooled<T, K> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        self.value.as_ref().expect("not dropped")
-    }
-}
-
-impl<T: Poolable, K: Key> DerefMut for Pooled<T, K> {
-    fn deref_mut(&mut self) -> &mut T {
-        self.value.as_mut().expect("not dropped")
-    }
-}
-
-impl<T: Poolable, K: Key> Drop for Pooled<T, K> {
-    fn drop(&mut self) {
-        if let Some(value) = self.value.take() {
-            if value.is_open() {
-                if let Some(pool) = self.pool.upgrade() {
-                    let mut inner = pool.lock().unwrap();
-                    let conn_key = inner.connections.insert(value);
-                    inner
-                        .host_to_conn_keys
-                        .entry(self.key.clone())
-                        .or_default()
-                        .0
-                        .push(conn_key);
-                }
-            }
-        }
+        let mut inner = self.inner.lock().unwrap();
+        let conn_key = inner.connections.insert(value.clone());
+        let (keys, _) = inner.host_to_conn_keys.entry(key.clone()).or_default();
+        keys.push(conn_key);
     }
 }
 
@@ -175,13 +93,10 @@ impl fmt::Display for Error {
 impl StdError for Error {}
 
 impl<T: Poolable + Clone, K: Key> Future for Checkout<T, K> {
-    type Output = Result<Pooled<T, K>, Error>;
+    type Output = Result<T, Error>;
 
     fn poll(self: Pin<&mut Self>, _cx: &mut task::Context<'_>) -> Poll<Self::Output> {
-        let pool_arc = match self.pool.inner.clone() {
-            Some(inner) => inner,
-            None => return Poll::Ready(Err(Error::PoolDisabled)),
-        };
+        let pool_arc = self.pool.inner.clone();
 
         let mut inner = pool_arc.lock().unwrap();
 
@@ -224,11 +139,7 @@ impl<T: Poolable + Clone, K: Key> Future for Checkout<T, K> {
         }
         if let Some(conn_key) = conn_key {
             let value = inner.connections[conn_key].clone();
-            return Poll::Ready(Ok(Pooled {
-                value: Some(value),
-                key: self.key.clone(),
-                pool: Arc::downgrade(&pool_arc),
-            }));
+            return Poll::Ready(Ok(value));
         }
 
         Poll::Ready(Err(Error::NoConnectionAvailable))
@@ -260,7 +171,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_checkout_and_pool() {
-        let pool = ConnPool::<MockConnection, MockKey>::new(1);
+        let pool = ConnPool::<MockConnection, MockKey>::new();
         let key = MockKey("foo".to_string());
 
         // Initially, no connection
@@ -268,27 +179,23 @@ mod tests {
         assert!(matches!(res, Err(Error::NoConnectionAvailable)));
 
         // Create and pool a connection
-        let connecting = pool.connecting(&key).unwrap();
-        pool.pooled(connecting, mock_conn(42));
+        pool.pooled(key.clone(), mock_conn(42));
 
         // Now checkout should succeed
-        let pooled = pool.checkout(key.clone()).await.unwrap();
+        let pooled = pool.checkout(key).await.unwrap();
         assert_eq!(pooled.id, 42);
     }
 
     #[tokio::test]
     async fn test_round_robin() {
-        let pool = ConnPool::<MockConnection, MockKey>::new(2);
+        let pool = ConnPool::<MockConnection, MockKey>::new();
 
         let key = MockKey("foo".to_string());
         let key_for_conn1 = key.clone();
         let key_for_conn2 = key.clone();
 
-        let conn1 = pool.connecting(&key_for_conn1).unwrap();
-        pool.pooled(conn1, mock_conn(1));
-
-        let conn2 = pool.connecting(&key_for_conn2).unwrap();
-        pool.pooled(conn2, mock_conn(2));
+        pool.pooled(key_for_conn1, mock_conn(1));
+        pool.pooled(key_for_conn2, mock_conn(2));
 
         let p1 = pool.checkout(key.clone()).await.unwrap();
         let p2 = pool.checkout(key.clone()).await.unwrap();
@@ -301,42 +208,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_connection_cleanup() {
-        let pool = ConnPool::<MockConnection, MockKey>::new(2);
+        let pool = ConnPool::<MockConnection, MockKey>::new();
 
         let key = MockKey("foo".to_string());
 
-        let conn1 = pool.connecting(&key).unwrap();
-        pool.pooled(conn1, mock_conn(1));
+        pool.pooled(key.clone(), mock_conn(1));
 
-        let conn2 = pool.connecting(&key).unwrap();
         let mut closed_conn = mock_conn(2);
         closed_conn.is_open = false;
-        pool.pooled(conn2, closed_conn);
+        pool.pooled(key.clone(), closed_conn);
 
         let p1 = pool.checkout(key.clone()).await.unwrap();
         assert_eq!(p1.id, 1);
 
         // After checkout, the closed connection should have been cleaned up.
-        let inner = pool.inner.as_ref().unwrap().lock().unwrap();
+        let inner = pool.inner.lock().unwrap();
         assert_eq!(
             inner.connections.len(),
             1,
             "Pool should have cleaned up the closed connection"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_max_connections() {
-        let pool = ConnPool::<MockConnection, MockKey>::new(1);
-
-        let key = MockKey("foo".to_string());
-
-        let conn1 = pool.connecting(&key).unwrap();
-        pool.pooled(conn1, mock_conn(1));
-
-        assert!(
-            pool.connecting(&key).is_none(),
-            "Should not be able to create a new connection when at max capacity"
         );
     }
 }

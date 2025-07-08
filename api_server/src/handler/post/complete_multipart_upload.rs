@@ -283,7 +283,7 @@ pub async fn complete_multipart_upload_handler(
         checksum: expected_checksum,
     }));
     let new_object_bytes = to_bytes_in::<_, Error>(&object, Vec::new())?;
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss
         .put_inode(
             bucket.root_blob_name.clone(),

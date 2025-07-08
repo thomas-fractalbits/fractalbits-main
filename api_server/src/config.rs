@@ -1,4 +1,5 @@
 use std::fs;
+use std::net::SocketAddr;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,9 +9,9 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
-    pub bss_addr: String,
-    pub nss_addr: String,
-    pub rss_addr: String,
+    pub bss_addr: SocketAddr,
+    pub nss_addr: SocketAddr,
+    pub rss_addr: SocketAddr,
 
     pub port: u16,
     pub region: String,
@@ -42,9 +43,9 @@ impl Default for S3CacheConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            bss_addr: "127.0.0.1:8088".into(),
-            nss_addr: "127.0.0.1:8087".into(),
-            rss_addr: "127.0.0.1:8086".into(),
+            bss_addr: "127.0.0.1:8088".parse().unwrap(),
+            nss_addr: "127.0.0.1:8087".parse().unwrap(),
+            rss_addr: "127.0.0.1:8086".parse().unwrap(),
             port: 8080,
             region: "us-west-1".into(),
             root_domain: ".localhost".into(),

@@ -21,7 +21,6 @@ use rpc_client_nss::RpcClientNss;
 use slotmap_conn_pool::ConnPool;
 use std::{
     net::SocketAddr,
-    ops::Deref,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -57,11 +56,11 @@ impl AppState {
     const RSS_CONNECTION_POOL_SIZE: usize = 64;
 
     pub async fn new(config: ArcConfig) -> Self {
-        let rpc_clients_nss = Self::new_rpc_clients_pool_nss(&config.nss_addr).await;
-        let rpc_clients_rss = Self::new_rpc_clients_pool_rss(&config.rss_addr).await;
+        let rpc_clients_nss = Self::new_rpc_clients_pool_nss(config.nss_addr).await;
+        let rpc_clients_rss = Self::new_rpc_clients_pool_rss(config.rss_addr).await;
 
         let (tx, rx) = mpsc::channel(1024 * 1024);
-        let blob_client = Arc::new(BlobClient::new(&config.bss_addr, &config.s3_cache, rx).await);
+        let blob_client = Arc::new(BlobClient::new(config.bss_addr, &config.s3_cache, rx).await);
 
         let cache = Arc::new(
             Cache::builder()
@@ -79,20 +78,14 @@ impl AppState {
         }
     }
 
-    async fn new_rpc_clients_pool_nss(nss_addr: &str) -> ConnPool<Arc<RpcClientNss>, SocketAddr> {
-        let resolved_addrs: Vec<SocketAddr> = tokio::net::lookup_host(nss_addr)
-            .await
-            .expect("Failed to resolve NSS RPC server address")
-            .collect();
-
-        assert!(!resolved_addrs.is_empty());
-        let rpc_clients_nss = ConnPool::new(Self::NSS_CONNECTION_POOL_SIZE);
-        for addr in resolved_addrs {
-            if let Some(connecting) = rpc_clients_nss.connecting(&addr) {
-                let stream = TcpStream::connect(addr).await.unwrap();
-                let client = Arc::new(RpcClientNss::new(stream).await.unwrap());
-                rpc_clients_nss.pooled(connecting, client);
-            }
+    async fn new_rpc_clients_pool_nss(
+        nss_addr: SocketAddr,
+    ) -> ConnPool<Arc<RpcClientNss>, SocketAddr> {
+        let rpc_clients_nss = ConnPool::new();
+        for _ in 0..Self::NSS_CONNECTION_POOL_SIZE {
+            let stream = TcpStream::connect(nss_addr).await.unwrap();
+            let client = Arc::new(RpcClientNss::new(stream).await.unwrap());
+            rpc_clients_nss.pooled(nss_addr, client);
         }
 
         info!(
@@ -103,21 +96,13 @@ impl AppState {
     }
 
     async fn new_rpc_clients_pool_rss(
-        rss_addr: &str,
+        rss_addr: SocketAddr,
     ) -> ConnPool<Arc<rpc_client_rss::RpcClientRss>, SocketAddr> {
-        let resolved_addrs: Vec<SocketAddr> = tokio::net::lookup_host(rss_addr)
-            .await
-            .expect("Failed to resolve RSS RPC server address")
-            .collect();
-
-        assert!(!resolved_addrs.is_empty());
-        let rpc_clients_rss = ConnPool::new(Self::RSS_CONNECTION_POOL_SIZE);
-        for addr in resolved_addrs {
-            if let Some(connecting) = rpc_clients_rss.connecting(&addr) {
-                let stream = TcpStream::connect(addr).await.unwrap();
-                let client = Arc::new(rpc_client_rss::RpcClientRss::new(stream).await.unwrap());
-                rpc_clients_rss.pooled(connecting, client);
-            }
+        let rpc_clients_rss = ConnPool::new();
+        for _ in 0..Self::RSS_CONNECTION_POOL_SIZE {
+            let stream = TcpStream::connect(rss_addr).await.unwrap();
+            let client = Arc::new(rpc_client_rss::RpcClientRss::new(stream).await.unwrap());
+            rpc_clients_rss.pooled(rss_addr, client);
         }
 
         info!(
@@ -127,22 +112,14 @@ impl AppState {
         rpc_clients_rss
     }
 
-    pub async fn get_rpc_client_nss(&self) -> impl Deref<Target = Arc<RpcClientNss>> {
+    pub async fn checkout_rpc_client_nss(&self) -> Arc<RpcClientNss> {
         let start = Instant::now();
         let res = self
             .rpc_clients_nss
-            .checkout(
-                self.config
-                    .nss_addr
-                    .split(',')
-                    .next()
-                    .unwrap()
-                    .parse()
-                    .unwrap(),
-            )
+            .checkout(self.config.nss_addr)
             .await
             .unwrap();
-        histogram!("get_rpc_client_nanos", "type" => "nss")
+        histogram!("checkout_rpc_client_nanos", "type" => "nss")
             .record(start.elapsed().as_nanos() as f64);
         res
     }
@@ -151,24 +128,14 @@ impl AppState {
         self.blob_client.clone()
     }
 
-    pub async fn get_rpc_client_rss(
-        &self,
-    ) -> impl Deref<Target = Arc<rpc_client_rss::RpcClientRss>> {
+    pub async fn checkout_rpc_client_rss(&self) -> Arc<rpc_client_rss::RpcClientRss> {
         let start = Instant::now();
         let res = self
             .rpc_clients_rss
-            .checkout(
-                self.config
-                    .rss_addr
-                    .split(',')
-                    .next()
-                    .unwrap()
-                    .parse()
-                    .unwrap(),
-            )
+            .checkout(self.config.rss_addr)
             .await
             .unwrap();
-        histogram!("get_rpc_client_nanos", "type" => "rss")
+        histogram!("checkout_rpc_client_nanos", "type" => "rss")
             .record(start.elapsed().as_nanos() as f64);
         res
     }
@@ -180,30 +147,22 @@ pub struct BlobClient {
     s3_cache_bucket: String,
     #[allow(dead_code)]
     blob_deletion_task_handle: JoinHandle<()>,
-    bss_addr: String,
+    bss_addr: SocketAddr,
 }
 
 impl BlobClient {
     const BSS_CONNECTION_POOL_SIZE: usize = 64;
 
     pub async fn new(
-        bss_addr: &str,
+        bss_addr: SocketAddr,
         config: &S3CacheConfig,
         rx: Receiver<(BlobId, usize)>,
     ) -> Self {
-        let resolved_addrs: Vec<SocketAddr> = tokio::net::lookup_host(bss_addr)
-            .await
-            .expect("Failed to resolve BSS RPC server address")
-            .collect();
-
-        assert!(!resolved_addrs.is_empty());
-        let clients_bss = ConnPool::new(Self::BSS_CONNECTION_POOL_SIZE);
-        for addr in resolved_addrs {
-            if let Some(connecting) = clients_bss.connecting(&addr) {
-                let stream = TcpStream::connect(addr).await.unwrap();
-                let client = Arc::new(RpcClientBss::new(stream).await.unwrap());
-                clients_bss.pooled(connecting, client);
-            }
+        let clients_bss = ConnPool::new();
+        for _ in 0..Self::BSS_CONNECTION_POOL_SIZE {
+            let stream = TcpStream::connect(bss_addr).await.unwrap();
+            let client = Arc::new(RpcClientBss::new(stream).await.unwrap());
+            clients_bss.pooled(bss_addr, client);
         }
 
         info!(
@@ -228,7 +187,6 @@ impl BlobClient {
 
         let blob_deletion_task_handle = tokio::spawn({
             let clients_bss = clients_bss.clone();
-            let bss_addr = bss_addr.to_string();
             async move {
                 if let Err(e) = Self::blob_deletion_task(clients_bss, rx, bss_addr).await {
                     tracing::error!("FATAL: blob deletion task error: {e}");
@@ -241,25 +199,21 @@ impl BlobClient {
             client_s3,
             s3_cache_bucket: config.s3_bucket.clone(),
             blob_deletion_task_handle,
-            bss_addr: bss_addr.to_string(),
+            bss_addr,
         }
     }
 
     async fn blob_deletion_task(
         clients_bss: ConnPool<Arc<RpcClientBss>, SocketAddr>,
         mut input: Receiver<(BlobId, usize)>,
-        bss_addr: String,
+        bss_addr: SocketAddr,
     ) -> Result<(), RpcErrorBss> {
         while let Some((blob_id, block_numbers)) = input.recv().await {
             let deleted = stream::iter(0..block_numbers)
                 .map(|block_number| {
                     let clients_bss = clients_bss.clone();
-                    let bss_addr = bss_addr.clone();
                     async move {
-                        let rpc_client_bss = clients_bss
-                            .checkout(bss_addr.parse().unwrap())
-                            .await
-                            .unwrap();
+                        let rpc_client_bss = clients_bss.checkout(bss_addr).await.unwrap();
                         let res = rpc_client_bss
                             .delete_blob(blob_id, block_number as u32)
                             .await;
@@ -290,12 +244,8 @@ impl BlobClient {
         body: Bytes,
     ) -> Result<usize, RpcErrorBss> {
         let start = Instant::now();
-        let rpc_client_bss = self
-            .clients_bss
-            .checkout(self.bss_addr.parse().unwrap())
-            .await
-            .unwrap();
-        histogram!("get_rpc_client_nanos", "type" => "bss")
+        let rpc_client_bss = self.clients_bss.checkout(self.bss_addr).await.unwrap();
+        histogram!("checkout_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         if block_number == 0 && body.len() < ObjectLayout::DEFAULT_BLOCK_SIZE as usize {
             return rpc_client_bss.put_blob(blob_id, block_number, body).await;
@@ -322,12 +272,8 @@ impl BlobClient {
         body: &mut Bytes,
     ) -> Result<usize, RpcErrorBss> {
         let start = Instant::now();
-        let rpc_client_bss = self
-            .clients_bss
-            .checkout(self.bss_addr.parse().unwrap())
-            .await
-            .unwrap();
-        histogram!("get_rpc_client_nanos", "type" => "bss")
+        let rpc_client_bss = self.clients_bss.checkout(self.bss_addr).await.unwrap();
+        histogram!("checkout_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         rpc_client_bss.get_blob(blob_id, block_number, body).await
     }
@@ -335,12 +281,8 @@ impl BlobClient {
     pub async fn delete_blob(&self, blob_id: Uuid, block_number: u32) -> Result<(), RpcErrorBss> {
         let start = Instant::now();
         let s3_key = format!("{blob_id}-{block_number}");
-        let rpc_client_bss = self
-            .clients_bss
-            .checkout(self.bss_addr.parse().unwrap())
-            .await
-            .unwrap();
-        histogram!("get_rpc_client_nanos", "type" => "bss")
+        let rpc_client_bss = self.clients_bss.checkout(self.bss_addr).await.unwrap();
+        histogram!("checkout_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         let (res_s3, res_bss) = tokio::join!(
             self.client_s3

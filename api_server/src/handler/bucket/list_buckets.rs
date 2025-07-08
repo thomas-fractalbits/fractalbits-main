@@ -89,7 +89,7 @@ pub async fn list_buckets_handler(
     request: Request,
 ) -> Result<Response, S3Error> {
     let Query(_opts): Query<ListBucketsOptions> = request.into_parts().0.extract().await?;
-    let rpc_client_rss = app.get_rpc_client_rss().await;
+    let rpc_client_rss = app.checkout_rpc_client_rss().await;
     let bucket_table: Table<RpcClientRss, BucketTable> =
         Table::new(&rpc_client_rss, Some(app.cache.clone()));
     let buckets: Vec<Bucket> = bucket_table

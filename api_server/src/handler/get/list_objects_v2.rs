@@ -260,7 +260,7 @@ pub async fn list_objects(
     delimiter: String,
     start_after: String,
 ) -> Result<(Vec<Object>, Vec<Prefix>, Option<String>), S3Error> {
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss
         .list_inodes(
             bucket.root_blob_name.clone(),

@@ -18,7 +18,7 @@ pub async fn abort_multipart_upload_handler(
     key: String,
     _upload_id: String,
 ) -> Result<Response, S3Error> {
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss
         .get_inode(bucket.root_blob_name.clone(), key.clone())
         .await?;

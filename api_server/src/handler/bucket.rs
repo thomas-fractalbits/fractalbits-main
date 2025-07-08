@@ -20,7 +20,7 @@ use std::time::Instant;
 
 pub async fn resolve_bucket(app: &AppState, bucket_name: String) -> Result<Bucket, S3Error> {
     let start = Instant::now();
-    let rpc_client_rss = app.get_rpc_client_rss().await;
+    let rpc_client_rss = app.checkout_rpc_client_rss().await;
     let bucket_table: Table<RpcClientRss, BucketTable> =
         Table::new(&rpc_client_rss, Some(app.cache.clone()));
     let duration = start.elapsed();

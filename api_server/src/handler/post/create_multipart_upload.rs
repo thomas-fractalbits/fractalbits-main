@@ -57,7 +57,7 @@ pub async fn create_multipart_upload_handler(
         state: ObjectState::Mpu(MpuState::Uploading),
     };
     let object_layout_bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new())?;
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let _resp = rpc_client_nss
         .put_inode(
             bucket.root_blob_name.clone(),

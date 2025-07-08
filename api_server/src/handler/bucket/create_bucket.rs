@@ -1,7 +1,13 @@
 use std::sync::Arc;
 
 use axum::{body::Body, http::header, response::Response};
-use bucket_tables::{api_key_table::{ApiKey, ApiKeyTable}, bucket_table::{Bucket, BucketTable}, permission::BucketKeyPerm, table::Table, Versioned};
+use bucket_tables::{
+    api_key_table::{ApiKey, ApiKeyTable},
+    bucket_table::{Bucket, BucketTable},
+    permission::BucketKeyPerm,
+    table::Table,
+    Versioned,
+};
 use bytes::Buf;
 use rpc_client_nss::rpc::create_root_inode_response;
 use rpc_client_rss::{RpcClientRss, RpcErrorRss};
@@ -69,7 +75,7 @@ pub async fn create_bucket_handler(
         }
     }
 
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss
         .create_root_inode(bucket_name.clone())
         .await?;
@@ -83,7 +89,7 @@ pub async fn create_bucket_handler(
 
     let retry_times = 10;
     for i in 0..retry_times {
-        let rpc_client_rss = app.get_rpc_client_rss().await;
+        let rpc_client_rss = app.checkout_rpc_client_rss().await;
         let bucket_table: Table<RpcClientRss, BucketTable> =
             Table::new(&rpc_client_rss, Some(app.cache.clone()));
         if bucket_table.get(bucket_name.clone(), false).await.is_ok() {

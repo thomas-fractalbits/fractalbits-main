@@ -29,7 +29,7 @@ pub async fn get_raw_object(
     root_blob_name: String,
     key: String,
 ) -> Result<ObjectLayout, S3Error> {
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss.get_inode(root_blob_name, key).await?;
 
     let object_bytes = match resp.result.unwrap() {
@@ -56,7 +56,7 @@ pub async fn list_raw_objects(
     start_after: String,
     skip_mpu_parts: bool,
 ) -> Result<Vec<(String, ObjectLayout)>, S3Error> {
-    let rpc_client_nss = app.get_rpc_client_nss().await;
+    let rpc_client_nss = app.checkout_rpc_client_nss().await;
     let resp = rpc_client_nss
         .list_inodes(
             root_blob_name,
