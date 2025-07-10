@@ -9,7 +9,7 @@ use api_server::{
 use axum::{extract::Request, routing, serve::ListenerExt};
 use clap::Parser;
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 #[derive(Parser)]
 #[clap(name = "api_server", about = "API server")]
@@ -30,8 +30,12 @@ async fn main() {
             tracing_subscriber::fmt::layer()
                 .with_file(true)
                 .with_line_number(true)
-                .without_time(),
+                .without_time()
+                .with_filter(tracing_subscriber::filter::LevelFilter::ERROR),
         )
+        .with(tracing_subscriber::fmt::layer().without_time().with_filter(
+            tracing_subscriber::filter::filter_fn(|meta| *meta.level() != tracing::Level::ERROR),
+        ))
         .init();
 
     #[cfg(feature = "metrics_statsd")]
