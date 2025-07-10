@@ -11,6 +11,7 @@ pub fn bootstrap(
     download_binaries(&[
         "api_server",
         "warp", // for e2e benchmark testing
+        "perf",
     ])?;
     create_config(bucket_name, bss_ip, nss_ip, rss_ip)?;
     for (role, ip) in [("bss", bss_ip), ("rss", rss_ip), ("nss", nss_ip)] {
