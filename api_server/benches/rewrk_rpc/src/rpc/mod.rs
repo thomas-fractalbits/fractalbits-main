@@ -221,7 +221,7 @@ async fn benchmark_bss_write(
 
         let mut futures = Vec::new();
         for _ in 0..io_depth {
-            let content = Bytes::from(vec![0; 8192 - 256]);
+            let content = Bytes::from(vec![0; 4096 - 256]);
             let uuid = match uuids.pop_front() {
                 Some(uuid) => uuid,
                 None => break,
