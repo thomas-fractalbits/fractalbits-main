@@ -4,8 +4,8 @@ use aws_sdk_s3::{Client, Config};
 use cmd_lib::*;
 
 const DEFAULT_PORT: u16 = 8080;
-const TEST_KEY: &'static str = "test_api_key";
-const TEST_SECRET: &'static str = "test_api_secret";
+const TEST_KEY: &str = "test_api_key";
+const TEST_SECRET: &str = "test_api_secret";
 
 #[allow(dead_code)]
 struct Service;

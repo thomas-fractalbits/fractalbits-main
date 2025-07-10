@@ -10,6 +10,7 @@ use common::Context;
 use rstest::*;
 
 // The test structure is identical for all supported checksum algorithms
+#[allow(clippy::too_many_arguments)]
 async fn test_checksum(
     ctx: &Context,
     bucket: &str,
@@ -68,7 +69,7 @@ async fn test_checksum(
         })
         .send()
         .await
-        .expect(&format!("put_object failed: (bucket={bucket}, key={key})"));
+        .unwrap_or_else(|_| panic!("put_object failed: (bucket={bucket}, key={key})"));
 
     ctx.client
         .get_object()

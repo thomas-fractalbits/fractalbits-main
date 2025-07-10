@@ -179,7 +179,7 @@ impl Poolable for RpcClient {
         })
         .await?;
 
-        Ok(RpcClient::new(stream).await.unwrap().into())
+        Ok(RpcClient::new(stream).await.unwrap())
     }
 
     fn is_open(&self) -> bool {

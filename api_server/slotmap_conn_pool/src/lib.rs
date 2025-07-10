@@ -29,8 +29,8 @@ impl<T: Poolable + Sync> Poolable for Arc<T> {
         self.deref().is_open()
     }
 
-    fn new(addr_key: Self::AddrKey) -> impl Future<Output = Result<Self, Self::Error>> + Send {
-        async { T::new(addr_key).await.map(Arc::new) }
+    async fn new(addr_key: Self::AddrKey) -> Result<Self, Self::Error> {
+        T::new(addr_key).await.map(Arc::new)
     }
 }
 
@@ -46,11 +46,13 @@ pub struct ConnPool<T, K: Key> {
     inner: Arc<Mutex<ConnPoolInner<T, K>>>,
 }
 
+type RecreatingFuture<T> = Pin<Box<dyn Future<Output = Result<T, <T as Poolable>::Error>> + Send>>;
+
 pub struct Checkout<T: Poolable, K: Key> {
     pool: ConnPool<T, K>,
     addr_key: K,
     conn_key: ConnectionKey,
-    recreating: Option<Pin<Box<dyn Future<Output = Result<T, <T as Poolable>::Error>> + Send>>>,
+    recreating: Option<RecreatingFuture<T>>,
 }
 
 impl<T, K: Key> Clone for ConnPool<T, K> {
@@ -211,8 +213,8 @@ mod tests {
 
         type AddrKey = MockKey;
 
-        fn new(addr_key: Self::AddrKey) -> impl Future<Output = Result<Self, Self::Error>> + Send {
-            async move { Ok(mock_conn(addr_key.0.parse().unwrap())) }
+        async fn new(addr_key: Self::AddrKey) -> Result<Self, Self::Error> {
+            Ok(mock_conn(addr_key.0.parse().unwrap()))
         }
     }
 

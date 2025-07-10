@@ -27,7 +27,7 @@ async fn test_basic_blob_io_with_fixed_bytes() {
         let mut readback_content = Bytes::new();
         let content_len = content.len();
         let size = rpc_client
-            .put_blob(blob_id.clone(), 0, content.clone())
+            .put_blob(blob_id, 0, content.clone())
             .await
             .unwrap();
         assert_eq!(header_len + content_len, size);
@@ -63,7 +63,7 @@ async fn test_basic_blob_io_with_random_bytes() {
         let mut readback_content = Bytes::new();
         let content_len = content.len();
         let size = rpc_client
-            .put_blob(blob_id.clone(), 0, content.clone())
+            .put_blob(blob_id, 0, content.clone())
             .await
             .unwrap();
         assert_eq!(header_len + content_len, size);

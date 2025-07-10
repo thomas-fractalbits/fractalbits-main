@@ -48,6 +48,6 @@ async fn test_basic_bucket_apis() {
 
     let buckets = ctx.list_buckets().await.buckets.unwrap();
     // Note we may have concurrent tests running, so just do basic testing here
-    assert!(buckets.len() >= 1);
+    assert!(!buckets.is_empty());
     ctx.delete_bucket(&bucket).await;
 }
