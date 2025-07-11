@@ -1521,6 +1521,7 @@ dependencies = [
  "aws-sdk-dynamodb",
  "aws-sdk-ec2",
  "chrono",
+ "clap 4.5.27",
  "env_logger 0.11.6",
  "log",
  "openssl",

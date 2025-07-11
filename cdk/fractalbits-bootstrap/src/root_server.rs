@@ -14,7 +14,8 @@ pub fn bootstrap(
 ) -> CmdResult {
     install_rpms(&["amazon-cloudwatch-agent", "perf"])?;
     download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
-    run_cmd!($BIN_PATH/rss_admin api-key init-test)?;
+    let region = get_current_aws_region()?;
+    run_cmd!($BIN_PATH/rss_admin --region=$region api-key init-test)?;
 
     create_rss_config()?;
     create_systemd_unit_file("root_server", true)?;
