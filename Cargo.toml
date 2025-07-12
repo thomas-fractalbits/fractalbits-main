@@ -90,6 +90,7 @@ metrics-exporter-prometheus = "0.17.2"
 tokio-retry = "0.3"
 moka = { version = "0.12", features = ["future"] }
 slotmap = "1.0"
+mimalloc = "0.1.47"
 
 # Dev dependencies
 aws-sdk-s3 = "1.65.0"
