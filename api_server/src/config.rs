@@ -51,7 +51,7 @@ impl Default for Config {
             region: "us-west-1".into(),
             root_domain: ".localhost".into(),
             s3_cache: S3CacheConfig::default(),
-            with_metrics: true,
+            with_metrics: false,
         }
     }
 }
