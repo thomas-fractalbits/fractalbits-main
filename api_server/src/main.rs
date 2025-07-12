@@ -9,6 +9,7 @@ use api_server::{
 use axum::{extract::Request, routing, serve::ListenerExt};
 use clap::Parser;
 use tower_http::trace::TraceLayer;
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 #[derive(Parser)]
@@ -43,10 +44,12 @@ async fn main() {
         use metrics_exporter_statsd::StatsdBuilder;
         // Initialize StatsD metrics exporter
         let recorder = StatsdBuilder::from("127.0.0.1", 8125)
+            .with_buffer_size(1)
             .build(None)
             .expect("Could not build StatsD recorder");
         metrics::set_global_recorder(Box::new(recorder))
             .expect("Could not install StatsD exporter");
+        info!("Metrics exporter for StatsD installed");
     }
     #[cfg(feature = "metrics_prometheus")]
     {
@@ -56,6 +59,7 @@ async fn main() {
             .with_http_listener("0.0.0.0:8085".parse::<SocketAddr>().unwrap())
             .install()
             .expect("Could not build Prometheus recorder");
+        info!("Metrics exporter for Prometheus installed");
     }
 
     let opt = Opt::parse();
@@ -93,7 +97,7 @@ async fn main() {
             }
         });
 
-    tracing::info!("Server started at port {port}");
+    info!("Server started at port {port}");
     if let Err(e) = axum::serve(listener, app).await {
         tracing::error!("Server stopped: {e}");
     }

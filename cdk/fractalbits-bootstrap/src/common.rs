@@ -9,6 +9,7 @@ pub const ROOT_SERVER_CONFIG: &str = "root_server_cloud_config.toml";
 pub const BENCH_SERVER_WORKLOAD_CONFIG: &str = "bench_workload.yaml";
 pub const BENCH_SERVER_BENCH_START_SCRIPT: &str = "bench_start.sh";
 pub const BOOTSTRAP_DONE_FILE: &str = "/opt/fractalbits/.bootstrap_done";
+pub const CLOUDWATCH_AGENT_CONFIG: &str = "cloudwatch_agent_config.json";
 
 pub fn download_binaries(file_list: &[&str]) -> CmdResult {
     for file_name in file_list {
@@ -226,6 +227,59 @@ pub fn install_rpms(rpms: &[&str]) -> CmdResult {
     run_cmd! {
         info "Installing ${rpms:?}";
         yum install -y -q $[rpms] >/dev/null;
+    }?;
+
+    Ok(())
+}
+
+fn create_cloudwatch_agent_config() -> CmdResult {
+    let aws_region = get_current_aws_region()?;
+    let content = format!(
+        r##"{{
+  "agent": {{
+    "region": "{aws_region}",
+    "run_as_user": "root",
+    "debug": false
+  }},
+  "metrics": {{
+    "namespace": "Vpc/Fractalbits",
+    "metrics_collected": {{
+      "statsd": {{
+        "metrics_aggregation_interval": 60,
+        "metrics_collection_interval": 10,
+        "service_address": ":8125"
+      }},
+      "cpu": {{
+        "measurement": [
+          "cpu_usage_idle"
+        ],
+        "metrics_collection_interval": 60,
+        "resources": [
+          "*"
+        ],
+        "totalcpu": true
+      }}
+    }}
+  }}
+}}"##
+    );
+
+    run_cmd! {
+        echo $content > $ETC_PATH/$CLOUDWATCH_AGENT_CONFIG;
+    }?;
+
+    Ok(())
+}
+
+pub fn setup_cloudwtach_agent() -> CmdResult {
+    create_cloudwatch_agent_config()?;
+
+    run_cmd! {
+        info "Creating CloudWatch agent configuration files";
+        /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+            -a fetch-config -m ec2 -c file:$ETC_PATH/$CLOUDWATCH_AGENT_CONFIG;
+        info "Enabling Cloudwatch agent service";
+        systemctl enable --now amazon-cloudwatch-agent;
     }?;
 
     Ok(())

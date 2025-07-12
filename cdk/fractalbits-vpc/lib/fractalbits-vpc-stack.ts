@@ -41,8 +41,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
       service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
     });
 
-    // Add Interface Endpoint for EC2 and SSM
-    ['SSM', 'SSM_MESSAGES', 'EC2', 'EC2_MESSAGES'].forEach(service => {
+    // Add Interface Endpoint for EC2, SSM, and CloudWatch
+    ['SSM', 'SSM_MESSAGES', 'EC2', 'EC2_MESSAGES', 'CLOUDWATCH', 'CLOUDWATCH_LOGS'].forEach(service => {
       this.vpc.addInterfaceEndpoint(`${service}Endpoint`, {
         service: (ec2.InterfaceVpcEndpointAwsService as any)[service],
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },

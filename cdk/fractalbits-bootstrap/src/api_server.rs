@@ -36,6 +36,7 @@ pub fn bootstrap(
         }?;
     }
 
+    setup_cloudwtach_agent()?;
     create_systemd_unit_file("api_server", true)?;
     Ok(())
 }
