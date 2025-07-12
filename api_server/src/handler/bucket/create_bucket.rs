@@ -12,6 +12,7 @@ use bytes::Buf;
 use rpc_client_nss::rpc::create_root_inode_response;
 use rpc_client_rss::RpcErrorRss;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::{
     handler::{common::s3_error::S3Error, Request},
@@ -51,6 +52,7 @@ pub async fn create_bucket_handler(
     bucket_name: String,
     request: Request,
 ) -> Result<Response, S3Error> {
+    info!("handling create_bucket request: {bucket_name}");
     let api_key_id = {
         if api_key.data.authorized_buckets.contains_key(&bucket_name) {
             return Err(S3Error::BucketAlreadyOwnedByYou);

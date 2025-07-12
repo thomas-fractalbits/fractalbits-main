@@ -9,6 +9,7 @@ use bucket_tables::{
 };
 use rpc_client_nss::rpc::delete_root_inode_response;
 use rpc_client_rss::RpcErrorRss;
+use tracing::info;
 
 use crate::handler::{common::s3_error::S3Error, Request};
 use crate::AppState;
@@ -19,6 +20,7 @@ pub async fn delete_bucket_handler(
     bucket: &Bucket,
     _request: Request,
 ) -> Result<Response, S3Error> {
+    info!("handling delete_bucket request: {}", bucket.bucket_name);
     let api_key_id = {
         if !api_key
             .data

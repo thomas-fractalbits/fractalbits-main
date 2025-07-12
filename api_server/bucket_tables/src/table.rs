@@ -122,9 +122,9 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
                         serde_json::from_slice(json.data.as_bytes()).unwrap(),
                     )
                         .into());
+                } else {
+                    counter!("table_cache_miss", "table_name" => F::TABLE_NAME).increment(1);
                 }
-            } else {
-                counter!("table_cache_miss", "table_name" => F::TABLE_NAME).increment(1);
             }
         }
 
@@ -132,8 +132,12 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
             .kv_client_provider
             .get_client()
             .await
-            .get(full_key)
+            .get(full_key.clone())
             .await?;
+
+        if let Some(ref cache) = self.cache {
+            cache.insert(full_key, json.clone()).await;
+        }
         Ok((
             json.version,
             serde_json::from_slice(json.data.as_bytes()).unwrap(),
