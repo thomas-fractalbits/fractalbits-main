@@ -54,7 +54,7 @@ macro_rules! extract_or_return {
 
 pub async fn any_handler(
     State(app): State<Arc<AppState>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
     request: http::Request<Body>,
 ) -> Response {
     let start = Instant::now();
@@ -66,7 +66,7 @@ pub async fn any_handler(
     let api_sig = extract_or_return!(&mut parts, &app, ApiSignature);
     let request = http::Request::from_parts(parts, body);
 
-    tracing::debug!(%bucket, %key, %addr);
+    tracing::debug!(%bucket, %key, %client_addr);
 
     let resource = format!("/{bucket}{key}");
     let endpoint =
@@ -78,6 +78,7 @@ pub async fn any_handler(
                     %key,
                     %api_cmd,
                     %api_sig,
+                    %client_addr,
                     error = ?e,
                     "failed to create endpoint"
                 );
@@ -103,6 +104,7 @@ pub async fn any_handler(
                 %bucket,
                 %key,
                 %endpoint,
+                %client_addr,
                 error = ?e,
                 "failed to handle request"
             );
