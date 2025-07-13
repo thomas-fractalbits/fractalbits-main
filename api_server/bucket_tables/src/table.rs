@@ -136,7 +136,9 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
             .await?;
 
         if let Some(ref cache) = self.cache {
-            cache.insert(full_key, json.clone()).await;
+            if try_cache {
+                cache.insert(full_key, json.clone()).await;
+            }
         }
         Ok((
             json.version,
