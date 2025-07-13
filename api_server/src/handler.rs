@@ -62,21 +62,21 @@ pub async fn any_handler(
     let (mut parts, body) = request.into_parts();
     let ApiCommandFromQuery(api_cmd) = extract_or_return!(&mut parts, &app, ApiCommandFromQuery);
     let auth = extract_or_return!(&mut parts, &app, Authentication);
-    let BucketNameAndKey { bucket_name, key } =
-        extract_or_return!(&mut parts, &app, BucketNameAndKey);
+    let BucketAndKeyName { bucket, key } = extract_or_return!(&mut parts, &app, BucketAndKeyName);
     let api_sig = extract_or_return!(&mut parts, &app, ApiSignature);
     let request = http::Request::from_parts(parts, body);
 
-    tracing::debug!(%bucket_name, %key, %addr);
+    tracing::debug!(%bucket, %key, %addr);
 
-    let resource = format!("/{bucket_name}{key}");
+    let resource = format!("/{bucket}{key}");
     let endpoint =
-        match Endpoint::from_extractors(&request, &bucket_name, &key, api_cmd, api_sig.clone()) {
+        match Endpoint::from_extractors(&request, &bucket, &key, api_cmd, api_sig.clone()) {
             Err(e) => {
+                let api_cmd = api_cmd.map_or("".into(), |cmd| cmd.to_string());
                 tracing::error!(
-                    %bucket_name,
+                    %bucket,
                     %key,
-                    ?api_cmd,
+                    %api_cmd,
                     %api_sig,
                     error = ?e,
                     "failed to create endpoint"
@@ -86,15 +86,7 @@ pub async fn any_handler(
             Ok(endpoint) => endpoint,
         };
     let endpoint_name = endpoint.as_str();
-    let result = any_handler_inner(
-        app,
-        bucket_name.clone(),
-        key.clone(),
-        auth,
-        request,
-        endpoint,
-    )
-    .await;
+    let result = any_handler_inner(app, bucket.clone(), key.clone(), auth, request, endpoint).await;
 
     let duration = start.elapsed();
     let endpoint = endpoint_name;
@@ -108,7 +100,7 @@ pub async fn any_handler(
             histogram!("request_duration_nanos", "status" => format!("{endpoint}_Err"))
                 .record(duration.as_nanos() as f64);
             tracing::error!(
-                %bucket_name,
+                %bucket,
                 %key,
                 %endpoint,
                 error = ?e,

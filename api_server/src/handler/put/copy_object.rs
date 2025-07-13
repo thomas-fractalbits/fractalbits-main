@@ -5,7 +5,7 @@ use crate::{
         bucket,
         common::{
             get_raw_object,
-            request::extract::BucketNameAndKey,
+            request::extract::BucketAndKeyName,
             response::xml::{Xml, XmlnsS3},
             s3_error::S3Error,
             signature::{body::ReqBody, checksum::ChecksumValue},
@@ -228,7 +228,7 @@ async fn get_copy_source_object(
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;
 
     let (source_bucket_name, source_key) =
-        BucketNameAndKey::get_bucket_and_key_from_path(&copy_source);
+        BucketAndKeyName::get_bucket_and_key_from_path(&copy_source);
 
     if !api_key.data.allow_read(&source_bucket_name) {
         return Err(S3Error::AccessDenied);

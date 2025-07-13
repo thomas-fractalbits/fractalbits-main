@@ -7,20 +7,20 @@ use axum_extra::extract::Host;
 
 use crate::{config::ArcConfig, handler::common::s3_error::S3Error};
 
-pub struct BucketNameAndKey {
-    pub bucket_name: String,
+pub struct BucketAndKeyName {
+    pub bucket: String,
     pub key: String,
 }
 
-impl BucketNameAndKey {
+impl BucketAndKeyName {
     async fn buket_name_from_host(
         parts: &mut Parts,
         config: ArcConfig,
     ) -> Result<Option<String>, S3Error> {
         let Host(host) = parts.extract::<Host>().await?;
         let authority: Authority = host.parse::<Authority>()?;
-        let bucket_name = authority.host().strip_suffix(&config.root_domain);
-        Ok(bucket_name.map(|s| s.to_owned()))
+        let bucket = authority.host().strip_suffix(&config.root_domain);
+        Ok(bucket.map(|s| s.to_owned()))
     }
 
     pub fn get_bucket_and_key_from_path(full_key: &str) -> (String, String) {
@@ -42,7 +42,7 @@ impl BucketNameAndKey {
     }
 }
 
-impl<S> FromRequestParts<S> for BucketNameAndKey
+impl<S> FromRequestParts<S> for BucketAndKeyName
 where
     ArcConfig: FromRef<S>,
     S: Send + Sync,
@@ -52,9 +52,9 @@ where
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let full_key = parts.uri.path().to_owned();
         let config = ArcConfig::from_ref(state);
-        let (bucket_name, key) = match Self::buket_name_from_host(parts, config).await? {
+        let (bucket, key) = match Self::buket_name_from_host(parts, config).await? {
             // Virtual-hosted-style request
-            Some(bucket_name) => (bucket_name, full_key),
+            Some(bucket) => (bucket, full_key),
             // Path-style request
             None => Self::get_bucket_and_key_from_path(&full_key),
         };
@@ -66,7 +66,7 @@ where
 
         check_key_name(&key)?;
 
-        Ok(Self { bucket_name, key })
+        Ok(Self { bucket, key })
     }
 }
 
@@ -101,7 +101,12 @@ mod tests {
             .with_state(config)
     }
 
-    async fn handler(BucketNameAndKey { bucket_name, .. }: BucketNameAndKey) -> String {
+    async fn handler(
+        BucketAndKeyName {
+            bucket: bucket_name,
+            ..
+        }: BucketAndKeyName,
+    ) -> String {
         bucket_name
     }
 
