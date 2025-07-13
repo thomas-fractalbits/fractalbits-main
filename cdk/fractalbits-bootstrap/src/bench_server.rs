@@ -47,8 +47,8 @@ fn create_workload_config(service_endpoint: &str, client_ips: &Vec<String>) -> C
       enabled: false
       dur: 10s
       pct: 7.5
-    no-clear: false
-    keep-data: false
+    no-clear: true
+    keep-data: true
 "##
     );
     run_cmd! {
