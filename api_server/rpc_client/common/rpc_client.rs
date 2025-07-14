@@ -6,13 +6,15 @@ use std::net::SocketAddr;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::{
     self,
+    io::AsyncWriteExt,
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
     net::TcpStream,
-    sync::{oneshot, RwLock},
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        oneshot, RwLock,
+    },
     task::JoinHandle,
 };
 use tokio_stream::StreamExt;
@@ -23,6 +25,13 @@ use crate::message::MessageHeader;
 use slotmap_conn_pool::Poolable;
 use tokio_retry::{strategy::ExponentialBackoff, Retry};
 use tracing::{debug, error, warn};
+
+#[cfg(feature = "nss")]
+const RPC_TYPE: &'static str = "nss";
+#[cfg(feature = "bss")]
+const RPC_TYPE: &'static str = "bss";
+#[cfg(feature = "rss")]
+const RPC_TYPE: &'static str = "rss";
 
 const MAX_CONNECTION_RETRIES: usize = 5; // Max attempts to connect to an RPC server
 
@@ -44,9 +53,17 @@ pub enum RpcError {
     InternalResponseError(String),
     #[error("Entry not found")]
     NotFound,
+    #[error("Send error: {0}")]
+    SendError(String),
     #[cfg(feature = "rss")] // for etcd txn api
     #[error("Retry")]
     Retry,
+}
+
+impl<T> From<mpsc::error::SendError<T>> for RpcError {
+    fn from(e: mpsc::error::SendError<T>) -> Self {
+        RpcError::SendError(e.to_string())
+    }
 }
 
 pub enum Message {
@@ -113,6 +130,7 @@ impl RpcClient {
                     Some(tx) => tx,
                     None => continue, // we may have received the response already
                 };
+            gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).decrement(1.0);
             if tx.send(frame).is_err() {
                 warn!(%request_id, "oneshot response send failed");
             }
@@ -126,20 +144,21 @@ impl RpcClient {
         mut input: Receiver<Message>,
     ) -> Result<(), RpcError> {
         while let Some(message) = input.recv().await {
+            gauge!("rpc_request_pending_in_send_queue", "type" => RPC_TYPE).decrement(1.0);
             match message {
                 Message::Bytes(mut bytes) => {
-                    sender.write_all_buf(&mut bytes).await.unwrap();
+                    sender.write_all_buf(&mut bytes).await?;
                 }
                 Message::Frame(mut frame) => {
                     let mut header_bytes = BytesMut::with_capacity(MessageHeader::SIZE);
                     frame.header.encode(&mut header_bytes);
-                    sender.write_all_buf(&mut header_bytes).await.unwrap();
+                    sender.write_all_buf(&mut header_bytes).await?;
                     if !frame.body.is_empty() {
-                        sender.write_all_buf(&mut frame.body).await.unwrap();
+                        sender.write_all_buf(&mut frame.body).await?;
                     }
                 }
             }
-            sender.flush().await.unwrap();
+            sender.flush().await?;
         }
         Ok(())
     }
@@ -149,11 +168,13 @@ impl RpcClient {
         request_id: u32,
         msg: Message,
     ) -> Result<MessageFrame, RpcError> {
-        self.sender.send(msg).await.unwrap();
+        self.sender.send(msg).await?;
+        gauge!("rpc_request_pending_in_send_queue", "type" => RPC_TYPE).increment(1.0);
         debug!(%request_id, "request sent from handler:");
 
         let (tx, rx) = oneshot::channel();
         self.requests.write().await.insert(request_id, tx);
+        gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).increment(1.0);
         let timeout_val = std::time::Duration::from_secs(5);
         let result = tokio::time::timeout(timeout_val, rx).await;
         let result = match result {
@@ -187,13 +208,16 @@ impl Poolable for RpcClient {
 
         let stream = Retry::spawn(retry_strategy, move || async move {
             TcpStream::connect(addr_key).await.map_err(|e| {
-                warn!("Failed to connect to RPC server at {}: {}", addr_key, e);
+                warn!(rpc_type=RPC_TYPE, %addr_key, error=%e, "failed to connect RPC server");
                 e
             })
         })
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Self::Error)?;
 
-        Ok(RpcClient::new(stream).await.unwrap())
+        RpcClient::new(stream)
+            .await
+            .map_err(|e| Box::new(e) as Self::Error)
     }
 
     fn is_open(&self) -> bool {
