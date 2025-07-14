@@ -331,7 +331,10 @@ async fn get_full_blob_stream(
             async move {
                 let mut block = Bytes::new();
                 match blob_client.get_blob(blob_id, i as u32, &mut block).await {
-                    Err(e) => Err(axum::Error::new(e)),
+                    Err(e) => {
+                        tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
+                        Err(axum::Error::new(e))
+                    }
                     Ok(_) => Ok(Body::from(block).into_data_stream()),
                 }
             }
@@ -356,7 +359,10 @@ async fn get_range_blob_stream(
             async move {
                 let mut block = Bytes::new();
                 match blob_client.get_blob(blob_id, i as u32, &mut block).await {
-                    Err(e) => Err(axum::Error::new(e)),
+                    Err(e) => {
+                        tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
+                        Err(axum::Error::new(e))
+                    }
                     Ok(_) => Ok(Body::from(block).into_data_stream()),
                 }
             }
