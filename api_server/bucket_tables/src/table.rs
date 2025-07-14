@@ -98,8 +98,8 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
         {
             Ok(_) => {
                 if let Some(ref cache) = self.cache {
-                    cache.insert(full_key, versioned_data).await;
-                    cache.insert(extra_full_key, extra_versioned_data).await;
+                    cache.invalidate(&full_key).await;
+                    cache.invalidate(&extra_full_key).await;
                 }
             }
             Err(e) => return Err(e),
@@ -209,7 +209,7 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
             Ok(()) => {
                 if let Some(ref cache) = self.cache {
                     cache.invalidate(&full_key).await;
-                    cache.insert(extra_full_key, extra_versioned_data).await;
+                    cache.invalidate(&extra_full_key).await;
                 }
             }
             Err(e) => return Err(e),
