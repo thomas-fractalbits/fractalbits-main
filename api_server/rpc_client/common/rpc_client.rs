@@ -1,5 +1,5 @@
 use bytes::{Bytes, BytesMut};
-use metrics::{gauge, Gauge};
+use metrics::{counter, gauge, Gauge};
 use std::collections::HashMap;
 use std::io::{self};
 use std::net::SocketAddr;
@@ -55,7 +55,7 @@ pub enum RpcError {
     NotFound,
     #[error("Send error: {0}")]
     SendError(String),
-    #[cfg(feature = "rss")] // for etcd txn api
+    #[cfg(feature = "rss")] // for rss txn api
     #[error("Retry")]
     Retry,
 }
@@ -125,6 +125,7 @@ impl RpcClient {
             let frame = frame?;
             let request_id = frame.header.id;
             debug!(%request_id, "receiving response:");
+            counter!("rpc_response_received", "type" => RPC_TYPE, "name" => "all").increment(1);
             let tx: oneshot::Sender<MessageFrame> =
                 match requests.write().await.remove(&frame.header.id) {
                     Some(tx) => tx,
@@ -159,6 +160,7 @@ impl RpcClient {
                 }
             }
             sender.flush().await?;
+            counter!("rpc_request_sent", "type" => RPC_TYPE, "name" => "all").increment(1);
         }
         Ok(())
     }
@@ -233,6 +235,8 @@ impl InflightRpcGuard {
     pub fn new(rpc_type: &'static str, rpc_name: &'static str) -> Self {
         let gauge = gauge!("inflight_rpc", "type" => rpc_type, "name" => rpc_name);
         gauge.increment(1.0);
+        counter!("rpc_request_sent", "type" => rpc_type, "name" => rpc_name).increment(1);
+
         Self { gauge }
     }
 }
