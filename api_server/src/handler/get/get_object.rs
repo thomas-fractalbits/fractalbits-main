@@ -8,7 +8,7 @@ use axum::{
     RequestPartsExt,
 };
 use bytes::Bytes;
-use futures::{stream, Stream, StreamExt, TryStreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use serde::Deserialize;
 
 use crate::{
@@ -181,11 +181,8 @@ pub async fn get_object_content(
             let blob_id = object.blob_id()?;
             let num_blocks = object.num_blocks()?;
             let size = object.size()?;
-            let body_stream = get_full_blob_stream(blob_client, blob_id, num_blocks).await?;
-            Ok((
-                Body::from_stream(body_stream.map_err(axum::Error::new)),
-                size,
-            ))
+            let body = get_full_blob_stream(blob_client, blob_id, num_blocks).await?;
+            Ok((body, size))
         }
         ObjectState::Mpu(ref mpu_state) => match mpu_state {
             MpuState::Uploading => {
@@ -225,10 +222,10 @@ pub async fn get_object_content(
                             let num_blocks = mpu_obj.num_blocks().map_err(axum::Error::new)?;
                             get_full_blob_stream(blob_client, blob_id, num_blocks)
                                 .await
-                                .map(|s| s.map_err(axum::Error::new))
                                 .map_err(axum::Error::new)
                         }
                     })
+                    .map_ok(|body| body.into_data_stream())
                     .try_flatten();
                 Ok((Body::from_stream(body_stream), body_size))
             }
@@ -324,8 +321,24 @@ async fn get_full_blob_stream(
     blob_client: Arc<BlobClient>,
     blob_id: BlobId,
     num_blocks: usize,
-) -> Result<impl Stream<Item = Result<Bytes, S3Error>>, S3Error> {
-    let body_stream = stream::iter(0..num_blocks).then(move |i| {
+) -> Result<Body, S3Error> {
+    if num_blocks == 0 {
+        return Ok(Body::empty());
+    }
+
+    // Get the first block
+    let mut first_block = Bytes::new();
+    blob_client
+        .get_blob(blob_id, 0, &mut first_block)
+        .await
+        .map_err(S3Error::from)?;
+
+    if num_blocks == 1 {
+        return Ok(Body::from(first_block));
+    }
+
+    // Stream for remaining blocks
+    let remaining_stream = stream::iter(1..num_blocks).then(move |i| {
         let blob_client = blob_client.clone();
         async move {
             let mut block = Bytes::new();
@@ -338,7 +351,10 @@ async fn get_full_blob_stream(
             }
         }
     });
-    Ok(body_stream)
+
+    let full_stream = stream::once(async { Ok(first_block) }).chain(remaining_stream);
+
+    Ok(Body::from_stream(full_stream.map_err(axum::Error::new)))
 }
 
 async fn get_range_blob_stream(
@@ -427,3 +443,4 @@ fn parse_range_header(
     };
     Ok(range)
 }
+
