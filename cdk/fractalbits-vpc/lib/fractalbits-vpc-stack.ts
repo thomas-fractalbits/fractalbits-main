@@ -116,7 +116,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // Define instance metadata
     const nssInstanceType = ec2.InstanceType.of(ec2.InstanceClass.M7GD, ec2.InstanceSize.XLARGE4);
-    const bssInstanceType = ec2.InstanceType.of(ec2.InstanceClass.M7GD, ec2.InstanceSize.XLARGE4);
+    const bssInstanceType = ec2.InstanceType.of(ec2.InstanceClass.IM4GN, ec2.InstanceSize.XLARGE);
     const rssInstanceType = ec2.InstanceType.of(ec2.InstanceClass.C7G, ec2.InstanceSize.MEDIUM);
     const apiInstanceType = ec2.InstanceType.of(ec2.InstanceClass.C7G, ec2.InstanceSize.LARGE);
     const nssNumNvmeDisks = 1;

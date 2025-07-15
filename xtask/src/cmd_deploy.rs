@@ -20,19 +20,47 @@ pub fn run_cmd_deploy(
     let (rust_build_target, zig_build_target) = if target_arm {
         (
             "aarch64-unknown-linux-gnu",
-            ["-Dtarget=aarch64-linux-gnu", "-Dcpu=neoverse_v1"],
+            [
+                "-Dtarget=aarch64-linux-gnu",
+                "-Dcpu=neoverse_v1",
+                "-Dbss_cpu=neoverse_n1",
+            ],
         )
     } else {
         (
             "x86_64-unknown-linux-gnu",
-            ["-Dtarget=x86_64-linux-gnu", "-Dcpu=cascadelake"],
+            ["-Dtarget=x86_64-linux-gnu", "-Dcpu=cascadelake", ""],
         )
     };
 
     run_cmd! {
         info "Building Rust projects with zigbuild";
-        cargo zigbuild --target $rust_build_target $rust_build_opt;
+    }?;
 
+    if target_arm {
+        // Build fractalbits-bootstrap separately with neoverse_n1
+        run_cmd! {
+            info "Building fractalbits-bootstrap for Graviton2 (neoverse-n1)";
+            RUSTFLAGS="-C target-cpu=neoverse-n1" cargo zigbuild
+                -p fractalbits-bootstrap --target $rust_build_target $rust_build_opt;
+        }?;
+
+        // Build the rest of the workspace
+        run_cmd! {
+            info "Building other Rust projects for Graviton3 (neoverse-v1)";
+            RUSTFLAGS="-C target-cpu=neoverse-v1" cargo zigbuild
+                --workspace --exclude fractalbits-bootstrap
+                --target $rust_build_target $rust_build_opt;
+        }?;
+    } else {
+        // Original behavior for x86
+        run_cmd! {
+            info "Building all Rust projects for x86_64";
+            cargo zigbuild --target $rust_build_target $rust_build_opt;
+        }?;
+    }
+
+    run_cmd! {
         info "Building Zig projects";
         zig build -Duse_s3_backend=$use_s3_backend
             -Denable_dev_mode=$enable_dev_mode $[zig_build_target] $zig_build_opt 2>&1;
