@@ -8,7 +8,7 @@ use axum::{
     RequestPartsExt,
 };
 use bytes::Bytes;
-use futures::{StreamExt, TryStreamExt};
+use futures::{stream, Stream, StreamExt, TryStreamExt};
 use serde::Deserialize;
 
 use crate::{
@@ -181,8 +181,11 @@ pub async fn get_object_content(
             let blob_id = object.blob_id()?;
             let num_blocks = object.num_blocks()?;
             let size = object.size()?;
-            let body_stream = get_full_blob_stream(blob_client, blob_id, num_blocks).await;
-            Ok((Body::from_stream(body_stream), size))
+            let body_stream = get_full_blob_stream(blob_client, blob_id, num_blocks).await?;
+            Ok((
+                Body::from_stream(body_stream.map_err(axum::Error::new)),
+                size,
+            ))
         }
         ObjectState::Mpu(ref mpu_state) => match mpu_state {
             MpuState::Uploading => {
@@ -218,15 +221,12 @@ pub async fn get_object_content(
                     .then(move |(_key, mpu_obj)| {
                         let blob_client = blob_client.clone();
                         async move {
-                            let blob_id = match mpu_obj.blob_id() {
-                                Ok(blob_id) => blob_id,
-                                Err(e) => return Err(axum::Error::new(e)),
-                            };
-                            let num_blocks = match mpu_obj.num_blocks() {
-                                Ok(num_blocks) => num_blocks,
-                                Err(e) => return Err(axum::Error::new(e)),
-                            };
-                            Ok(get_full_blob_stream(blob_client, blob_id, num_blocks).await)
+                            let blob_id = mpu_obj.blob_id().map_err(axum::Error::new)?;
+                            let num_blocks = mpu_obj.num_blocks().map_err(axum::Error::new)?;
+                            get_full_blob_stream(blob_client, blob_id, num_blocks)
+                                .await
+                                .map(|s| s.map_err(axum::Error::new))
+                                .map_err(axum::Error::new)
                         }
                     })
                     .try_flatten();
@@ -324,24 +324,21 @@ async fn get_full_blob_stream(
     blob_client: Arc<BlobClient>,
     blob_id: BlobId,
     num_blocks: usize,
-) -> BodyDataStream {
-    let body_stream = futures::stream::iter(0..num_blocks)
-        .then(move |i| {
-            let blob_client = blob_client.clone();
-            async move {
-                let mut block = Bytes::new();
-                match blob_client.get_blob(blob_id, i as u32, &mut block).await {
-                    Err(e) => {
-                        tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
-                        Err(axum::Error::new(e))
-                    }
-                    Ok(_) => Ok(Body::from(block).into_data_stream()),
+) -> Result<impl Stream<Item = Result<Bytes, S3Error>>, S3Error> {
+    let body_stream = stream::iter(0..num_blocks).then(move |i| {
+        let blob_client = blob_client.clone();
+        async move {
+            let mut block = Bytes::new();
+            match blob_client.get_blob(blob_id, i as u32, &mut block).await {
+                Err(e) => {
+                    tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
+                    Err(S3Error::from(e))
                 }
+                Ok(_) => Ok(block),
             }
-        })
-        .try_flatten();
-
-    Body::from_stream(body_stream).into_data_stream()
+        }
+    });
+    Ok(body_stream)
 }
 
 async fn get_range_blob_stream(
