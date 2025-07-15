@@ -32,7 +32,7 @@ pub fn bootstrap(num_nvme_disks: usize, meta_stack_testing: bool, _for_bench: bo
 
 fn create_bss_config() -> CmdResult {
     let config_content = r##"server_port = 8088
-log_level= "info""##
+log_level= "warn""##
         .to_string();
     run_cmd! {
         mkdir -p $ETC_PATH;
