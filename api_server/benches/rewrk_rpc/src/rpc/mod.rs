@@ -24,6 +24,7 @@ mod user_input;
 pub type Handle = JoinHandle<anyhow::Result<WorkerResult>>;
 
 const TEST_BUCKET_ROOT_BLOB_NAME: &str = "947ef2be-44b2-4ac2-969b-2574eb85662b";
+const INODE_SIZE: usize = 187;
 
 fn read_keys(filename: &str, num_tasks: usize, keys_limit: usize) -> Vec<VecDeque<String>> {
     let file = File::open(filename).unwrap_or_else(|_| panic!("open {filename} failed"));
@@ -124,7 +125,9 @@ async fn benchmark_nss_read(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let mut in_flight_requests = FuturesUnordered::<Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>>::new();
+    let mut in_flight_requests = FuturesUnordered::<
+        Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>,
+    >::new();
 
     // Fill the in-flight requests up to io_depth
     for _ in 0..io_depth {
@@ -146,7 +149,9 @@ async fn benchmark_nss_read(
     }
 
     // Benchmark loop.
-    while let Ok(Some((request_start, result))) = timeout_at(deadline, in_flight_requests.next()).await {
+    while let Ok(Some((request_start, result))) =
+        timeout_at(deadline, in_flight_requests.next()).await
+    {
         if let Err(e) = result {
             let error = e.to_string();
 
@@ -198,7 +203,9 @@ async fn benchmark_bss_write(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let mut in_flight_requests = FuturesUnordered::<Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>>::new();
+    let mut in_flight_requests = FuturesUnordered::<
+        Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>,
+    >::new();
 
     // Fill the in-flight requests up to io_depth
     for _ in 0..io_depth {
@@ -208,7 +215,9 @@ async fn benchmark_bss_write(
             let blob_id = Uuid::parse_str(&uuid).unwrap();
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
-                let result = rpc_client.put_blob(blob_id, 0, content).await
+                let result = rpc_client
+                    .put_blob(blob_id, 0, content)
+                    .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result)
@@ -219,7 +228,9 @@ async fn benchmark_bss_write(
     }
 
     // Benchmark loop.
-    while let Ok(Some((request_start, result))) = timeout_at(deadline, in_flight_requests.next()).await {
+    while let Ok(Some((request_start, result))) =
+        timeout_at(deadline, in_flight_requests.next()).await
+    {
         if let Err(e) = result {
             let error = e.to_string();
 
@@ -241,7 +252,9 @@ async fn benchmark_bss_write(
             let blob_id = Uuid::parse_str(&uuid).unwrap();
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
-                let result = rpc_client.put_blob(blob_id, 0, content).await
+                let result = rpc_client
+                    .put_blob(blob_id, 0, content)
+                    .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result)
@@ -270,7 +283,9 @@ async fn benchmark_bss_read(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let mut in_flight_requests = FuturesUnordered::<Pin<Box<dyn Future<Output = (Instant, anyhow::Result<Bytes>)> + Send + 'static>>>::new();
+    let mut in_flight_requests = FuturesUnordered::<
+        Pin<Box<dyn Future<Output = (Instant, anyhow::Result<Bytes>)> + Send + 'static>>,
+    >::new();
 
     // Fill the in-flight requests up to io_depth
     for _ in 0..io_depth {
@@ -280,7 +295,9 @@ async fn benchmark_bss_read(
                 let request_start = Instant::now();
                 let blob_id = Uuid::parse_str(&uuid).unwrap();
                 let mut content = Bytes::new();
-                let result = rpc_client.get_blob(blob_id, 0, &mut content).await
+                let result = rpc_client
+                    .get_blob(blob_id, 0, &mut content)
+                    .await
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result.map(|_| content))
             }));
@@ -290,7 +307,9 @@ async fn benchmark_bss_read(
     }
 
     // Benchmark loop.
-    while let Ok(Some((request_start, result))) = timeout_at(deadline, in_flight_requests.next()).await {
+    while let Ok(Some((request_start, result))) =
+        timeout_at(deadline, in_flight_requests.next()).await
+    {
         if let Err(e) = result {
             let error = e.to_string();
 
@@ -312,7 +331,9 @@ async fn benchmark_bss_read(
                 let request_start = Instant::now();
                 let blob_id = Uuid::parse_str(&uuid).unwrap();
                 let mut content = Bytes::new();
-                let result = rpc_client.get_blob(blob_id, 0, &mut content).await
+                let result = rpc_client
+                    .get_blob(blob_id, 0, &mut content)
+                    .await
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result.map(|_| content))
             }));
@@ -338,14 +359,16 @@ async fn benchmark_nss_write(
     let mut request_times = Vec::new();
     let mut error_map = HashMap::new();
 
-    let mut in_flight_requests = FuturesUnordered::<Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>>::new();
+    let mut in_flight_requests = FuturesUnordered::<
+        Pin<Box<dyn Future<Output = (Instant, anyhow::Result<()>)> + Send + 'static>>,
+    >::new();
 
     // Fill the in-flight requests up to io_depth
     for _ in 0..io_depth {
         if let Some(key) = keys.pop_front() {
             let rpc_client = rpc_client.clone();
             let key_for_rpc = key.clone();
-            let value = Bytes::from(key_for_rpc.clone());
+            let value = Bytes::from(vec![b'i'; INODE_SIZE]);
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
                 let result = rpc_client
@@ -361,7 +384,9 @@ async fn benchmark_nss_write(
     }
 
     // Benchmark loop.
-    while let Ok(Some((request_start, result))) = timeout_at(deadline, in_flight_requests.next()).await {
+    while let Ok(Some((request_start, result))) =
+        timeout_at(deadline, in_flight_requests.next()).await
+    {
         if let Err(e) = result {
             let error = e.to_string();
 
