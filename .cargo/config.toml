@@ -6,4 +6,4 @@ rustflags = ["--cfg", "tokio_unstable"]
 
 [profile.release]
 debug = true
-
+lto = true
