@@ -452,6 +452,8 @@ where
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
     ) -> task::Poll<Option<Self::Item>> {
+        use bytes::Buf;
+        use sha2::{Digest, Sha256};
         use std::task::Poll;
 
         let mut this = self.project();
@@ -461,6 +463,7 @@ where
         }
 
         loop {
+            let buf_len = this.buf.len();
             let (input, payload) =
                 match Self::parse_next(this.buf, this.signing.is_some(), *this.has_trailer) {
                     Ok(res) => res,
@@ -474,6 +477,9 @@ where
                                 return Poll::Ready(Some(Err(StreamingPayloadError::Stream(e))))
                             }
                             None => {
+                                if this.buf.is_empty() {
+                                    return Poll::Ready(None);
+                                }
                                 return Poll::Ready(Some(Err(StreamingPayloadError::message(
                                     "Unexpected EOF",
                                 ))));
@@ -484,6 +490,8 @@ where
                         return Poll::Ready(Some(Err(e)))
                     }
                 };
+
+            let consumed = buf_len - input.len();
 
             match payload {
                 StreamingPayloadChunk::Chunk { data, header } => {
@@ -505,7 +513,7 @@ where
                         signing.previous_signature = header.signature.unwrap();
                     }
 
-                    *this.buf = input.into();
+                    this.buf.advance(consumed);
 
                     // 0-sized chunk is the last
                     if data.is_empty() {
@@ -524,14 +532,14 @@ where
                     );
 
                     if let Some(signing) = this.signing.as_mut() {
-                        let data = [
-                            trailer.header_name.as_ref(),
-                            &b":"[..],
-                            trailer.header_value.as_ref(),
-                            &b"\n"[..],
-                        ]
-                        .concat();
-                        let trailer_sha256sum = sha256sum(&data);
+                        let mut hasher = Sha256::new();
+                        hasher.update(trailer.header_name.as_ref() as &[u8]);
+                        hasher.update(b":");
+                        hasher.update(trailer.header_value.as_ref() as &[u8]);
+                        hasher.update(b"\n");
+                        let digest = hasher.finalize();
+                        let hash_bytes: [u8; 32] = digest.into();
+                        let trailer_sha256sum: Hash = hash_bytes.into();
 
                         let expected_signature = compute_streaming_trailer_signature(
                             &signing.signing_hmac,
@@ -546,7 +554,7 @@ where
                         }
                     }
 
-                    *this.buf = input.into();
+                    this.buf.advance(consumed);
                     *this.done = true;
 
                     let mut trailers_map = HeaderMap::new();
