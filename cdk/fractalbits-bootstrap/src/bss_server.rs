@@ -31,9 +31,12 @@ pub fn bootstrap(num_nvme_disks: usize, meta_stack_testing: bool, _for_bench: bo
 }
 
 fn create_bss_config() -> CmdResult {
-    let config_content = r##"server_port = 8088
+    let num_threads = run_fun!(nproc)?;
+    let config_content = format!(
+        r##"server_port = 8088
+num_threads = {num_threads}
 log_level= "warn""##
-        .to_string();
+    );
     run_cmd! {
         mkdir -p $ETC_PATH;
         echo $config_content > $ETC_PATH/$BSS_SERVER_CONFIG;
