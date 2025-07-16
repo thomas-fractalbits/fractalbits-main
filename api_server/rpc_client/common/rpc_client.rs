@@ -3,6 +3,8 @@ use metrics::{counter, gauge, histogram, Gauge};
 use std::collections::HashMap;
 use std::io::{self};
 use std::net::SocketAddr;
+use std::os::fd::RawFd;
+use std::os::unix::io::AsRawFd;
 use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
 use std::time::Instant;
@@ -28,11 +30,11 @@ use tokio_retry::{strategy::ExponentialBackoff, Retry};
 use tracing::{debug, error, warn};
 
 #[cfg(feature = "nss")]
-const RPC_TYPE: &'static str = "nss";
+const RPC_TYPE: &str = "nss";
 #[cfg(feature = "bss")]
-const RPC_TYPE: &'static str = "bss";
+const RPC_TYPE: &str = "bss";
 #[cfg(feature = "rss")]
-const RPC_TYPE: &'static str = "rss";
+const RPC_TYPE: &str = "rss";
 
 const MAX_CONNECTION_RETRIES: usize = 5; // Max attempts to connect to an RPC server
 
@@ -78,11 +80,13 @@ pub struct RpcClient {
     next_id: AtomicU32,
     send_task: JoinHandle<()>,
     recv_task: JoinHandle<()>,
+    socket_fd: RawFd,
 }
 
 impl RpcClient {
     pub async fn new(stream: TcpStream) -> Result<Self, RpcError> {
         stream.set_nodelay(true)?;
+        let socket_fd = stream.as_raw_fd();
         let (receiver, sender) = stream.into_split();
 
         // Start message receiver task, for rpc responses
@@ -90,8 +94,10 @@ impl RpcClient {
         let recv_task = {
             let requests_clone = requests.clone();
             tokio::spawn(async move {
-                if let Err(e) = Self::receive_message_task(receiver, requests_clone).await {
-                    error!("FATAL: receive message task error: {e}");
+                if let Err(e) =
+                    Self::receive_message_task(socket_fd, receiver, requests_clone).await
+                {
+                    error!(%socket_fd, "FATAL: receive message task error: {e}");
                 }
             })
         };
@@ -101,8 +107,8 @@ impl RpcClient {
         let (tx, rx) = mpsc::channel(1024 * 1024);
         let send_task = {
             tokio::spawn(async move {
-                if let Err(e) = Self::send_message_task(sender, rx).await {
-                    error!("FATAL: send message task error: {e}");
+                if let Err(e) = Self::send_message_task(socket_fd, sender, rx).await {
+                    error!(%socket_fd, "FATAL: send message task error: {e}");
                 }
             })
         };
@@ -113,10 +119,12 @@ impl RpcClient {
             next_id: AtomicU32::new(1),
             send_task,
             recv_task,
+            socket_fd,
         })
     }
 
     async fn receive_message_task(
+        socket_fd: RawFd,
         receiver: OwnedReadHalf,
         requests: Arc<RwLock<HashMap<u32, oneshot::Sender<MessageFrame>>>>,
     ) -> Result<(), RpcError> {
@@ -125,23 +133,28 @@ impl RpcClient {
         while let Some(frame) = reader.next().await {
             let frame = frame?;
             let request_id = frame.header.id;
-            debug!(%request_id, "receiving response:");
+            debug!(%socket_fd, %request_id, "receiving response:");
             counter!("rpc_response_received", "type" => RPC_TYPE, "name" => "all").increment(1);
             let tx: oneshot::Sender<MessageFrame> =
                 match requests.write().await.remove(&frame.header.id) {
                     Some(tx) => tx,
-                    None => continue, // we may have received the response already
+                    None => {
+                        warn!(%socket_fd, request_id=frame.header.id,
+                            "received {RPC_TYPE} rpc message with id not in the resp_map");
+                        continue;
+                    }
                 };
             gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).decrement(1.0);
             if tx.send(frame).is_err() {
-                warn!(%request_id, "oneshot response send failed");
+                warn!(%socket_fd, %request_id, "oneshot response send failed");
             }
         }
-        warn!("connection closed, receive_message_task quit");
+        warn!(%socket_fd, "receive_message_task quit");
         Ok(())
     }
 
     async fn send_message_task(
+        socket_fd: RawFd,
         mut sender: OwnedWriteHalf,
         mut input: Receiver<Message>,
     ) -> Result<(), RpcError> {
@@ -163,6 +176,7 @@ impl RpcClient {
             sender.flush().await?;
             counter!("rpc_request_sent", "type" => RPC_TYPE, "name" => "all").increment(1);
         }
+        warn!(%socket_fd, "send_message_task quit");
         Ok(())
     }
 
@@ -171,19 +185,20 @@ impl RpcClient {
         request_id: u32,
         msg: Message,
     ) -> Result<MessageFrame, RpcError> {
+        let (tx, rx) = oneshot::channel();
+        assert!(self.requests.write().await.insert(request_id, tx).is_none());
+        gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).increment(1.0);
+
         self.sender.send(msg).await?;
         gauge!("rpc_request_pending_in_send_queue", "type" => RPC_TYPE).increment(1.0);
         debug!(%request_id, "request sent from handler:");
 
-        let (tx, rx) = oneshot::channel();
-        self.requests.write().await.insert(request_id, tx);
-        gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).increment(1.0);
         let timeout_val = std::time::Duration::from_secs(4); // TODO: align with s3 handler setting
         let result = tokio::time::timeout(timeout_val, rx).await;
         let result = match result {
             Ok(result) => result,
             Err(_) => {
-                warn!(%request_id, "rpc request timeout");
+                warn!(socket_fd=%self.socket_fd, %request_id, "{RPC_TYPE} rpc request timeout");
                 return Err(RpcError::InternalResponseError("timeout".into()));
             }
         };
