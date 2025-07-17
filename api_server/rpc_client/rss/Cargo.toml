@@ -18,6 +18,7 @@ metrics-exporter-statsd.workspace = true
 tokio-retry.workspace = true
 slotmap_conn_pool.workspace = true
 parking_lot.workspace = true
+strum.workspace = true
 
 [build-dependencies]
 prost-build.workspace = true

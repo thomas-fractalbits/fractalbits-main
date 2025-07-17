@@ -27,6 +27,7 @@ use tokio_util::codec::FramedRead;
 use crate::codec::{MessageFrame, MesssageCodec};
 use crate::message::MessageHeader;
 use slotmap_conn_pool::Poolable;
+use strum::AsRefStr;
 use tokio_retry::{strategy::ExponentialBackoff, Retry};
 use tracing::{debug, error, warn};
 
@@ -85,6 +86,14 @@ pub struct RpcClient {
     is_closed: Arc<AtomicBool>,
 }
 
+impl Drop for RpcClient {
+    fn drop(&mut self) {
+        // Just try to make metrics (`rpc_request_pending_in_resp_map`) accurate
+        Self::drain_pending_requests(self.socket_fd, &self.requests, DrainFrom::RpcClient);
+        warn!(socket_fd=%self.socket_fd, "rpc client is closed and dropped");
+    }
+}
+
 impl RpcClient {
     pub async fn new(stream: TcpStream) -> Result<Self, RpcError> {
         stream.set_nodelay(true)?;
@@ -102,11 +111,12 @@ impl RpcClient {
             let is_closed_clone = is_closed.clone();
             async move {
                 if let Err(e) =
-                    Self::receive_message_task(socket_fd, receiver, requests_clone).await
+                    Self::receive_message_task(socket_fd, receiver, &requests_clone).await
                 {
                     error!(%socket_fd, "FATAL: receive message task error: {e}");
                 }
                 is_closed_clone.store(true, Ordering::SeqCst);
+                Self::drain_pending_requests(socket_fd, &requests_clone, DrainFrom::ReceiveTask);
             }
         });
 
@@ -115,11 +125,13 @@ impl RpcClient {
         let (tx, rx) = mpsc::channel(1024 * 1024);
         tasks.spawn({
             let is_closed_clone = is_closed.clone();
+            let requests_clone = requests.clone();
             async move {
                 if let Err(e) = Self::send_message_task(socket_fd, sender, rx).await {
                     error!(%socket_fd, "FATAL: send message task error: {e}");
                 }
                 is_closed_clone.store(true, Ordering::SeqCst);
+                Self::drain_pending_requests(socket_fd, &requests_clone, DrainFrom::SendTask);
             }
         });
 
@@ -136,7 +148,7 @@ impl RpcClient {
     async fn receive_message_task(
         socket_fd: RawFd,
         receiver: OwnedReadHalf,
-        requests: Arc<Mutex<HashMap<u32, oneshot::Sender<MessageFrame>>>>,
+        requests: &Arc<Mutex<HashMap<u32, oneshot::Sender<MessageFrame>>>>,
     ) -> Result<(), RpcError> {
         let decoder = MesssageCodec::default();
         let mut reader = FramedRead::new(receiver, decoder);
@@ -194,11 +206,6 @@ impl RpcClient {
         request_id: u32,
         msg: Message,
     ) -> Result<MessageFrame, RpcError> {
-        // if self.is_closed.load(Ordering::SeqCst) {
-        //     return Err(RpcError::InternalRequestError(
-        //         "Connection is closed".to_string(),
-        //     ));
-        // }
         let (tx, rx) = oneshot::channel();
         assert!(self.requests.lock().insert(request_id, tx).is_none());
         gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE).increment(1.0);
@@ -223,6 +230,33 @@ impl RpcClient {
         self.next_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
+
+    fn drain_pending_requests(
+        socket_fd: RawFd,
+        requests: &Arc<Mutex<HashMap<u32, oneshot::Sender<MessageFrame>>>>,
+        drain_from: DrainFrom,
+    ) {
+        let mut requests = requests.lock();
+        let pending_count = requests.len();
+        if pending_count > 0 {
+            warn!(
+                %socket_fd,
+                "Draining {pending_count} pending requests from {} on connection close",
+                drain_from.as_ref()
+            );
+            gauge!("rpc_request_pending_in_resp_map", "type" => RPC_TYPE)
+                .decrement(pending_count as f64);
+            requests.clear(); // This drops the senders, notifying receivers of an error.
+        }
+    }
+}
+
+#[derive(AsRefStr)]
+#[strum(serialize_all = "snake_case")]
+enum DrainFrom {
+    SendTask,
+    ReceiveTask,
+    RpcClient,
 }
 
 impl Poolable for RpcClient {
