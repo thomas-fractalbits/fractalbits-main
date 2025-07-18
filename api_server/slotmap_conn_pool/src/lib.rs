@@ -7,6 +7,7 @@ use std::future::Future;
 use std::hash::Hash;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
+use tokio::sync::Semaphore;
 
 new_key_type! { struct ConnectionKey; }
 
@@ -36,7 +37,7 @@ pub trait Key: Eq + Hash + Clone + Debug + Unpin + Send + 'static {}
 impl<T> Key for T where T: Eq + Hash + Clone + Debug + Unpin + Send + 'static {}
 
 struct ConnPoolInner<T, K: Key> {
-    connections: SlotMap<ConnectionKey, T>,
+    connections: SlotMap<ConnectionKey, (T, Arc<Semaphore>)>,
     host_to_conn_keys: HashMap<K, Vec<ConnectionKey>>,
 }
 
@@ -67,7 +68,9 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
         T: Clone,
     {
         let mut inner = self.inner.write().unwrap();
-        let conn_key = inner.connections.insert(value.clone());
+        let conn_key = inner
+            .connections
+            .insert((value.clone(), Arc::new(Semaphore::new(1))));
         let keys = inner.host_to_conn_keys.entry(key.clone()).or_default();
         keys.push(conn_key);
     }
@@ -77,61 +80,91 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
         T: Poolable + Clone,
         T::AddrKey: From<K>,
     {
-        let mut conn_key = {
+        let mut current_conn_key = {
             let inner = self.inner.read().unwrap();
             Self::get_conn_key(&inner, &addr_key)?
         };
 
         loop {
-            let (is_closed, conn_clone) = {
+            let (is_closed, conn_option, semaphore_option) = {
                 let inner = self.inner.read().unwrap();
-                if let Some(conn) = inner.connections.get(conn_key) {
-                    (conn.is_closed(), Some(conn.clone()))
+                if let Some((conn, semaphore)) = inner.connections.get(current_conn_key) {
+                    (
+                        conn.is_closed(),
+                        Some(conn.clone()),
+                        Some(semaphore.clone()),
+                    )
                 } else {
-                    (true, None)
+                    (true, None, None)
                 }
             };
 
-            if let Some(conn) = conn_clone {
+            if let (Some(conn), Some(semaphore)) = (conn_option, semaphore_option) {
                 if !is_closed {
                     return Ok(conn);
                 } else {
-                    // Connection is broken, replace it with newly created one
-                    {
-                        let mut inner = self.inner.write().unwrap();
-                        // Check if the connection is still broken, it might have been replaced by another thread
-                        if let Some(c) = inner.connections.get(conn_key) {
-                            if c.is_closed() {
-                                inner.connections.remove(conn_key);
-                            }
+                    // Connection is broken. Acquire the per-connection semaphore.
+                    // This will block other tasks trying to recreate *this specific* connection.
+                    let _permit = semaphore.acquire().await.unwrap();
+
+                    // Re-check connection state after acquiring the semaphore.
+                    // Another thread might have already recreated it while we were waiting for the semaphore.
+                    let (is_closed_after_lock, conn_after_lock_option) = {
+                        let inner = self.inner.read().unwrap();
+                        if let Some((conn, _)) = inner.connections.get(current_conn_key) {
+                            (conn.is_closed(), Some(conn.clone()))
+                        } else {
+                            (true, None)
+                        }
+                    };
+
+                    if let Some(conn_after_lock) = conn_after_lock_option {
+                        if !is_closed_after_lock {
+                            return Ok(conn_after_lock);
                         }
                     }
 
+                    // If we reach here, the connection is still broken and we hold the semaphore.
+                    // Proceed with recreation.
                     let new_conn = match T::new(addr_key.clone().into()).await {
                         Ok(c) => c,
                         Err(e) => panic!("Failed to create new connection: {:?}", e),
                     };
 
-                    let mut inner = self.inner.write().unwrap();
-                    let new_conn_key = inner.connections.insert(new_conn.clone());
+                    // Acquire write lock to modify the pool.
+                    let mut inner = self.inner.write().unwrap(); // Acquire write lock
+
+                    // Remove the old, broken connection.
+                    inner.connections.remove(current_conn_key);
+
+                    // Insert the new connection with a new semaphore.
+                    let new_conn_key = inner
+                        .connections
+                        .insert((new_conn.clone(), Arc::new(Semaphore::new(1))));
+
+                    // Update the host_to_conn_keys mapping.
                     if let Some(keys) = inner.host_to_conn_keys.get_mut(&addr_key) {
-                        if let Some(key_ref) = keys.iter_mut().find(|k| **k == conn_key) {
+                        if let Some(key_ref) = keys.iter_mut().find(|k| **k == current_conn_key) {
                             *key_ref = new_conn_key;
+                        } else {
+                            // This case should ideally not be hit if the logic is sound,
+                            // but as a fallback, we add the new key.
+                            keys.push(new_conn_key);
                         }
                     }
                     return Ok(new_conn);
                 }
             }
 
-            // Connection key not valid anymore. Get a new one.
-            let inner = self.inner.read().unwrap();
-            match Self::get_conn_key(&inner, &addr_key) {
-                Ok(key) => {
-                    conn_key = key;
-                    // loop to try again with the new key.
+            // If we reach here, the connection key was not valid (e.g., removed by another thread
+            // before we could even check its status). Get a new one and retry the loop.
+            current_conn_key = {
+                let inner = self.inner.read().unwrap();
+                match Self::get_conn_key(&inner, &addr_key) {
+                    Ok(key) => key,
+                    Err(e) => return Err(e),
                 }
-                Err(e) => return Err(e),
-            }
+            };
         }
     }
 
