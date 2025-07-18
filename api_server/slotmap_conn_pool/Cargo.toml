@@ -9,3 +9,4 @@ edition = "2021"
 slotmap.workspace = true
 tokio.workspace = true
 rand.workspace = true
+parking_lot.workspace = true

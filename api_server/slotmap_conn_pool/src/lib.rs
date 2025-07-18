@@ -1,3 +1,4 @@
+use parking_lot::RwLock;
 use rand::Rng;
 use slotmap::{new_key_type, SlotMap};
 use std::collections::HashMap;
@@ -6,7 +7,7 @@ use std::fmt::{self, Debug};
 use std::future::Future;
 use std::hash::Hash;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::Arc;
 use tokio::sync::Semaphore;
 
 new_key_type! { struct ConnectionKey; }
@@ -67,7 +68,7 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
     where
         T: Clone,
     {
-        let mut inner = self.inner.write().unwrap();
+        let mut inner = self.inner.write();
         let conn_key = inner
             .connections
             .insert((value.clone(), Arc::new(Semaphore::new(1))));
@@ -80,14 +81,11 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
         T: Poolable + Clone,
         T::AddrKey: From<K>,
     {
-        let mut current_conn_key = {
-            let inner = self.inner.read().unwrap();
-            Self::get_conn_key(&inner, &addr_key)?
-        };
+        let mut current_conn_key = self.get_conn_key(&addr_key)?;
 
         loop {
             let (is_closed, conn_option, semaphore_option) = {
-                let inner = self.inner.read().unwrap();
+                let inner = self.inner.read();
                 if let Some((conn, semaphore)) = inner.connections.get(current_conn_key) {
                     (
                         conn.is_closed(),
@@ -110,7 +108,7 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
                     // Re-check connection state after acquiring the semaphore.
                     // Another thread might have already recreated it while we were waiting for the semaphore.
                     let (is_closed_after_lock, conn_after_lock_option) = {
-                        let inner = self.inner.read().unwrap();
+                        let inner = self.inner.read();
                         if let Some((conn, _)) = inner.connections.get(current_conn_key) {
                             (conn.is_closed(), Some(conn.clone()))
                         } else {
@@ -132,7 +130,7 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
                     };
 
                     // Acquire write lock to modify the pool.
-                    let mut inner = self.inner.write().unwrap(); // Acquire write lock
+                    let mut inner = self.inner.write(); // Acquire write lock
 
                     // Remove the old, broken connection.
                     inner.connections.remove(current_conn_key);
@@ -159,8 +157,7 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
             // If we reach here, the connection key was not valid (e.g., removed by another thread
             // before we could even check its status). Get a new one and retry the loop.
             current_conn_key = {
-                let inner = self.inner.read().unwrap();
-                match Self::get_conn_key(&inner, &addr_key) {
+                match self.get_conn_key(&addr_key) {
                     Ok(key) => key,
                     Err(e) => return Err(e),
                 }
@@ -168,10 +165,8 @@ impl<T: Poolable, K: Key> ConnPool<T, K> {
         }
     }
 
-    fn get_conn_key(
-        inner_locked: &RwLockReadGuard<'_, ConnPoolInner<T, K>>,
-        key: &K,
-    ) -> Result<ConnectionKey, Error> {
+    fn get_conn_key(&self, key: &K) -> Result<ConnectionKey, Error> {
+        let inner_locked = self.inner.read();
         match inner_locked.host_to_conn_keys.get(key) {
             None => Err(Error::NoConnectionAvailable),
             Some(keys) => {
@@ -291,7 +286,7 @@ mod tests {
         let p1 = pool.checkout(key.clone()).await.unwrap();
         assert_eq!(p1.id, 1);
 
-        let inner = pool.inner.read().unwrap();
+        let inner = pool.inner.read();
         assert_eq!(inner.connections.len(), 2);
     }
 }

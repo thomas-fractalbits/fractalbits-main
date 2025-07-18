@@ -4078,6 +4078,7 @@ dependencies = [
 name = "slotmap_conn_pool"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "rand 0.8.5",
  "slotmap",
  "tokio",
