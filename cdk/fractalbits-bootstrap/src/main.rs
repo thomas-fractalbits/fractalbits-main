@@ -68,6 +68,9 @@ enum Command {
         #[clap(long, long_help = "Multi-attached EBS volume ID")]
         volume_id: String,
 
+        #[clap(long, long_help = "EC2 IAM role")]
+        iam_role: String,
+
         #[clap(long, default_value = "false", long_help = "For meta stack testing")]
         meta_stack_testing: bool,
     },
@@ -161,7 +164,14 @@ fn main() -> CmdResult {
             bucket,
             volume_id,
             meta_stack_testing,
-        } => nss_server::bootstrap(&bucket, &volume_id, meta_stack_testing, for_bench)?,
+            iam_role,
+        } => nss_server::bootstrap(
+            &bucket,
+            &volume_id,
+            meta_stack_testing,
+            for_bench,
+            &iam_role,
+        )?,
         Command::RootServer {
             primary_instance_id,
             secondary_instance_id,

@@ -10,6 +10,7 @@ pub fn bootstrap(
     volume_id: &str,
     meta_stack_testing: bool,
     for_bench: bool,
+    iam_role: &str,
 ) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm", "perf", "lldb"])?;
     if meta_stack_testing || for_bench {
@@ -17,7 +18,7 @@ pub fn bootstrap(
     }
     format_local_nvme_disks(false)?;
     download_binaries(&["nss_server"])?;
-    setup_configs(bucket_name, volume_id, "nss_server")?;
+    setup_configs(bucket_name, volume_id, iam_role, "nss_server")?;
 
     // Note for normal deployment, the nss_server service is not started
     // until EBS/nss formatted from root_server
@@ -28,9 +29,14 @@ pub fn bootstrap(
     Ok(())
 }
 
-fn setup_configs(bucket_name: &str, volume_id: &str, service_name: &str) -> CmdResult {
+fn setup_configs(
+    bucket_name: &str,
+    volume_id: &str,
+    iam_role: &str,
+    service_name: &str,
+) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
-    create_nss_config(bucket_name, &volume_dev)?;
+    create_nss_config(bucket_name, &volume_dev, iam_role)?;
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
     create_ebs_udev_rule(volume_id, service_name)?;
     create_coredump_config()?;
@@ -38,7 +44,7 @@ fn setup_configs(bucket_name: &str, volume_id: &str, service_name: &str) -> CmdR
     Ok(())
 }
 
-fn create_nss_config(bucket_name: &str, volume_dev: &str) -> CmdResult {
+fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> CmdResult {
     let aws_region = get_current_aws_region()?;
 
     // Get total memory in kilobytes from /proc/meminfo
@@ -67,6 +73,7 @@ fn create_nss_config(bucket_name: &str, volume_dev: &str) -> CmdResult {
 blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
+iam_role = "{iam_role}"
 
 [s3_cache]
 s3_host = "s3.{aws_region}.amazonaws.com"

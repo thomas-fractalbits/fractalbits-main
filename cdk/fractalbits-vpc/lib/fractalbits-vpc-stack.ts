@@ -54,7 +54,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // IAM Role for EC2
     const ec2Role = new iam.Role(this, 'InstanceRole', {
-      roleName: 'FractalbitsInstanceRole',
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMFullAccess'),
@@ -211,11 +210,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
         bootstrapOptions: `${forBenchFlag} bss_server` },
       {
         id: 'nss_server_primary',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId}`
+        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId} --iam_role=${ec2Role.roleName}`
       },
       {
         id: 'nss_server_secondary',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId}`
+        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId} --iam_role=${ec2Role.roleName}`
       },
     ];
 
