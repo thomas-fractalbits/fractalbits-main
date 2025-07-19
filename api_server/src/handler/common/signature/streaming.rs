@@ -436,7 +436,7 @@ where
         let (input, data) = try_parse!(take::<_, _, nom::error::Error<_>>(header.size)(input));
         let (input, _) = try_parse!(tag::<_, _, nom::error::Error<_>>("\r\n")(input));
 
-        let data = Bytes::from(data.to_vec());
+        let data = Bytes::copy_from_slice(data);
 
         Ok((input, StreamingPayloadChunk::Chunk { header, data }))
     }
