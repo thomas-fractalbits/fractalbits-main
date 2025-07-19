@@ -39,6 +39,13 @@ pub fn run_cmd_deploy(
     }?;
 
     if target_arm {
+        // Build the rest of the workspace
+        run_cmd! {
+            info "Building Rust projects for Graviton3 (neoverse-v1)";
+            RUSTFLAGS="-C target-cpu=neoverse-v1" cargo zigbuild
+                --target $rust_build_target $rust_build_opt;
+        }?;
+
         if !bss_use_i3 {
             // Build fractalbits-bootstrap separately with neoverse_n1
             run_cmd! {
@@ -47,14 +54,6 @@ pub fn run_cmd_deploy(
                     -p fractalbits-bootstrap --target $rust_build_target $rust_build_opt;
             }?;
         }
-
-        // Build the rest of the workspace
-        run_cmd! {
-            info "Building Rust projects for Graviton3 (neoverse-v1)";
-            RUSTFLAGS="-C target-cpu=neoverse-v1" cargo zigbuild
-                --workspace --exclude fractalbits-bootstrap
-                --target $rust_build_target $rust_build_opt;
-        }?;
     } else {
         // Original behavior for x86
         run_cmd! {
