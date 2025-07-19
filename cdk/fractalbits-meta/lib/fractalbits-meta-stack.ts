@@ -7,15 +7,17 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 interface FractalbitsMetaStackProps extends cdk.StackProps {
   serviceName: string;
   bssUseI3?: boolean;
+  availabilityZone?: string;
 }
 
 export class FractalbitsMetaStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: FractalbitsMetaStackProps) {
     super(scope, id, props);
 
+    const az = props.availabilityZone ?? this.availabilityZones[this.availabilityZones.length - 1];
     const vpc = new ec2.Vpc(this, 'FractalbitsMetaStackVpc', {
       vpcName: 'fractalbits-meta-stack-vpc',
-      maxAzs: 1,
+      availabilityZones: [az],
       natGateways: 0,
       subnetConfiguration: [
         { name: 'PublicSubnet', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
@@ -94,7 +96,7 @@ export class FractalbitsMetaStack extends cdk.Stack {
       // Create EBS Volume with Multi-Attach capabilities
       const ebsVolume = new ec2.Volume(this, 'MultiAttachVolume', {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
-        availabilityZone: vpc.availabilityZones[0],
+        availabilityZone: az,
         size: cdk.Size.gibibytes(20),
         volumeType: ec2.EbsDeviceVolumeType.IO2,
         iops: 10000,
@@ -117,7 +119,7 @@ export class FractalbitsMetaStack extends cdk.Stack {
       });
     } else {
       const bssInstanceType = props.bssUseI3
-          ? ec2.InstanceType.of(ec2.InstanceClass.I3, ec2.InstanceSize.METAL)
+          ? ec2.InstanceType.of(ec2.InstanceClass.I3, ec2.InstanceSize.XLARGE2)
           : ec2.InstanceType.of(ec2.InstanceClass.IS4GEN, ec2.InstanceSize.XLARGE);
       const bssNumNvmeDisks = props.bssUseI3 ? 8 : 1;
       instance = createInstance(`${props.serviceName}_bench`, ec2.SubnetType.PRIVATE_ISOLATED, bssInstanceType);
