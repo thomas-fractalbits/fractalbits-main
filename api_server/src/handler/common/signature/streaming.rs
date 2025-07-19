@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::http::header::{HeaderMap, HeaderValue, CONTENT_ENCODING};
 use axum::http::request::Request;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use futures::prelude::*;
 use futures::task;
@@ -470,7 +470,7 @@ where
                     Err(nom::Err::Incomplete(_)) => {
                         match futures::ready!(this.stream.as_mut().poll_next(cx)) {
                             Some(Ok(bytes)) => {
-                                this.buf.extend(bytes);
+                                this.buf.put(bytes);
                                 continue;
                             }
                             Some(Err(e)) => {

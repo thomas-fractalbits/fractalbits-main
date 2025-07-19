@@ -93,7 +93,7 @@ fn create_workload_config(service_endpoint: &str, client_ips: &Vec<String>) -> C
   params:
     # Duration to run the benchmark.
     # Use 's' and 'm' to specify seconds and minutes.
-    duration: 5m
+    duration: 10m
 
     # Concurrent operations to run per warp instance.
     concurrent: 16

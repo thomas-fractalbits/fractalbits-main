@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use axum::body::BodyDataStream;
-use bytes::{Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::{ready, Stream};
 use pin_project_lite::pin_project;
 use std::pin::Pin;
@@ -43,7 +43,7 @@ impl Stream for BlockDataStream {
         loop {
             match ready!(this.stream.as_mut().poll_next(cx)) {
                 Some(data) => {
-                    this.block_data.extend(data.unwrap());
+                    this.block_data.put(data.unwrap());
                     if this.block_data.len() >= *this.block_size as usize {
                         return Poll::Ready(Some(self.take_block()));
                     }

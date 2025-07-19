@@ -54,7 +54,7 @@ rss_addr = "{rss_ip}:8088"
 region = "{aws_region}"
 port = 80
 root_domain = ".localhost"
-with_metrics = true
+with_metrics = false
 request_timeout_seconds = 115
 
 [s3_cache]
