@@ -135,9 +135,12 @@ enum Command {
 
 #[cmd_lib::main]
 fn main() -> CmdResult {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
-        .format_target(false)
-        .init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
+    info!(
+        "build info: {}",
+        option_env!("BUILD_INFO").unwrap_or_default()
+    );
 
     let opts = Opts::parse();
     let for_bench = opts.common.for_bench;

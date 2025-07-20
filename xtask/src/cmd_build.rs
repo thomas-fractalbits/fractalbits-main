@@ -22,7 +22,12 @@ pub fn build_info() -> String {
     let git_branch = run_fun!(git branch --show-current).unwrap();
     let git_rev = run_fun!(git rev-parse --short HEAD).unwrap();
     let build_timestamp = run_fun!(date "+%s").unwrap();
-    format!("{git_branch}:{git_rev}, build time: {build_timestamp}")
+    let dirty = if run_cmd!(git diff-index --quiet HEAD).is_ok() {
+        ""
+    } else {
+        "+"
+    };
+    format!("{git_branch}:{git_rev}{dirty}, build time: {build_timestamp}")
 }
 
 pub fn build_rewrk() -> CmdResult {
