@@ -67,9 +67,7 @@ pub async fn put_object_handler(
             let blob_client = blob_client.clone();
             async move {
                 let data = block_data.map_err(|_e| S3Error::InternalError)?;
-                let put_result = blob_client
-                    .put_blob(blob_id, i as u32, data)
-                    .await;
+                let put_result = blob_client.put_blob(blob_id, i as u32, data).await;
 
                 match put_result {
                     Ok(x) => Ok((x - MessageHeader::SIZE) as u64),

@@ -9,6 +9,7 @@ mod root_server;
 use clap::Parser;
 use cmd_lib::*;
 use common::*;
+use std::io::Write;
 use strum::AsRefStr;
 
 #[derive(Parser)]
@@ -135,7 +136,29 @@ enum Command {
 
 #[cmd_lib::main]
 fn main() -> CmdResult {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::new()
+        .format(|buf, record| {
+            let timestamp = chrono::Local::now().format("%b %d %H:%M:%S").to_string();
+            let process_name = std::env::current_exe()
+                .ok()
+                .and_then(|path| {
+                    path.file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                })
+                .unwrap_or_else(|| "fractalbits-bootstrap".to_string());
+            let pid = std::process::id();
+            writeln!(
+                buf,
+                "{} {}[{}]: {} {}",
+                timestamp,
+                process_name,
+                pid,
+                record.level(),
+                record.args()
+            )
+        })
+        .filter(None, log::LevelFilter::Info)
+        .init();
 
     info!(
         "build info: {}",
