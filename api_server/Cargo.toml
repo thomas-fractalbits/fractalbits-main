@@ -66,6 +66,7 @@ metrics-exporter-prometheus = { workspace = true, optional = true }
 tokio-retry.workspace = true
 moka.workspace = true
 mimalloc.workspace = true
+arrayvec.workspace = true
 
 [dev-dependencies]
 cmd_lib.workspace = true

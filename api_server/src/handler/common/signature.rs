@@ -1,5 +1,7 @@
+use std::fmt::Write;
 use std::sync::Arc;
 
+use arrayvec::ArrayString;
 use body::ReqBody;
 use bucket_tables::{api_key_table::ApiKey, Versioned};
 use chrono::{DateTime, Utc};
@@ -84,17 +86,32 @@ pub fn signing_hmac(
     region: &str,
 ) -> Result<HmacSha256, hmac::digest::InvalidLength> {
     let service = "s3";
-    let secret = String::from("AWS4") + secret_key;
-    let mut date_hmac = HmacSha256::new_from_slice(secret.as_bytes())?;
-    date_hmac.update(datetime.format(SHORT_DATE).to_string().as_bytes());
-    let mut region_hmac = HmacSha256::new_from_slice(&date_hmac.finalize().into_bytes())?;
-    region_hmac.update(region.as_bytes());
-    let mut service_hmac = HmacSha256::new_from_slice(&region_hmac.finalize().into_bytes())?;
-    service_hmac.update(service.as_bytes());
-    let mut signing_hmac = HmacSha256::new_from_slice(&service_hmac.finalize().into_bytes())?;
-    signing_hmac.update(b"aws4_request");
-    let hmac = HmacSha256::new_from_slice(&signing_hmac.finalize().into_bytes())?;
-    Ok(hmac)
+
+    let mut initial_key = Vec::with_capacity(4 + secret_key.len());
+    initial_key.extend_from_slice(b"AWS4");
+    initial_key.extend_from_slice(secret_key.as_bytes());
+
+    let mut date_str = ArrayString::<8>::new();
+    write!(&mut date_str, "{}", datetime.format(SHORT_DATE))
+        .expect("Formatting a date into an 8-byte ArrayString should not fail");
+
+    let mut mac = HmacSha256::new_from_slice(&initial_key)?;
+    mac.update(date_str.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(region.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(service.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(b"aws4_request");
+    let signing_key = mac.finalize().into_bytes();
+
+    HmacSha256::new_from_slice(&signing_key)
 }
 
 pub fn compute_scope(datetime: &DateTime<Utc>, region: &str, service: &str) -> String {

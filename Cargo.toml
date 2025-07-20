@@ -72,7 +72,7 @@ base64 = "0.22.1"
 crc32c = "0.6.8"
 md-5 = "0.10"
 sha1 = "0.10"
-sha2 = "0.10"
+sha2 = { version = "0.10", features = ["asm-aarch64"] }
 url = "2.5.4"
 http-body = "1.0.1"
 serde_bytes = "0.11"
@@ -92,6 +92,7 @@ moka = { version = "0.12", features = ["future"] }
 slotmap = "1.0"
 mimalloc = "0.1.47"
 parking_lot = "0.12"
+arrayvec = "0.7"
 
 # Dev dependencies
 aws-sdk-s3 = "1.65.0"
