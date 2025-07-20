@@ -35,7 +35,9 @@ fn create_bss_config() -> CmdResult {
     let config_content = format!(
         r##"server_port = 8088
 num_threads = {num_threads}
-log_level= "warn""##
+log_level = "warn"
+use_direct_io = true
+"##
     );
     run_cmd! {
         mkdir -p $ETC_PATH;
