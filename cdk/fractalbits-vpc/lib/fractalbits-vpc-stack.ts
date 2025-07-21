@@ -30,7 +30,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
       availabilityZones: [az],
       natGateways: 0,
       subnetConfiguration: [
-        { name: 'PublicSubnet', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
         { name: 'PrivateSubnet', subnetType: ec2.SubnetType.PRIVATE_ISOLATED, cidrMask: 24 },
       ],
     });
@@ -68,11 +67,10 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const publicSg = new ec2.SecurityGroup(this, 'PublicInstanceSG', {
       vpc: this.vpc,
       securityGroupName: 'FractalbitsPublicInstanceSG',
-      description: 'Allow inbound on port 80 and 22 for public access, and outbound for SSM, DDB, S3',
+      description: 'Allow inbound on port 80 for public access, and outbound for SSM, DDB, S3',
       allowAllOutbound: true,
     });
     publicSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP access from anywhere');
-    publicSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH access from anywhere');
     if (props.benchType === "internal") {
       // Allow incoming traffic on port 7761 for bench clients
       publicSg.addIngressRule(ec2.Peer.ipv4(this.vpc.vpcCidrBlock), ec2.Port.tcp(7761), 'Allow access to port 7761 from within VPC');
@@ -147,7 +145,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     }
 
     for (let i = 1; i <= props.numApiServers; i++) {
-      instanceConfigs.push({ id: `api_server_${i}`, subnet: ec2.SubnetType.PUBLIC, instanceType: apiInstanceType, sg: publicSg });
+      instanceConfigs.push({ id: `api_server_${i}`, subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: apiInstanceType, sg: publicSg });
     }
 
     const instances: Record<string, ec2.Instance> = {};
@@ -304,11 +302,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'VolumeId', {
       value: ebsVolumeId,
       description: 'EBS volume ID',
-    });
-
-    new cdk.CfnOutput(this, 'Ec2Role', {
-      value: ec2Role.roleName,
-      description: 'Ec2 instance IAM role',
     });
   }
 }
