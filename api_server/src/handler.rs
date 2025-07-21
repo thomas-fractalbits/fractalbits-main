@@ -45,7 +45,13 @@ macro_rules! extract_or_return {
         match <$extractor>::from_request_parts($parts, $app).await {
             Ok(value) => value,
             Err(rejection) => {
-                tracing::warn!("failed to extract parts: {:?}", rejection);
+                tracing::warn!(
+                    "failed to extract parts at {}:{} {:?} {:?}",
+                    file!(),
+                    line!(),
+                    rejection,
+                    $parts
+                );
                 return rejection.into_response();
             }
         }

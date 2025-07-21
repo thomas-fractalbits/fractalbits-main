@@ -66,7 +66,7 @@ where
             Ok(ApiCommandFromQuery(None))
         } else {
             if api_commands.len() > 1 {
-                tracing::debug!(
+                tracing::warn!(
                     "Multiple api command found: {api_commands:?}, pick up the first one"
                 );
             }
