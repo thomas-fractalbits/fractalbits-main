@@ -86,19 +86,20 @@ pub fn run_cmd_deploy(
     }?;
 
     if bss_use_i3 {
+        let target_cpu = "skylake"; // for i3en Intel Xeon Platinum 8175
         run_cmd! {
             info "Building bss fractalbits-bootstrap & rewrk_rpc for x86_64";
-            RUSTFLAGS="-C target-cpu=broadwell"
+            RUSTFLAGS="-C target-cpu=$target_cpu"
             BUILD_INFO=$build_info
             cargo zigbuild -p fractalbits-bootstrap
                 --target x86_64-unknown-linux-gnu $rust_build_opt;
-            RUSTFLAGS="-C target-cpu=broadwell"
+            RUSTFLAGS="-C target-cpu=$target_cpu"
             BUILD_INFO=$build_info
             cargo zigbuild -p rewrk_rpc
                 --target x86_64-unknown-linux-gnu $rust_build_opt;
         }?;
 
-        let zig_build_target = ["-Dtarget=x86_64-linux-gnu", "-Dcpu=broadwell", ""];
+        let zig_build_target = ["-Dtarget=x86_64-linux-gnu", &format!("-Dcpu={target_cpu}")];
         run_cmd! {
             info "Building bss_server for x86_64";
             zig build
