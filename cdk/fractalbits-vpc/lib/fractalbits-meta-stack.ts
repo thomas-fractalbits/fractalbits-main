@@ -84,6 +84,7 @@ export class FractalbitsMetaStack extends cdk.Stack {
         this,
         'BssAsg',
         this.vpc,
+        [az],
         sg,
         ec2Role,
         bssInstanceTypes,

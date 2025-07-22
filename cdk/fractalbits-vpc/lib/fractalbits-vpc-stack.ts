@@ -172,11 +172,12 @@ export class FractalbitsVpcStack extends cdk.Stack {
         this,
         'BssAsg',
         this.vpc,
+        [az],
         privateSg,
         ec2Role,
         ['i8g.xlarge', 'i8g.2xlarge', 'i8g.4xlarge', 'i8g.8xlarge'],
         // ['i3.2xlarge', 'i3en.xlarge', 'i8g.xlarge2', 'is4gn.xlarge'],
-        bssBootstrapOptions
+        bssBootstrapOptions,
     );
 
     let nlb: elbv2.NetworkLoadBalancer | undefined;

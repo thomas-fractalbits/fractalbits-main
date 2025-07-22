@@ -44,6 +44,7 @@ export const createEc2Asg = (
     scope: Construct,
     id: string,
     vpc: ec2.Vpc,
+    availabilityZones: string[],
     sg: ec2.SecurityGroup,
     role: iam.Role,
     instanceTypeNames: string[],
@@ -104,7 +105,10 @@ export const createEc2Asg = (
         vpc: vpc,
         minCapacity: 1,
         maxCapacity: 1,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        vpcSubnets: {
+          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          availabilityZones: availabilityZones
+        },
         mixedInstancesPolicy: {
             instancesDistribution: {
                 onDemandPercentageAboveBaseCapacity: 100,
