@@ -9,7 +9,7 @@ interface FractalbitsMetaStackProps extends cdk.StackProps {
   serviceName: string;
   availabilityZone?: string;
   nssInstanceType?: string;
-  bssInstanceType?: string;
+  bssInstanceTypes?: string;
 }
 
 export class FractalbitsMetaStack extends cdk.Stack {
@@ -77,8 +77,11 @@ export class FractalbitsMetaStack extends cdk.Stack {
       });
 
     } else {
-      // const bssInstanceTypes = props.bssInstanceType ? [props.bssInstanceType] : ['i3.2xlarge', 'i3en.xlarge', 'i8g.xlarge2', 'is4gn.xlarge'];
-      const bssInstanceTypes = props.bssInstanceType ? [props.bssInstanceType] : ['i8g.xlarge', 'i8g.2xlarge', 'i8g.4xlarge', 'i8g.8xlarge'];
+      if (!props.bssInstanceTypes) {
+        console.error("Error: bssInstanceTypes must be provided for the 'bss' service type in the meta stack. Please specify it via --context bssInstanceTypes='type1,type2'");
+        process.exit(1);
+      }
+      const bssInstanceTypes = props.bssInstanceTypes.split(',');
       const bssBootstrapOptions = `--for_bench bss_server --meta_stack_testing`;
       const asg = createEc2Asg(
         this,

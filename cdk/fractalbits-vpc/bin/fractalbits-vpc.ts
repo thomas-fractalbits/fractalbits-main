@@ -10,12 +10,14 @@ const app = new cdk.App();
 const numApiServers = app.node.tryGetContext('numApiServers') ?? 1;
 const benchType = app.node.tryGetContext('benchType') ?? null;
 const availabilityZone = app.node.tryGetContext('availabilityZone') ?? app.node.tryGetContext('az') ?? undefined;
+const bssInstanceTypes = app.node.tryGetContext('bssInstanceTypes') ?? "i8g.xlarge,i8g.2xlarge,i8g.4xlarge";
 
 const vpcStack = new FractalbitsVpcStack(app, 'FractalbitsVpcStack', {
   env: {},
   numApiServers: numApiServers,
   benchType: benchType,
   availabilityZone: availabilityZone,
+  bssInstanceTypes: bssInstanceTypes,
 });
 
 if (benchType === "service_endpoint") {
@@ -37,7 +39,6 @@ if (benchType === "service_endpoint") {
 
 // === meta stack ===
 const nssInstanceType = app.node.tryGetContext('nssInstanceType') ?? null;
-const bssInstanceType = app.node.tryGetContext('bssInstanceType') ?? null;
 new FractalbitsMetaStack(app, 'FractalbitsMetaStack-Nss', {
   serviceName: 'nss',
   nssInstanceType: nssInstanceType,
@@ -46,6 +47,6 @@ new FractalbitsMetaStack(app, 'FractalbitsMetaStack-Nss', {
 
 new FractalbitsMetaStack(app, 'FractalbitsMetaStack-Bss', {
   serviceName: 'bss',
-  bssInstanceType: bssInstanceType,
+  bssInstanceTypes: bssInstanceTypes,
   availabilityZone: availabilityZone,
 });

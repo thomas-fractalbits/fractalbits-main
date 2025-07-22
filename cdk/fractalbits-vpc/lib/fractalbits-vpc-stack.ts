@@ -15,6 +15,7 @@ export interface FractalbitsVpcStackProps extends cdk.StackProps {
   numApiServers: number;
   benchType?: "service_endpoint" | "internal" | "external" | null;
   availabilityZone?: string;
+  bssInstanceTypes: string;
 }
 
 export class FractalbitsVpcStack extends cdk.Stack {
@@ -170,15 +171,15 @@ export class FractalbitsVpcStack extends cdk.Stack {
     // Create bss_server separately in a ASG group
     const forBenchFlag = props.benchType ? ' --for_bench' : '';
     const bssBootstrapOptions = `${forBenchFlag} bss_server --bss_service_id=${bssService.serviceId}`;
-    let bssAsg = createEc2Asg(
+    const bssInstanceTypes = props.bssInstanceTypes.split(',');
+    const bssAsg = createEc2Asg(
         this,
         'BssAsg',
         this.vpc,
         [az],
         privateSg,
         ec2Role,
-        ['i8g.4xlarge', 'i8g.8xlarge', 'i8g.12xlarge', 'i8g.16xlarge', 'i8g.24xlarge', 'i8g.metal-24xl'],
-        // ['i3.2xlarge', 'i3en.xlarge', 'i8g.xlarge2', 'is4gn.xlarge'],
+        bssInstanceTypes,
         bssBootstrapOptions,
     );
 
