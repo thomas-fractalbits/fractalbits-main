@@ -44,6 +44,23 @@ pub struct Authentication {
     pub date: DateTime<Utc>,
 }
 
+impl Authentication {
+    pub fn dummy() -> Self {
+        Self {
+            key_id: "test_api_key".to_string(),
+            scope: Scope {
+                date: Utc::now().format(SHORT_DATE).to_string(),
+                region: "us-east-1".to_string(),
+                service: "s3".to_string(),
+            },
+            signed_headers: BTreeSet::new(),
+            signature: "".to_string(),
+            content_sha256: "UNSIGNED-PAYLOAD".to_string(),
+            date: Utc::now(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Scope {
     pub date: String,

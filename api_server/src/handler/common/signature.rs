@@ -14,6 +14,8 @@ use super::data::{sha256sum, Hash};
 use super::request::extract::Authentication;
 use axum::body::Body;
 use axum::http::{request::Request, HeaderName};
+use rpc_client_rss::RpcErrorRss;
+use sync_wrapper::SyncWrapper;
 
 pub use error::*;
 
@@ -64,14 +66,16 @@ pub async fn verify_request(
     mut req: Request<Body>,
     auth: &Authentication,
 ) -> Result<VerifiedRequest, Error> {
-    let checked_signature = payload::check_payload_signature(app.clone(), auth, &mut req).await?;
+    let checked_signature =
+        match payload::check_payload_signature(app.clone(), auth, &mut req).await {
+            Ok(cs) => cs,
+            Err(e) => return Err(Error::SignatureError(Box::new(e), SyncWrapper::new(req))),
+        };
 
     let request =
         streaming::parse_streaming_body(req, &checked_signature, &app.config.region, "s3")?;
 
-    let api_key = checked_signature
-        .key
-        .ok_or_else(|| Error::Other("Fractalbits does not support anonymous access yet".into()))?;
+    let api_key = checked_signature.key.ok_or(Error::RpcErrorRss(RpcErrorRss::NotFound))?;
 
     Ok(VerifiedRequest {
         request,

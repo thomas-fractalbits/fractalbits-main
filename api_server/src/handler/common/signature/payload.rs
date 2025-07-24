@@ -14,6 +14,7 @@ use bucket_tables::{
 use chrono::{DateTime, Utc};
 use hmac::Mac;
 use itertools::Itertools;
+use rpc_client_rss::RpcErrorRss;
 use sha2::{Digest, Sha256};
 
 use crate::handler::common::{request::extract::Authentication, xheader};
@@ -288,4 +289,13 @@ pub async fn verify_v4(
     }
 
     Ok(Some(key))
+}
+
+pub async fn get_api_key(
+    app: Arc<AppState>,
+    access_key: &str,
+) -> Result<Versioned<ApiKey>, RpcErrorRss> {
+    let api_key_table: Table<Arc<AppState>, ApiKeyTable> =
+        Table::new(app.clone(), Some(app.cache.clone()));
+    api_key_table.get(access_key.to_string(), true).await
 }
