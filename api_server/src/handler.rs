@@ -66,7 +66,11 @@ pub async fn any_handler(
     let start = Instant::now();
     let (mut parts, body) = request.into_parts();
     let ApiCommandFromQuery(api_cmd) = extract_or_return!(&mut parts, &app, ApiCommandFromQuery);
-    let auth = extract_or_return!(&mut parts, &app, Authentication);
+    let auth = if app.config.allow_missing_or_bad_signature {
+        None
+    } else {
+        Some(extract_or_return!(&mut parts, &app, Authentication))
+    };
     let BucketAndKeyName { bucket, key } = extract_or_return!(&mut parts, &app, BucketAndKeyName);
     let api_sig = extract_or_return!(&mut parts, &app, ApiSignature);
     let request = http::Request::from_parts(parts, body);
@@ -143,19 +147,82 @@ async fn any_handler_inner(
     app: Arc<AppState>,
     bucket_name: String,
     key: String,
-    auth: Authentication,
+    auth: Option<Authentication>,
     request: http::Request<Body>,
     endpoint: Endpoint,
 ) -> Result<Response, S3Error> {
+    let (parts, body) = request.into_parts();
+    let request = http::Request::from_parts(parts, body);
     let start = Instant::now();
+
     let VerifiedRequest {
         request, api_key, ..
-    } = match verify_request(app.clone(), request, &auth).await {
-        Ok(res) => res,
-        Err(signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound)) => {
-            return Err(S3Error::InvalidAccessKeyId)
+    } = if app.config.allow_missing_or_bad_signature {
+        if auth.is_none() {
+            tracing::warn!("allowing anonymous access, falling back to 'test_api_key'");
+            let access_key = "test_api_key";
+            let api_key =
+                common::signature::payload::get_api_key(app.clone(), access_key)
+                    .await
+                    .map_err(|_| S3Error::InvalidAccessKeyId)?;
+            VerifiedRequest {
+                request: request.map(ReqBody::from),
+                api_key,
+                content_sha256_header: signature::ContentSha256Header::UnsignedPayload,
+            }
+        } else {
+            let auth_unwrapped = auth.unwrap();
+            match verify_request(app.clone(), request, &auth_unwrapped).await {
+                Ok(res) => res,
+                Err(signature::error::Error::SignatureError(e, request_wrapper)) => {
+                    let request = request_wrapper.into_inner();
+                    match *e {
+                        signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound) => {
+                            return Err(S3Error::InvalidAccessKeyId);
+                        }
+                        _ => {
+                            tracing::warn!(
+                                "allowed bad signature for {:?}, falling back to 'test_api_key'",
+                                auth_unwrapped
+                            );
+                            let access_key = "test_api_key";
+                            let api_key =
+                                common::signature::payload::get_api_key(app.clone(), access_key)
+                                    .await
+                                    .map_err(|_| S3Error::InvalidAccessKeyId)?;
+                            VerifiedRequest {
+                                request: request.map(ReqBody::from),
+                                api_key,
+                                content_sha256_header: signature::ContentSha256Header::UnsignedPayload,
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("unexpected error during signature verification: {:?}", e);
+                    return Err(S3Error::InternalError);
+                }
+            }
         }
-        Err(_e) => return Err(S3Error::InvalidSignature),
+    } else {
+        let auth_unwrapped = auth.ok_or(S3Error::InvalidSignature)?;
+        match verify_request(app.clone(), request, &auth_unwrapped).await {
+            Ok(res) => res,
+            Err(signature::error::Error::SignatureError(e, _)) => {
+                match *e {
+                    signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound) => {
+                        return Err(S3Error::InvalidAccessKeyId);
+                    }
+                    _ => {
+                        return Err(S3Error::InvalidSignature);
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::error!("unexpected error during signature verification: {:?}", e);
+                return Err(S3Error::InternalError);
+            }
+        }
     };
     histogram!("verify_request_duration_nanos", "endpoint" => endpoint.as_str())
         .record(start.elapsed().as_nanos() as f64);

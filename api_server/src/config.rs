@@ -23,6 +23,7 @@ pub struct Config {
     pub request_timeout_seconds: u64,
 
     pub s3_cache: S3CacheConfig,
+    pub allow_missing_or_bad_signature: bool,
 }
 
 #[allow(dead_code)]
@@ -60,6 +61,7 @@ impl Default for Config {
             s3_cache: S3CacheConfig::default(),
             with_metrics: true,
             request_timeout_seconds: 115,
+            allow_missing_or_bad_signature: true,
         }
     }
 }

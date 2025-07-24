@@ -1,6 +1,7 @@
-use axum::{extract::rejection::QueryRejection, http::header::ToStrError};
+use axum::{body::Body, extract::rejection::QueryRejection, http::{header::ToStrError, Request}};
 use rpc_client_rss::RpcErrorRss;
 use thiserror::Error;
+use sync_wrapper::SyncWrapper;
 
 /// Errors of this crate
 #[derive(Debug, Error)]
@@ -38,6 +39,9 @@ pub enum Error {
 
     #[error("Other: {0}")]
     Other(String),
+
+    #[error("Signature error: {0}")]
+    SignatureError(Box<Error>, SyncWrapper<Request<Body>>),
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
