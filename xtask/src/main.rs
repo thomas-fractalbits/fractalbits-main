@@ -34,9 +34,6 @@ enum Cmd {
         #[clap(long, long_help = "Nss data on local disks (without s3)")]
         nss_data_on_local: bool,
 
-        #[clap(long, long_help = "Keep using old data, without formatting")]
-        keep_data: bool,
-
         #[clap(
             long,
             long_help = "set max number of keys for benchmark",
@@ -63,9 +60,9 @@ enum Cmd {
         release: bool,
     },
 
-    #[clap(about = "Service stop/start/restart")]
+    #[clap(about = "Service stop/init/start/restart")]
     Service {
-        #[clap(long_help = "stop/start/restart")]
+        #[clap(long_help = "stop/int/start/restart")]
         action: ServiceAction,
 
         #[clap(
@@ -122,6 +119,7 @@ enum BenchService {
 #[derive(Parser, Clone, EnumString, PartialEq)]
 #[strum(serialize_all = "snake_case")]
 pub enum ServiceAction {
+    Init,
     Stop,
     Start,
     Restart,
@@ -173,7 +171,6 @@ fn main() -> CmdResult {
             workload,
             with_flame_graph,
             nss_data_on_local,
-            keep_data,
             keys_limit,
         } => {
             let mut service_name = ServiceName::All;
@@ -183,7 +180,6 @@ fn main() -> CmdResult {
                 workload,
                 with_flame_graph,
                 nss_data_on_local,
-                keep_data,
                 keys_limit,
                 &mut service_name,
             )

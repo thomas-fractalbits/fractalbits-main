@@ -6,6 +6,7 @@ pub fn run_cmd_service(
     build_mode: BuildMode,
 ) -> CmdResult {
     match action {
+        ServiceAction::Init => init_service(service, build_mode),
         ServiceAction::Stop => stop_service(service),
         ServiceAction::Start => start_services(service, build_mode),
         ServiceAction::Restart => {
@@ -15,88 +16,51 @@ pub fn run_cmd_service(
     }
 }
 
-pub fn stop_service(service: ServiceName) -> CmdResult {
-    info!("Killing previous service(s) (if any) ...");
-    run_cmd!(sync)?;
+pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
+    stop_service(service)?;
 
-    let services: Vec<String> = match service {
-        ServiceName::All => vec![
-            ServiceName::ApiServer.as_ref().to_owned(),
-            ServiceName::Nss.as_ref().to_owned(),
-            ServiceName::Bss.as_ref().to_owned(),
-            ServiceName::Rss.as_ref().to_owned(),
-            ServiceName::Minio.as_ref().to_owned(),
-            ServiceName::DdbLocal.as_ref().to_owned(),
-        ],
-        single_service => vec![single_service.as_ref().to_owned()],
+    let init_ddb_local = || -> CmdResult {
+        run_cmd! {
+            rm -f data/rss/shared-local-instance.db;
+            mkdir -p data/rss;
+        }?;
+        start_ddb_local_service()?;
+        const DDB_TABLE_NAME: &str = "fractalbits-keys-and-buckets";
+        run_cmd! {
+            info "Initializing table: $DDB_TABLE_NAME ...";
+            AWS_DEFAULT_REGION=fakeRegion
+            AWS_ACCESS_KEY_ID=fakeMyKeyId
+            AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
+            AWS_ENDPOINT_URL_DYNAMODB="http://localhost:8000"
+            aws dynamodb create-table
+                --table-name $DDB_TABLE_NAME
+                --attribute-definitions AttributeName=id,AttributeType=S
+                --key-schema AttributeName=id,KeyType=HASH
+                --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1 >/dev/null;
+        }
     };
-
-    for service in services {
-        if run_cmd!(systemctl --user is-active --quiet $service.service).is_err() {
-            continue;
+    let init_rss = || -> CmdResult {
+        // Start ddb_local service at first if needed, since root server stores infomation in ddb_local
+        if run_cmd!(systemctl --user is-active --quiet ddb_local.service).is_err() {
+            init_ddb_local()?;
         }
 
-        run_cmd!(systemctl --user stop $service.service)?;
-
-        // make sure the process is really killed
-        if run_cmd!(systemctl --user is-active --quiet $service.service).is_ok() {
-            cmd_die!("Failed to stop $service: service is still running");
-        }
-    }
-
-    Ok(())
-}
-
-pub fn start_services(service: ServiceName, build_mode: BuildMode) -> CmdResult {
-    match service {
-        ServiceName::Bss => start_bss_service(build_mode)?,
-        ServiceName::Nss => start_nss_service(build_mode, false, false)?,
-        ServiceName::Rss => start_rss_service(build_mode)?,
-        ServiceName::ApiServer => start_api_server(build_mode)?,
-        ServiceName::All => {
-            start_rss_service(build_mode)?;
-            start_bss_service(build_mode)?;
-            start_nss_service(build_mode, false, false)?;
-            start_api_server(build_mode)?;
-        }
-        ServiceName::Minio => start_minio_service()?,
-        ServiceName::DdbLocal => start_ddb_local_service()?,
-    }
-    Ok(())
-}
-
-pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
-    create_dirs_for_bss_server()?;
-    create_systemd_unit_file(ServiceName::Bss, build_mode)?;
-
-    let bss_wait_secs = 10;
-    run_cmd! {
-        mkdir -p data/bss;
-        systemctl --user start bss.service;
-        info "Waiting ${bss_wait_secs}s for bss server up";
-        sleep $bss_wait_secs;
-    }?;
-
-    let bss_server_pid = run_fun!(pidof bss_server)?;
-    check_pids(ServiceName::Bss, &bss_server_pid)?;
-    info!("bss server (pid={bss_server_pid}) started");
-    Ok(())
-}
-
-pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool, keep_data: bool) -> CmdResult {
-    if !data_on_local {
-        // Start minio to simulate local s3 service
-        if run_cmd!(systemctl --user is-active --quiet minio.service).is_err() {
-            start_minio_service()?;
-        }
-    }
-
-    create_systemd_unit_file(ServiceName::Nss, build_mode)?;
-
-    let pwd = run_fun!(pwd)?;
-    let format_log = "data/format.log";
-    let fbs_log = "data/fbs.log";
-    if !keep_data {
+        // Initialize api key for testing
+        let build = build_mode.as_ref();
+        run_cmd! {
+            AWS_DEFAULT_REGION=fakeRegion
+            AWS_ACCESS_KEY_ID=fakeMyKeyId
+            AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
+            AWS_ENDPOINT_URL_DYNAMODB="http://localhost:8000"
+            ./target/${build}/rss_admin --region=fakeRegion api-key init-test;
+        }?;
+        stop_service(ServiceName::DdbLocal)?;
+        Ok(())
+    };
+    let init_nss = || -> CmdResult {
+        let pwd = run_fun!(pwd)?;
+        let format_log = "data/format.log";
+        let fbs_log = "data/fbs.log";
         create_dirs_for_nss_server()?;
         match build_mode {
             BuildMode::Debug => run_cmd! {
@@ -116,7 +80,105 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool, keep_data: 
                     -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG |& ts -m $TS_FMT >$fbs_log;
             }?,
         }
+        Ok(())
+    };
+    let init_minio = || run_cmd!(mkdir -p data/s3);
+    let init_bss = || create_dirs_for_bss_server();
+
+    match service {
+        ServiceName::ApiServer => {}
+        ServiceName::DdbLocal => init_ddb_local()?,
+        ServiceName::Minio => init_minio()?,
+        ServiceName::Bss => init_bss()?,
+        ServiceName::Rss => init_rss()?,
+        ServiceName::Nss => init_nss()?,
+        ServiceName::All => {
+            init_rss()?;
+            init_bss()?;
+            init_nss()?;
+        }
     }
+    Ok(())
+}
+
+pub fn stop_service(service: ServiceName) -> CmdResult {
+    let services: Vec<String> = match service {
+        ServiceName::All => vec![
+            ServiceName::ApiServer.as_ref().to_owned(),
+            ServiceName::Nss.as_ref().to_owned(),
+            ServiceName::Bss.as_ref().to_owned(),
+            ServiceName::Rss.as_ref().to_owned(),
+            ServiceName::Minio.as_ref().to_owned(),
+            ServiceName::DdbLocal.as_ref().to_owned(),
+        ],
+        single_service => vec![single_service.as_ref().to_owned()],
+    };
+
+    run_cmd! {
+        info "Running sync command";
+        sync
+    }?;
+
+    info!("Killing previous service(s) (if any) ...");
+    for service in services {
+        if run_cmd!(systemctl --user is-active --quiet $service.service).is_err() {
+            continue;
+        }
+
+        run_cmd!(systemctl --user stop $service.service)?;
+
+        // make sure the process is really killed
+        if run_cmd!(systemctl --user is-active --quiet $service.service).is_ok() {
+            cmd_die!("Failed to stop $service: service is still running");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn start_services(service: ServiceName, build_mode: BuildMode) -> CmdResult {
+    match service {
+        ServiceName::Bss => start_bss_service(build_mode)?,
+        ServiceName::Nss => start_nss_service(build_mode, false)?,
+        ServiceName::Rss => start_rss_service(build_mode)?,
+        ServiceName::ApiServer => start_api_server(build_mode)?,
+        ServiceName::All => {
+            start_rss_service(build_mode)?;
+            start_bss_service(build_mode)?;
+            start_nss_service(build_mode, false)?;
+            start_api_server(build_mode)?;
+        }
+        ServiceName::Minio => start_minio_service()?,
+        ServiceName::DdbLocal => start_ddb_local_service()?,
+    }
+    Ok(())
+}
+
+pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
+    create_systemd_unit_file(ServiceName::Bss, build_mode)?;
+
+    let bss_wait_secs = 10;
+    run_cmd! {
+        systemctl --user start bss.service;
+        info "Waiting ${bss_wait_secs}s for bss server up";
+        sleep $bss_wait_secs;
+    }?;
+
+    let bss_server_pid = run_fun!(pidof bss_server)?;
+    check_pids(ServiceName::Bss, &bss_server_pid)?;
+    info!("bss server (pid={bss_server_pid}) started");
+    Ok(())
+}
+
+pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResult {
+    if !data_on_local {
+        // Start minio to simulate local s3 service
+        if run_cmd!(systemctl --user is-active --quiet minio.service).is_err() {
+            start_minio_service()?;
+        }
+    }
+
+    create_systemd_unit_file(ServiceName::Nss, build_mode)?;
 
     let nss_wait_secs = 10;
     run_cmd! {
@@ -232,20 +294,6 @@ WorkingDirectory={working_dir}
         systemctl --user is-active --quiet ddb_local.service;
     }?;
 
-    const DDB_TABLE_NAME: &str = "fractalbits-keys-and-buckets";
-    run_cmd! {
-        info "Initializing table: $DDB_TABLE_NAME ...";
-        AWS_DEFAULT_REGION=fakeRegion
-        AWS_ACCESS_KEY_ID=fakeMyKeyId
-        AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
-        AWS_ENDPOINT_URL_DYNAMODB="http://localhost:8000"
-        aws dynamodb create-table
-            --table-name $DDB_TABLE_NAME
-            --attribute-definitions AttributeName=id,AttributeType=S
-            --key-schema AttributeName=id,KeyType=HASH
-            --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1 >/dev/null;
-    }?;
-
     Ok(())
 }
 
@@ -272,7 +320,6 @@ WorkingDirectory={pwd}/data
     let my_bucket = format!("s3://{bucket_name}");
     run_cmd! {
         mkdir -p etc;
-        mkdir -p data/s3;
         echo $service_file_content > $service_file;
         info "Linking $service_file into ~/.config/systemd/user";
         systemctl --user link $service_file --force --quiet;
@@ -397,7 +444,7 @@ fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
     Ok(())
 }
 
-pub fn create_dirs_for_nss_server() -> CmdResult {
+fn create_dirs_for_nss_server() -> CmdResult {
     info!("Creating necessary directories for nss_server");
     run_cmd! {
         mkdir -p data/ebs;
@@ -410,7 +457,7 @@ pub fn create_dirs_for_nss_server() -> CmdResult {
     Ok(())
 }
 
-pub fn create_dirs_for_bss_server() -> CmdResult {
+fn create_dirs_for_bss_server() -> CmdResult {
     info!("Creating necessary directories for bss_server");
     run_cmd! {
         mkdir -p data/bss;

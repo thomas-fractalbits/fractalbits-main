@@ -3,21 +3,14 @@ use crate::*;
 pub fn run_cmd_precheckin(api_only: bool) -> CmdResult {
     let working_dir = run_fun!(pwd)?;
     cmd_service::stop_service(ServiceName::All)?;
+    cmd_build::build_rss_api_server(BuildMode::Debug)?;
+    cmd_build::build_bss_nss_server(BuildMode::Debug)?;
 
-    run_cmd! {
-        info "Building rust binaries";
-        cargo build;
-
-        info "Building zig binaries";
-        zig build 2>&1;
-    }?;
-
-    cmd_service::create_dirs_for_bss_server()?;
-    cmd_service::create_dirs_for_nss_server()?;
     if api_only {
         return run_s3_api_tests();
     }
 
+    cmd_service::init_service(ServiceName::All, BuildMode::Debug)?;
     cmd_service::start_minio_service()?;
     run_cmd! {
         cd data;
@@ -90,13 +83,7 @@ fn run_art_tests() -> CmdResult {
 }
 
 fn run_s3_api_tests() -> CmdResult {
-    cmd_service::stop_service(ServiceName::All)?;
-    run_cmd! {
-        info "Removing previous buckets (ddb_local) data";
-        cd data;
-        rm -f rss/shared-local-instance.db;
-    }?;
-
+    cmd_service::init_service(ServiceName::All, BuildMode::Debug)?;
     cmd_service::start_services(ServiceName::All, BuildMode::Debug)?;
     run_cmd! {
         info "Run cargo tests (s3 api tests)";
