@@ -29,7 +29,6 @@ use axum::{
 use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_bss::message::MessageHeader;
 use rpc_client_nss::rpc::put_inode_response;
 use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
@@ -67,10 +66,11 @@ pub async fn put_object_handler(
             let blob_client = blob_client.clone();
             async move {
                 let data = block_data.map_err(|_e| S3Error::InternalError)?;
+                let len = data.len() as u64;
                 let put_result = blob_client.put_blob(blob_id, i as u32, data).await;
 
                 match put_result {
-                    Ok(x) => Ok((x - MessageHeader::SIZE) as u64),
+                    Ok(()) => Ok(len),
                     Err(_e) => Err(S3Error::InternalError),
                 }
             }

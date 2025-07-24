@@ -26,17 +26,15 @@ async fn test_basic_blob_io_with_fixed_bytes() {
         let content: Bytes = vec![0xff; 1024 * 1024 - 256].into();
         let mut readback_content = Bytes::new();
         let content_len = content.len();
-        let size = rpc_client
+        rpc_client
             .put_blob(blob_id, 0, content.clone())
             .await
             .unwrap();
-        assert_eq!(header_len + content_len, size);
 
-        let size = rpc_client
+        rpc_client
             .get_blob(blob_id, 0, &mut readback_content)
             .await
             .unwrap();
-        assert_eq!(header_len + content_len, size);
         assert_eq!(content, readback_content);
     }
 }
@@ -62,17 +60,15 @@ async fn test_basic_blob_io_with_random_bytes() {
         let content = Bytes::from((4096..1024 * 1024 - 256).fake::<String>());
         let mut readback_content = Bytes::new();
         let content_len = content.len();
-        let size = rpc_client
+        rpc_client
             .put_blob(blob_id, 0, content.clone())
             .await
             .unwrap();
-        assert_eq!(header_len + content_len, size);
 
         let size = rpc_client
             .get_blob(blob_id, 0, &mut readback_content)
             .await
             .unwrap();
-        assert_eq!(header_len + content_len, size);
         assert_eq!(content, readback_content);
     }
 }

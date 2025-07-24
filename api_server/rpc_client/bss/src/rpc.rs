@@ -14,7 +14,7 @@ impl RpcClient {
         blob_id: Uuid,
         block_number: u32,
         body: Bytes,
-    ) -> Result<usize, RpcError> {
+    ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "put_blob");
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
@@ -25,7 +25,7 @@ impl RpcClient {
         header.size = (MessageHeader::SIZE + body.len()) as u32;
 
         let msg_frame = MessageFrame::new(header, body);
-        let resp = self
+        self
             .send_request(header.id, Message::Frame(msg_frame))
             .await
             .map_err(|e| {
@@ -34,7 +34,7 @@ impl RpcClient {
                 }
                 e
             })?;
-        Ok(resp.header.result as usize)
+        Ok(())
     }
 
     pub async fn get_blob(
@@ -42,7 +42,7 @@ impl RpcClient {
         blob_id: Uuid,
         block_number: u32,
         body: &mut Bytes,
-    ) -> Result<usize, RpcError> {
+    ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "get_blob");
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
@@ -62,9 +62,8 @@ impl RpcClient {
                 }
                 e
             })?;
-        let size = resp.header.result;
         *body = resp.body;
-        Ok(size as usize)
+        Ok(())
     }
 
     pub async fn delete_blob(&self, blob_id: Uuid, block_number: u32) -> Result<(), RpcError> {
@@ -78,7 +77,7 @@ impl RpcClient {
         header.size = MessageHeader::SIZE as u32;
 
         let msg_frame = MessageFrame::new(header, Bytes::new());
-        let _resp = self
+        self
             .send_request(header.id, Message::Frame(msg_frame))
             .await
             .map_err(|e| {
