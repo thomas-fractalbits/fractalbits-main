@@ -8,7 +8,7 @@ use api_server::{
 };
 use axum::{extract::Request, routing, serve::ListenerExt};
 use clap::Parser;
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -81,7 +81,9 @@ async fn main() {
     let port = config.port;
     let app_state = AppState::new(ArcConfig(Arc::new(config))).await;
 
-    let app = routing::any(any_handler)
+    let app = axum::Router::new()
+        .nest_service("/ui/", ServeDir::new("../ui/dist"))
+        .fallback(any_handler)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {
