@@ -61,7 +61,7 @@ impl Default for Config {
             s3_cache: S3CacheConfig::default(),
             with_metrics: true,
             request_timeout_seconds: 115,
-            allow_missing_or_bad_signature: true,
+            allow_missing_or_bad_signature: false,
         }
     }
 }
