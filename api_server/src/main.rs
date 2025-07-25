@@ -1,14 +1,21 @@
 use std::sync::Arc;
 use std::{net::SocketAddr, path::PathBuf};
 
+mod api_key_routes;
+
 use api_server::{
     config::{self, ArcConfig},
     handler::any_handler,
     AppState,
 };
-use axum::{extract::Request, routing, serve::ListenerExt};
+use axum::{
+    extract::Request,
+    routing::{delete, get, post},
+    serve::ListenerExt,
+    Router,
+};
 use clap::Parser;
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -81,7 +88,15 @@ async fn main() {
     let port = config.port;
     let app_state = AppState::new(ArcConfig(Arc::new(config))).await;
 
-    let app = routing::any(any_handler)
+    let api_key_routes = Router::new()
+        .route("/", post(api_key_routes::create_api_key))
+        .route("/", get(api_key_routes::list_api_keys))
+        .route("/{key_id}", delete(api_key_routes::delete_api_key));
+
+    let app = Router::new()
+        .nest_service("/ui", ServeDir::new("../ui/dist"))
+        .nest("/api_keys", api_key_routes)
+        .fallback(any_handler)
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|req: &Request| {
