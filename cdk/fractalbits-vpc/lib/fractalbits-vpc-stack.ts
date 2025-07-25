@@ -8,7 +8,7 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
 
-import {createInstance, createUserData, createEc2Asg, createEbsVolume} from './ec2-utils';
+import {createInstance, createUserData, createEc2Asg, createEbsVolume, addAsgDeregistrationLifecycleHook} from './ec2-utils';
 import {FractalbitsHelperStack} from './fractalbits-helper-stack';
 
 export interface FractalbitsVpcStackProps extends cdk.StackProps {
@@ -266,6 +266,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
       },
     });
 
+    addAsgDeregistrationLifecycleHook(this, 'Bss', bssAsg, bssService);
+
     new cdk.CustomResource(this, 'DeregisterApiServerAsgInstances', {
       serviceToken: helperStack.deregisterProviderServiceToken,
       properties: {
@@ -275,6 +277,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
         AsgName: apiServerAsg.autoScalingGroupName,
       },
     });
+
+    addAsgDeregistrationLifecycleHook(this, 'ApiServer', apiServerAsg, apiServerService);
 
     if (benchClientAsg && benchClientService) {
       new cdk.CustomResource(this, 'DeregisterBenchClientAsgInstances', {
@@ -286,6 +290,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
           AsgName: benchClientAsg.autoScalingGroupName,
         },
       });
+      addAsgDeregistrationLifecycleHook(this, 'BenchClient', benchClientAsg, benchClientService);
     }
 
     // Outputs

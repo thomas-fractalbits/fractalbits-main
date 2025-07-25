@@ -5,7 +5,8 @@ import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 import {Construct} from 'constructs';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as cr from 'aws-cdk-lib/custom-resources';
+import * as hooktargets from 'aws-cdk-lib/aws-autoscaling-hooktargets';
+import * as path from 'path';
 
 export const createInstance = (
   scope: Construct,
@@ -151,4 +152,40 @@ export const createEbsVolume = (
   return ebsVolume;
 };
 
+export function addAsgDeregistrationLifecycleHook(
+  scope: Construct,
+  id: string,
+  asg: autoscaling.AutoScalingGroup,
+  service: servicediscovery.Service,
+) {
+  const deregisterLambdaRole = new iam.Role(scope, `${id}DeregisterRole`, {
+    assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+    managedPolicies: [
+      iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AWSCloudMapFullAccess'),
+    ],
+  });
+
+  deregisterLambdaRole.addToPolicy(new iam.PolicyStatement({
+    actions: ['autoscaling:CompleteLifecycleAction'],
+    resources: [asg.autoScalingGroupArn],
+  }));
+
+  const deregisterInstanceLambda = new lambda.Function(scope, `${id}DeregisterInstanceLifecycleLambda`, {
+    runtime: lambda.Runtime.NODEJS_20_X,
+    handler: 'index.handler',
+    code: lambda.Code.fromAsset(path.join(__dirname, 'lambda/deregister-instance-lifecycle')),
+    environment: {
+      SERVICE_ID: service.serviceId,
+    },
+    role: deregisterLambdaRole,
+  });
+
+  new autoscaling.LifecycleHook(scope, `${id}LifecycleHook`, {
+    autoScalingGroup: asg,
+    lifecycleTransition: autoscaling.LifecycleTransition.INSTANCE_TERMINATING,
+    heartbeatTimeout: cdk.Duration.minutes(5),
+    notificationTarget: new hooktargets.FunctionHook(deregisterInstanceLambda),
+  });
+}
 
