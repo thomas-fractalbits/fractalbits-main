@@ -3,8 +3,7 @@ import {Construct} from 'constructs';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
-import {createInstance, createUserData, createEc2Asg, addAsgDeregistrationLifecycleHook} from './ec2-utils';
-import {FractalbitsHelperStack} from './fractalbits-helper-stack';
+import {createInstance, createUserData, createEc2Asg, addAsgDeregistrationLifecycleHook, createDeregisterProviderServiceToken} from './ec2-utils';
 
 interface FractalbitsBenchVpcStackProps extends cdk.StackProps {
   serviceEndpoint: string;
@@ -108,10 +107,10 @@ export class FractalbitsBenchVpcStack extends cdk.Stack {
       description: 'Auto Scaling Group Name for bench clients',
     });
 
-    const helperStack = new FractalbitsHelperStack(this, 'FractalbitsHelperStack');
+    const deregisterProviderServiceToken = createDeregisterProviderServiceToken(this, 'DeregisterProvider');
 
     new cdk.CustomResource(this, 'DeregisterBenchClientAsgInstances', {
-      serviceToken: helperStack.deregisterProviderServiceToken,
+      serviceToken: deregisterProviderServiceToken,
       properties: {
         ServiceId: benchClientService.serviceId,
         NamespaceName: privateDnsNamespace.namespaceName,
