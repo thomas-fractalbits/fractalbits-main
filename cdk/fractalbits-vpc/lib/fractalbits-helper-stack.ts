@@ -1,10 +1,10 @@
 import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
+import {Construct} from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as cr from 'aws-cdk-lib/custom-resources';
 
-export class FractalbitsHelperStack extends cdk.NestedStack {
+export class FractalbitsHelperStack extends cdk.Stack {
   public readonly deregisterProviderServiceToken: string;
 
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
