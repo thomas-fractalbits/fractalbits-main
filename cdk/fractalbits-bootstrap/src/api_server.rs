@@ -63,6 +63,7 @@ root_domain = ".localhost"
 with_metrics = false
 request_timeout_seconds = 115
 allow_missing_or_bad_signature = false
+web_root = "{WEB_ROOT}"
 
 [s3_cache]
 s3_host = "http://s3.{aws_region}.amazonaws.com"
