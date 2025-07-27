@@ -41,8 +41,8 @@ fn download_binary(file_name: &str) -> CmdResult {
 
 pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResult {
     let aws_region = get_current_aws_region()?;
+    let working_dir = "/data";
     let mut requires = "";
-    let mut working_dir = "/data";
     let mut env_settings = String::new();
     let exec_start = match service_name {
         "api_server" => {
@@ -63,7 +63,6 @@ Environment="RUST_LOG=info""##
         }
         "bss_server" => {
             requires = "data-local.mount";
-            working_dir = "/data/local";
             format!("{BIN_PATH}{service_name} -c {ETC_PATH}{BSS_SERVER_CONFIG}")
         }
         "bench_server" => {

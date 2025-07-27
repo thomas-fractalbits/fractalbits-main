@@ -10,8 +10,9 @@ pub fn bootstrap(service_id: &str, meta_stack_testing: bool, for_bench: bool) ->
     create_coredump_config()?;
 
     info!("Creating directories for bss_server");
+    run_cmd!(mkdir -p /data/local/stats)?;
     for i in 0..256 {
-        run_cmd!(mkdir -p /data/local/bss/dir$i)?;
+        run_cmd!(mkdir -p /data/local/blobs/dir$i)?;
     }
 
     create_bss_config()?;
@@ -35,7 +36,8 @@ pub fn bootstrap(service_id: &str, meta_stack_testing: bool, for_bench: bool) ->
 fn create_bss_config() -> CmdResult {
     let num_threads = run_fun!(nproc)?;
     let config_content = format!(
-        r##"server_port = 8088
+        r##"working_dir = "/data"
+server_port = 8088
 num_threads = {num_threads}
 log_level = "warn"
 use_direct_io = true

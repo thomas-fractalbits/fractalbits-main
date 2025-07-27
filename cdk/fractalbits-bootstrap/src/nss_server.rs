@@ -69,7 +69,8 @@ fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> Cmd
         (ebs_blockdev_mb as f64 * EBS_SPACE_PERCENT) as u64 * 1024 * 1024;
 
     let config_content = format!(
-        r##"server_port = 8088
+        r##"working_dir = "/data"
+server_port = 8088
 blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
@@ -126,6 +127,8 @@ pub fn format_nss(ebs_dev: String, testing_mode: bool) -> CmdResult {
     }
 
     info!("Creating directories for nss_server");
+    run_cmd!(mkdir -p /data/local/stats)?;
+
     for i in 0..256 {
         run_cmd!(mkdir -p /data/local/meta_cache/blobs/dir$i)?;
     }
@@ -136,7 +139,6 @@ pub fn format_nss(ebs_dev: String, testing_mode: bool) -> CmdResult {
 
     run_cmd! {
         info "Running format for nss_server";
-        cd /data;
         /opt/fractalbits/bin/nss_server format -c /opt/fractalbits/etc/nss_server_cloud_config.toml;
     }?;
 

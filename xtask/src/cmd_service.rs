@@ -65,7 +65,6 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
         create_dirs_for_nss_server()?;
         match build_mode {
             BuildMode::Debug => run_cmd! {
-                cd data;
                 info "formatting nss_server with default configs";
                 ${pwd}/zig-out/bin/nss_server format
                     |& ts -m $TS_FMT >$format_log;
@@ -73,7 +72,6 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
                     |& ts -m $TS_FMT >$fbs_log;
             }?,
             BuildMode::Release => run_cmd! {
-                cd data;
                 info "formatting nss_server for benchmarking";
                 ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG
                     |& ts -m $TS_FMT >$format_log;
@@ -416,7 +414,7 @@ Environment="AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000""##
     if let Some(config) = config_file {
         exec_start += &format!(" -c {config}");
     }
-    let working_dir = run_fun!(realpath $pwd/data)?;
+    let working_dir = run_fun!(realpath $pwd)?;
     let systemd_unit_content = format!(
         r##"[Unit]
 Description={service_name} Service
@@ -456,6 +454,7 @@ fn create_dirs_for_nss_server() -> CmdResult {
     info!("Creating necessary directories for nss_server");
     run_cmd! {
         mkdir -p data/ebs;
+        mkdir -p data/local/stats;
         mkdir -p data/local/meta_cache/blobs;
     }?;
     for i in 0..256 {
@@ -468,10 +467,11 @@ fn create_dirs_for_nss_server() -> CmdResult {
 fn create_dirs_for_bss_server() -> CmdResult {
     info!("Creating necessary directories for bss_server");
     run_cmd! {
-        mkdir -p data/bss;
+        mkdir -p data/local/stats;
+        mkdir -p data/local/blobs;
     }?;
     for i in 0..256 {
-        run_cmd!(mkdir -p data/bss/dir$i)?;
+        run_cmd!(mkdir -p data/local/blobs/dir$i)?;
     }
 
     Ok(())
