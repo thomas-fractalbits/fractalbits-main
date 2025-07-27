@@ -204,16 +204,6 @@ pub fn start_rss_service(build_mode: BuildMode) -> CmdResult {
         start_ddb_local_service()?;
     }
 
-    // Initialize api key for testing
-    let build = build_mode.as_ref();
-    run_cmd! {
-        AWS_DEFAULT_REGION=fakeRegion
-        AWS_ACCESS_KEY_ID=fakeMyKeyId
-        AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
-        AWS_ENDPOINT_URL_DYNAMODB="http://localhost:8000"
-        ./target/${build}/rss_admin --region=fakeRegion api-key init-test;
-    }?;
-
     create_systemd_unit_file(ServiceName::Rss, build_mode, None)?;
     let rss_wait_secs = 10;
     run_cmd! {
