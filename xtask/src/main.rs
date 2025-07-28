@@ -15,6 +15,8 @@ pub const TEST_BUCKET_ROOT_BLOB_NAME: &str = "947ef2be-44b2-4ac2-969b-2574eb8566
 pub const TS_FMT: &str = "%b %d %H:%M:%.S";
 pub const NSS_SERVER_BENCH_CONFIG: &str = "nss_server_bench_config.toml";
 pub const API_SERVER_GUI_CONFIG: &str = "api_server_gui_config.toml";
+// Need to match with api_server's default config to make authentication work
+pub const UI_DEFAULT_REGION: &str = "us-west-1";
 
 #[derive(Parser)]
 #[command(rename_all = "snake_case")]
@@ -167,7 +169,7 @@ fn main() -> CmdResult {
             cmd_build::build_rss_api_server(build_mode)?;
             cmd_build::build_bss_nss_server(build_mode)?;
             cmd_build::build_rewrk_rpc()?;
-            cmd_build::build_ui()?;
+            cmd_build::build_ui(UI_DEFAULT_REGION)?;
         }
         Cmd::Precheckin { api_only } => cmd_precheckin::run_cmd_precheckin(api_only)?,
         Cmd::Nightly => cmd_nightly::run_cmd_nightly()?,

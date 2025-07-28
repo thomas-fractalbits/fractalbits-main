@@ -73,11 +73,11 @@ pub fn build_rss_api_server(mode: BuildMode) -> CmdResult {
     }
 }
 
-pub fn build_ui() -> CmdResult {
+pub fn build_ui(region: &str) -> CmdResult {
     run_cmd! {
         info "Building ui ...";
         cd ./ui;
         npm install;
-        npm run build;
+        VITE_AWS_REGION=$region npm run build;
     }
 }

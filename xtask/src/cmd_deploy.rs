@@ -110,7 +110,8 @@ pub fn run_cmd_deploy(
         }?;
     }
 
-    cmd_build::build_ui()?;
+    let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
+    cmd_build::build_ui(&region)?;
 
     info!("Uploading Rust-built binaries");
     let rust_bins = [
@@ -153,8 +154,7 @@ pub fn run_cmd_deploy(
 }
 
 fn get_build_bucket_name() -> FunResult {
-    let awk_opts = r#"{{print $2}}"#;
-    let region = run_fun!(aws configure list | grep region | awk $awk_opts)?;
+    let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
     Ok(format!("fractalbits-builds-{}", region))
 }
 
