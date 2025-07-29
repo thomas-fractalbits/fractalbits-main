@@ -83,7 +83,7 @@ pub fn create_mixed_workload_config(
 
     # The number of objects to upload before starting the benchmark.
     # Upload enough objects to ensure that any remote caching is bypassed.
-    objects: 1000
+    # objects: 1000
 
     # Adjust the distribution of each operation type
     # The final distribution will be determined by the fraction of each value of the total.
@@ -134,7 +134,7 @@ pub fn create_mixed_workload_config(
     md5: false
 
     # Disable multipart uploads
-    disable-multipart: false
+    disable-multipart: true
 
     # Disable calculating sha256 on client side for uploads
     disable-sha256-payload: true

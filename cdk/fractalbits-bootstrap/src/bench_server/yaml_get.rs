@@ -69,7 +69,7 @@ pub fn create_get_workload_config(
     #  CAREFUL:    ALL DATA WILL BE DELETED IN BUCKET!
     #
     # By default, 'warp-benchmark-bucket' will be created or used.
-    bucket: warp-benchmark-bucket
+    bucket:
 
   # params specifies the benchmark parameters.
   # The fields here depend on the benchmark type.
@@ -83,7 +83,7 @@ pub fn create_get_workload_config(
 
     # The number of objects to upload before starting the benchmark.
     # Upload enough objects to ensure that any remote caching is bypassed.
-    objects: 1000
+    # objects: 1000
 
     # Properties of uploaded objects.
     obj:
@@ -91,7 +91,7 @@ pub fn create_get_workload_config(
       size: 4KiB
 
       # Number of versions to upload of each object
-      versions: 2
+      versions: 1
 
       # Randomize the size of each object within certain constraints.
       # See https://github.com/minio/warp?tab=readme-ov-file#random-file-sizes
@@ -145,7 +145,7 @@ pub fn create_get_workload_config(
     md5: false
 
     # Disable multipart uploads
-    disable-multipart: false
+    disable-multipart: true
 
     # Disable calculating sha256 on client side for uploads
     disable-sha256-payload: true

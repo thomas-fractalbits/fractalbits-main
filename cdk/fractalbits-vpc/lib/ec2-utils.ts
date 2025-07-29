@@ -81,7 +81,6 @@ export const createEc2Asg = (
     vpc: vpc,
     minCapacity: minCapacity,
     maxCapacity: maxCapacity,
-    desiredCapacity: maxCapacity,
     vpcSubnets: {
       subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
     },

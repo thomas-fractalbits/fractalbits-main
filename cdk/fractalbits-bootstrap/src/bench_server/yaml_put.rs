@@ -69,7 +69,7 @@ pub fn create_put_workload_config(
     #  CAREFUL:    ALL DATA WILL BE DELETED IN BUCKET!
     #
     # By default, 'warp-benchmark-bucket' will be created or used.
-    bucket: warp-benchmark-bucket
+    bucket:
 
   # params specifies the benchmark parameters.
   # The fields here depend on the benchmark type.
@@ -82,7 +82,7 @@ pub fn create_put_workload_config(
     concurrent: 48
 
     # Use POST Object operations for upload.
-    post: false
+    # post: false
 
     # Properties of uploaded objects.
     obj:
