@@ -58,8 +58,16 @@ export const createEc2Asg = (
     throw new Error("instanceTypeNames must not be empty.");
   }
 
-  const isArm = instanceTypeNames.every(name => name.includes('g'));
-  const isX86 = instanceTypeNames.every(name => !name.includes('g'));
+  const isArmInstance = (name: string): boolean => {
+    const family = name.split('.')[0];
+    // Graviton (arm) instances have a 'g' after the generation number, e.g. m6g, t4g, c7g.
+    // The 'a1' family is also arm.
+    // G-family instances (e.g. g4dn) are for GPU, not graviton, and are x86, but g5g is arm.
+    return family === 'a1' || /\d[g]/.test(family);
+  };
+
+  const isArm = instanceTypeNames.every(isArmInstance);
+  const isX86 = instanceTypeNames.every(name => !isArmInstance(name));
   if (!isArm && !isX86) {
     console.error("Error: both x86 and arm instance types are found, which is not supported for now.");
     process.exit(1);
