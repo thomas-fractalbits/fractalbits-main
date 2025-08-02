@@ -50,12 +50,13 @@ pub fn bootstrap(
 
 fn create_config(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
     let aws_region = get_current_aws_region()?;
+    let num_cores = run_fun!(nproc)?;
     let config_content = format!(
         r##"bss_addr = "{bss_ip}:8088"
 nss_addr = "{nss_ip}:8088"
 rss_addr = "{rss_ip}:8088"
-bss_conn_num = 8
-nss_conn_num = 4
+bss_conn_num = {num_cores}
+nss_conn_num = {num_cores}
 rss_conn_num = 1
 region = "{aws_region}"
 port = 80

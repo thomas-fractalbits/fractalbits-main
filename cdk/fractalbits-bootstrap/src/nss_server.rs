@@ -69,9 +69,20 @@ fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> Cmd
     let art_journal_segment_size =
         (ebs_blockdev_mb as f64 * EBS_SPACE_PERCENT) as u64 * 1024 * 1024;
 
+    let num_cores_str = run_fun!(nproc)?;
+    let num_cores = num_cores_str.trim().parse::<u64>().map_err(|_| {
+        Error::other(format!("invalid num_cores: {num_cores_str}"))
+    })?;
+    let net_worker_thread_count = num_cores / 2;
+    let art_thread_dataop_count = num_cores / 2;
+    let art_thread_count = art_thread_dataop_count + 4;
+
     let config_content = format!(
         r##"working_dir = "/data"
 server_port = 8088
+net_worker_thread_count = {net_worker_thread_count}
+art_thread_count = {art_thread_count}
+art_thread_dataop_count = {art_thread_dataop_count}
 blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
