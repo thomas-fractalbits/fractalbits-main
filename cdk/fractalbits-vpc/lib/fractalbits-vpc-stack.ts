@@ -41,7 +41,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
     });
 
     const ec2Role = createEc2Role(this);
-
     createVpcEndpoints(this.vpc);
 
     const publicSg = new ec2.SecurityGroup(this, 'PublicInstanceSG', {

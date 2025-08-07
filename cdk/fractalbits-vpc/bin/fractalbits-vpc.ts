@@ -4,6 +4,7 @@ import {FractalbitsVpcStack} from '../lib/fractalbits-vpc-stack';
 import {FractalbitsBenchVpcStack} from '../lib/fractalbits-bench-vpc-stack';
 import {PeeringStack} from '../lib/fractalbits-peering-stack';
 import {FractalbitsMetaStack} from '../lib/fractalbits-meta-stack';
+import {VpcWithPrivateLinkStack} from "../lib/vpc-with-private-link-stack";
 
 const app = new cdk.App();
 
@@ -52,4 +53,9 @@ new FractalbitsMetaStack(app, 'FractalbitsMetaStack-Nss', {
 new FractalbitsMetaStack(app, 'FractalbitsMetaStack-Bss', {
   serviceName: 'bss',
   bssInstanceTypes: bssInstanceTypes,
+});
+
+// === VpcWithPrivateLinkStack ===
+new VpcWithPrivateLinkStack(app, 'VpcWithPrivateLinkStack', {
+  env: {},
 });
