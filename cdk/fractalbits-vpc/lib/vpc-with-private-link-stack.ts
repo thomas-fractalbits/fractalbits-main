@@ -38,16 +38,17 @@ export class VpcWithPrivateLinkStack extends cdk.Stack {
       description: 'Allow all outbound',
       allowAllOutbound: true,
     });
-    const servicePort = 5001;
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'Allow HTTP access from anywhere');
-    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(servicePort), 'Allow port 5001 access from anywhere');
+    const servicePort = 5201; // iperf3 service port
+    sg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(servicePort), `Allow port ${servicePort} access from anywhere`);
 
-    const machineImage = ec2.MachineImage.latestAmazonLinux2023();
-    const instanceType = ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO);
+    const machineImage = ec2.MachineImage.latestAmazonLinux2023({
+      cpuType: ec2.AmazonLinuxCpuType.ARM_64
+    });
 
     const az1 = this.availabilityZones[0];
     const az2 = this.availabilityZones[1];
 
+    const instanceType = new ec2.InstanceType('m7gd.4xlarge');
     const provider = new Instance(this, 'Provider', {
       vpc: this.vpc,
       vpcSubnets: {
@@ -60,10 +61,8 @@ export class VpcWithPrivateLinkStack extends cdk.Stack {
       machineImage,
     });
     provider.addUserData(
-      'yum install -y httpd',
-      'systemctl start httpd',
-      'systemctl enable httpd',
-      'echo "Hello from provider" > /var/www/html/index.html',
+      'yum install -y iperf3',
+      `echo "To start iperf3, run iperf3 -s"`,
     );
 
     const nlb = new elbv2.NetworkLoadBalancer(this, 'VpcWithPrivateLinkNlb', {
@@ -112,8 +111,8 @@ export class VpcWithPrivateLinkStack extends cdk.Stack {
     const endpointDnsEntry = cdk.Fn.select(0, endpoint.vpcEndpointDnsEntries);
     const endpointDns = cdk.Fn.select(1, cdk.Fn.split(':', endpointDnsEntry));
     consumer.addUserData(
-      `echo "To send traffic, run the following command:"`,
-      `echo "curl http://${endpointDns}"`,
+      'yum install -y iperf3',
+      `echo "To send traffic, run iperf3 -c ${endpointDns}"`,
     );
 
     new cdk.CfnOutput(this, 'ProviderInstanceId', {
