@@ -18,7 +18,7 @@ use crate::{
         Request,
     },
     object_layout::{MpuState, ObjectCoreMetaData, ObjectState},
-    AppState, BlobId,
+    AppState,
 };
 use axum::{http::HeaderValue, response::Response};
 use base64::{prelude::BASE64_STANDARD, Engine};
@@ -32,7 +32,6 @@ use rpc_client_nss::rpc::put_inode_response;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::Sha256;
-use tokio::sync::mpsc::Sender;
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
@@ -220,7 +219,6 @@ pub async fn complete_multipart_upload_handler(
     bucket: &Bucket,
     key: String,
     upload_id: String,
-    blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let headers = extract_metadata_headers(request.headers())?;
     let expected_checksum = request_checksum_value(request.headers())?;
@@ -273,7 +271,7 @@ pub async fn complete_multipart_upload_handler(
         return Err(S3Error::InvalidPart);
     }
     for mpu_key in invalid_part_keys.iter() {
-        delete_object_handler(app.clone(), bucket, mpu_key.clone(), blob_deletion.clone()).await?;
+        delete_object_handler(app.clone(), bucket, mpu_key.clone()).await?;
     }
 
     let etag = gen_etag();

@@ -3,12 +3,10 @@ use std::sync::Arc;
 use axum::response::Response;
 use axum::{http::HeaderValue, response};
 use serde::Serialize;
-use tokio::sync::mpsc::Sender;
-
 use crate::handler::common::{mpu_get_part_prefix, s3_error::S3Error};
 use crate::handler::put::put_object_handler;
 use crate::handler::Request;
-use crate::{AppState, BlobId};
+use crate::AppState;
 use bucket_tables::bucket_table::Bucket;
 
 #[allow(dead_code)]
@@ -37,7 +35,6 @@ pub async fn upload_part_handler(
     key: String,
     part_number: u64,
     upload_id: String,
-    blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     if !(1..=10_000).contains(&part_number) {
         return Err(S3Error::InvalidPart);
@@ -45,7 +42,7 @@ pub async fn upload_part_handler(
     // TODO: check upload_id
 
     let key = mpu_get_part_prefix(key, part_number);
-    put_object_handler(app, request, bucket, key, blob_deletion).await?;
+    put_object_handler(app, request, bucket, key).await?;
 
     let mut resp = response::Response::default();
     let etag = format!("{upload_id}{part_number}");

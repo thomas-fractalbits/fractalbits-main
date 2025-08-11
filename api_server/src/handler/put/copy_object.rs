@@ -16,7 +16,7 @@ use crate::{
         Request,
     },
     object_layout::*,
-    AppState, BlobId,
+    AppState,
 };
 use axum::{
     body::Body,
@@ -26,7 +26,6 @@ use axum::{
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, Versioned};
 use serde::Serialize;
-use tokio::sync::mpsc::Sender;
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
@@ -198,7 +197,6 @@ pub async fn copy_object_handler(
     api_key: Versioned<ApiKey>,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
     let header_opts = HeaderOpts::from_headers(request.headers())?;
     let (source_obj, body) =
@@ -209,7 +207,6 @@ pub async fn copy_object_handler(
         Request::new(ReqBody::from(body)),
         bucket,
         key,
-        blob_deletion,
     )
     .await?;
 

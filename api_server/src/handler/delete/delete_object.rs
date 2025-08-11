@@ -22,8 +22,8 @@ pub async fn delete_object_handler(
     app: Arc<AppState>,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
+    let blob_deletion = app.get_blob_deletion();
     let rpc_timeout = app.config.rpc_timeout();
     let resp = nss_rpc_retry!(
         app,

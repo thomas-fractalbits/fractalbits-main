@@ -141,6 +141,10 @@ impl AppState {
     pub fn get_blob_client(&self) -> Arc<BlobClient> {
         self.blob_client.clone()
     }
+
+    pub fn get_blob_deletion(&self) -> Sender<(BlobId, usize)> {
+        self.blob_deletion.clone()
+    }
 }
 
 pub struct BlobClient {

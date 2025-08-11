@@ -19,7 +19,7 @@ use crate::{
         Request,
     },
     object_layout::*,
-    AppState, BlobId,
+    AppState,
 };
 use axum::{
     body::Body,
@@ -30,7 +30,6 @@ use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_nss::rpc::put_inode_response;
-use tokio::sync::mpsc::Sender;
 use uuid::Uuid;
 
 use super::block_data_stream::BlockDataStream;
@@ -40,8 +39,8 @@ pub async fn put_object_handler(
     request: Request,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
 ) -> Result<Response, S3Error> {
+    let blob_deletion = app.get_blob_deletion();
     let start = Instant::now();
     let headers = extract_metadata_headers(request.headers())?;
     let expected_checksums = ExpectedChecksums {

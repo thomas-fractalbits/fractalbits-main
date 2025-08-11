@@ -12,7 +12,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::{AppState, BlobId};
+use crate::AppState;
 use axum::{
     body::Body,
     extract::{ConnectInfo, FromRequestParts, State},
@@ -36,7 +36,6 @@ use head::HeadEndpoint;
 use post::PostEndpoint;
 use put::PutEndpoint;
 use rpc_client_rss::RpcErrorRss;
-use tokio::sync::mpsc::Sender;
 
 pub type Request<T = ReqBody> = http::Request<T>;
 
@@ -231,7 +230,6 @@ async fn any_handler_inner(
         return Err(S3Error::AccessDenied);
     }
 
-    let blob_deletion = app.blob_deletion.clone();
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
             bucket_handler(app, request, api_key, bucket_name, bucket_endpoint).await
@@ -252,18 +250,17 @@ async fn any_handler_inner(
                 api_key,
                 &bucket,
                 key,
-                blob_deletion,
                 put_endpoint,
             )
             .await
         }
         Endpoint::Post(post_endpoint) => {
             let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            post_handler(app, request, &bucket, key, blob_deletion, post_endpoint).await
+            post_handler(app, request, &bucket, key, post_endpoint).await
         }
         Endpoint::Delete(delete_endpoint) => {
             let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            delete_handler(app, request, &bucket, key, blob_deletion, delete_endpoint).await
+            delete_handler(app, request, &bucket, key, delete_endpoint).await
         }
     }
 }
@@ -327,12 +324,11 @@ async fn put_handler(
     api_key: Versioned<ApiKey>,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
     endpoint: PutEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
         PutEndpoint::PutObject => {
-            put::put_object_handler(app, request, bucket, key, blob_deletion).await
+            put::put_object_handler(app, request, bucket, key).await
         }
         PutEndpoint::UploadPart(part_number, upload_id) => {
             put::upload_part_handler(
@@ -342,12 +338,11 @@ async fn put_handler(
                 key,
                 part_number,
                 upload_id,
-                blob_deletion,
             )
             .await
         }
         PutEndpoint::CopyObject => {
-            put::copy_object_handler(app, request, api_key, bucket, key, blob_deletion).await
+            put::copy_object_handler(app, request, api_key, bucket, key).await
         }
         PutEndpoint::RenameFolder => put::rename_folder_handler(app, request, bucket, key).await,
         PutEndpoint::RenameObject => put::rename_object_handler(app, request, bucket, key).await,
@@ -359,7 +354,6 @@ async fn post_handler(
     request: Request,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
     endpoint: PostEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
@@ -370,7 +364,6 @@ async fn post_handler(
                 bucket,
                 key,
                 upload_id,
-                blob_deletion,
             )
             .await
         }
@@ -378,7 +371,7 @@ async fn post_handler(
             post::create_multipart_upload_handler(app, request, bucket, key).await
         }
         PostEndpoint::DeleteObjects => {
-            post::delete_objects_handler(app, request, bucket, blob_deletion).await
+            post::delete_objects_handler(app, request, bucket).await
         }
     }
 }
@@ -388,7 +381,6 @@ async fn delete_handler(
     request: Request,
     bucket: &Bucket,
     key: String,
-    blob_deletion: Sender<(BlobId, usize)>,
     endpoint: DeleteEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
@@ -396,7 +388,7 @@ async fn delete_handler(
             delete::abort_multipart_upload_handler(app, request, bucket, key, upload_id).await
         }
         DeleteEndpoint::DeleteObject => {
-            delete::delete_object_handler(app, bucket, key, blob_deletion).await
+            delete::delete_object_handler(app, bucket, key).await
         }
     }
 }
