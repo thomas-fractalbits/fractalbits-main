@@ -57,6 +57,9 @@ enum Cmd {
         api_only: bool,
     },
 
+    #[clap(about = "Test root server leader election")]
+    TestLeaderElection,
+
     #[clap(about = "Build the whole project")]
     Build {
         #[clap(long, long_help = "release build or not")]
@@ -173,6 +176,30 @@ fn main() -> CmdResult {
             cmd_build::build_ui(UI_DEFAULT_REGION)?;
         }
         Cmd::Precheckin { api_only } => cmd_precheckin::run_cmd_precheckin(api_only)?,
+        Cmd::TestLeaderElection => {
+            // Initialize DDB local with leader election table and run tests
+            cmd_service::init_service(ServiceName::DdbLocal, BuildMode::Debug)?;
+            cmd_service::start_services(ServiceName::DdbLocal, BuildMode::Debug, false)?;
+
+            run_cmd! {
+                info "Running root_server leader election tests...";
+                cargo test --package root_server --test leader_election_test -- --test-threads 1 --nocapture;
+            }?;
+
+            // Also show current leader state for manual inspection
+            run_cmd! {
+                info "Showing current leader state:";
+                AWS_DEFAULT_REGION=fakeRegion
+                AWS_ACCESS_KEY_ID=fakeMyKeyId
+                AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
+                cargo run --package root_server --bin rss_admin --
+                    --region fakeRegion
+                    --ddb-endpoint "http://localhost:8000"
+                    show-leader;
+            }?;
+
+            let _ = cmd_service::stop_service(ServiceName::DdbLocal);
+        }
         Cmd::Nightly => cmd_nightly::run_cmd_nightly()?,
         Cmd::Bench {
             service,

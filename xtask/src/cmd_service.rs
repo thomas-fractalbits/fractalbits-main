@@ -26,6 +26,8 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
             mkdir -p data/rss;
         }?;
         start_ddb_local_service()?;
+
+        // Create main keys-and-buckets table
         const DDB_TABLE_NAME: &str = "fractalbits-keys-and-buckets";
         run_cmd! {
             info "Initializing table: $DDB_TABLE_NAME ...";
@@ -38,7 +40,24 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
                 --attribute-definitions AttributeName=id,AttributeType=S
                 --key-schema AttributeName=id,KeyType=HASH
                 --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1 >/dev/null;
-        }
+        }?;
+
+        // Create leader election table for root server
+        const LEADER_TABLE_NAME: &str = "fractalbits-leader-election";
+        run_cmd! {
+            info "Initializing leader election table: $LEADER_TABLE_NAME ...";
+            AWS_DEFAULT_REGION=fakeRegion
+            AWS_ACCESS_KEY_ID=fakeMyKeyId
+            AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
+            AWS_ENDPOINT_URL_DYNAMODB="http://localhost:8000"
+            aws dynamodb create-table
+                --table-name $LEADER_TABLE_NAME
+                --attribute-definitions AttributeName=key,AttributeType=S
+                --key-schema AttributeName=key,KeyType=HASH
+                --provisioned-throughput ReadCapacityUnits=1,WriteCapacityUnits=1 >/dev/null;
+        }?;
+
+        Ok(())
     };
     let init_rss = || -> CmdResult {
         // Start ddb_local service at first if needed, since root server stores infomation in ddb_local

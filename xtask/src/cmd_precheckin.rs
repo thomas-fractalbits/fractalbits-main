@@ -7,7 +7,8 @@ pub fn run_cmd_precheckin(api_only: bool) -> CmdResult {
     cmd_build::build_zig_servers(BuildMode::Debug)?;
 
     if api_only {
-        return run_s3_api_tests();
+        run_s3_api_tests()?;
+        return run_leader_election_tests();
     }
 
     cmd_service::init_service(ServiceName::All, BuildMode::Debug)?;
@@ -22,6 +23,7 @@ pub fn run_cmd_precheckin(api_only: bool) -> CmdResult {
     }?;
 
     run_s3_api_tests()?;
+    run_leader_election_tests()?;
     run_art_tests()?;
 
     if let Ok(core_file) = run_fun!(ls data | grep ^core) {
@@ -86,5 +88,19 @@ fn run_s3_api_tests() -> CmdResult {
     }?;
     let _ = cmd_service::stop_service(ServiceName::All);
 
+    Ok(())
+}
+
+fn run_leader_election_tests() -> CmdResult {
+    // Ensure DDB local is initialized with leader election table
+    cmd_service::init_service(ServiceName::DdbLocal, BuildMode::Debug)?;
+    cmd_service::start_services(ServiceName::DdbLocal, BuildMode::Debug, false)?;
+
+    run_cmd! {
+        info "Running root_server leader election tests";
+        cargo test --package root_server --test leader_election_test -- --test-threads 1 --nocapture;
+    }?;
+
+    let _ = cmd_service::stop_service(ServiceName::DdbLocal);
     Ok(())
 }
