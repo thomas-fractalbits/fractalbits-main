@@ -100,7 +100,7 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
         }
         Ok(())
     };
-    let init_nss_health_agent = || -> CmdResult { Ok(()) };
+    let init_nss_role_agent = || -> CmdResult { Ok(()) };
     let init_minio = || run_cmd!(mkdir -p data/s3);
     let init_bss = || create_dirs_for_bss_server();
 
@@ -111,7 +111,7 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
         ServiceName::Bss => init_bss()?,
         ServiceName::Rss => init_rss()?,
         ServiceName::Nss => init_nss()?,
-        ServiceName::NssHealthAgent => init_nss_health_agent()?,
+        ServiceName::NssHealthAgent => init_nss_role_agent()?,
         ServiceName::All => {
             init_rss()?;
             init_bss()?;
@@ -160,14 +160,14 @@ pub fn start_services(service: ServiceName, build_mode: BuildMode, for_gui: bool
     match service {
         ServiceName::Bss => start_bss_service(build_mode)?,
         ServiceName::Nss => start_nss_service(build_mode, false)?,
-        ServiceName::NssHealthAgent => start_nss_health_agent_service(build_mode)?,
+        ServiceName::NssHealthAgent => start_nss_role_agent_service(build_mode)?,
         ServiceName::Rss => start_rss_service(build_mode)?,
         ServiceName::ApiServer => start_api_server(build_mode, for_gui)?,
         ServiceName::All => {
             start_rss_service(build_mode)?;
             start_bss_service(build_mode)?;
             start_nss_service(build_mode, false)?;
-            start_nss_health_agent_service(build_mode)?;
+            start_nss_role_agent_service(build_mode)?;
             start_api_server(build_mode, for_gui)?;
         }
         ServiceName::Minio => start_minio_service()?,
@@ -219,18 +219,18 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
     Ok(())
 }
 
-pub fn start_nss_health_agent_service(build_mode: BuildMode) -> CmdResult {
+pub fn start_nss_role_agent_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::NssHealthAgent, build_mode, None)?;
 
     let wait_secs = 10;
     run_cmd! {
-        systemctl --user start nss_health_agent.service;
-        info "Waiting ${wait_secs}s for nss_health_agent server up";
+        systemctl --user start nss_role_agent.service;
+        info "Waiting ${wait_secs}s for nss_role_agent server up";
         sleep $wait_secs;
     }?;
-    let server_pid = run_fun!(pidof nss_health_agent)?;
+    let server_pid = run_fun!(pidof nss_role_agent)?;
     check_pids(ServiceName::NssHealthAgent, &server_pid)?;
-    info!("nss_health_agent server (pid={server_pid}) started");
+    info!("nss_role_agent server (pid={server_pid}) started");
     Ok(())
 }
 
@@ -399,7 +399,7 @@ Environment="RUST_LOG=warn""##
         },
         ServiceName::NssHealthAgent => {
             env_settings += env_rust_log(build_mode);
-            format!("{pwd}/target/{build}/nss_health_agent")
+            format!("{pwd}/target/{build}/nss_role_agent")
         }
         ServiceName::Rss => {
             env_settings = r##"

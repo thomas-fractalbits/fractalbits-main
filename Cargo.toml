@@ -6,7 +6,7 @@ members = [
     "api_server/bucket_tables",
     "api_server/kv_client_traits",
     "cdk/fractalbits-bootstrap",
-    "nss_health_agent",
+    "nss_role_agent",
     "root_server",
     "root_server/admin",
     "root_server/ebs-failover",
