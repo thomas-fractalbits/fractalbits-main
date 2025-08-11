@@ -9,8 +9,8 @@ bytes = "1.7.1"
 clap = "2"
 colored = "2"
 futures-util = "0.3"
-rpc_client_nss = { path = "../../rpc_client/nss" }
-rpc_client_bss = { path = "../../rpc_client/bss" }
+rpc_client_nss = { path = "../../../rpc_clients/nss" }
+rpc_client_bss = { path = "../../../rpc_clients/bss" }
 regex = "1.10.6"
 tokio = { version = "1.40.0", features = ["full"] }
 serde_json = "1"

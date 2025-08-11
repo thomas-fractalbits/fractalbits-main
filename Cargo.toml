@@ -5,29 +5,29 @@ members = [
     "api_server/benches/rewrk_rpc",
     "api_server/bucket_tables",
     "api_server/kv_client_traits",
-    "api_server/rpc_client/bss",
-    "api_server/rpc_client/common",
-    "api_server/rpc_client/nss",
-    "api_server/rpc_client/rss",
-    "api_server/slotmap_conn_pool",
     "cdk/fractalbits-bootstrap",
     "nss_health_agent",
     "root_server",
     "root_server/admin",
     "root_server/ebs-failover",
+    "rpc_clients/bss",
+    "rpc_clients/common",
+    "rpc_clients/nss",
+    "rpc_clients/rss",
+    "rpc_clients/slotmap_conn_pool",
     "xtask",
     "xtask/tools",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-kv_client_traits = { path = "api_server/kv_client_traits" }
-rpc_client_common = { path = "api_server/rpc_client/common" }
-rpc_client_bss = { path = "api_server/rpc_client/bss" }
-rpc_client_nss = { path = "api_server/rpc_client/nss" }
-rpc_client_rss = { path = "api_server/rpc_client/rss" }
-slotmap_conn_pool = { path = "api_server/slotmap_conn_pool" }
 bucket_tables = { path = "api_server/bucket_tables" }
+kv_client_traits = { path = "api_server/kv_client_traits" }
+rpc_client_common = { path = "rpc_clients/common" }
+rpc_client_bss = { path = "rpc_clients/bss" }
+rpc_client_nss = { path = "rpc_clients/nss" }
+rpc_client_rss = { path = "rpc_clients/rss" }
+slotmap_conn_pool = { path = "rpc_clients/slotmap_conn_pool" }
 xtask_tools = { path = "xtask/tools" }
 
 tokio-util = { version = "0.7.12", features = ["codec"] }
