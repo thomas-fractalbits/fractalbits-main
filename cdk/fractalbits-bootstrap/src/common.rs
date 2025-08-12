@@ -71,12 +71,12 @@ Environment="RUST_LOG=warn""##
         "bench_client" => {
             format!("{BIN_PATH}warp client")
         }
-        "ebs-failover" => {
-            env_settings = r##"
-Environment="RUST_LOG=warn""##
-                .to_string();
-            format!("{BIN_PATH}{service_name} -r {aws_region}")
-        }
+        // "ebs-failover" => {
+        //     env_settings = r##"
+        // Environment="RUST_LOG=warn""##
+        //         .to_string();
+        //     format!("{BIN_PATH}{service_name} -r {aws_region}")
+        // }
         _ => unreachable!(),
     };
     let systemd_unit_content = format!(

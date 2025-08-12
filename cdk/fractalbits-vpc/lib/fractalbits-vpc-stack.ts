@@ -81,15 +81,15 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     createServiceDiscoveryTable(this);
 
-    new dynamodb.Table(this, 'EBSFailoverStateTable', {
-      partitionKey: {
-        name: 'VolumeId',
-        type: dynamodb.AttributeType.STRING,
-      },
-      removalPolicy: cdk.RemovalPolicy.DESTROY, // Delete table on stack delete
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      tableName: 'ebs-failover-state',
-    });
+    // new dynamodb.Table(this, 'EBSFailoverStateTable', {
+    //   partitionKey: {
+    //     name: 'VolumeId',
+    //     type: dynamodb.AttributeType.STRING,
+    //   },
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY, // Delete table on stack delete
+    //   billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    //   tableName: 'ebs-failover-state',
+    // });
 
     // Define instance metadata, and create instances
     const nssInstanceType = new ec2.InstanceType('m7gd.4xlarge');

@@ -8,12 +8,13 @@ const MAX_POLL_ATTEMPTS: u64 = 60;
 
 pub fn bootstrap(
     primary_instance_id: &str,
-    secondary_instance_id: &str,
+    _secondary_instance_id: &str,
     volume_id: &str,
     for_bench: bool,
 ) -> CmdResult {
     install_rpms(&["amazon-cloudwatch-agent", "perf"])?;
-    download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
+    // download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
+    download_binaries(&["rss_admin", "root_server"])?;
     let region = get_current_aws_region()?;
     run_cmd!($BIN_PATH/rss_admin --region=$region api-key init-test)?;
 
@@ -33,9 +34,9 @@ pub fn bootstrap(
         ),
     )?;
 
-    if secondary_instance_id != "null" {
-        bootstrap_ebs_failover_service(primary_instance_id, secondary_instance_id, volume_id)?;
-    }
+    // if secondary_instance_id != "null" {
+    //     bootstrap_ebs_failover_service(primary_instance_id, secondary_instance_id, volume_id)?;
+    // }
 
     Ok(())
 }
@@ -130,6 +131,7 @@ fn run_cmd_with_ssm(instance_id: &str, cmd: &str) -> CmdResult {
     Ok(())
 }
 
+#[allow(unused)]
 fn bootstrap_ebs_failover_service(
     primary_instance_id: &str,
     secondary_instance_id: &str,

@@ -388,29 +388,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aws-sdk-ec2"
-version = "1.156.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e04d00427a65f27b7f704f43352560d1eba7d31204a9566e2c633fb5c1d96ed"
-dependencies = [
- "aws-credential-types",
- "aws-runtime",
- "aws-smithy-async",
- "aws-smithy-http",
- "aws-smithy-json",
- "aws-smithy-query",
- "aws-smithy-runtime",
- "aws-smithy-runtime-api",
- "aws-smithy-types",
- "aws-smithy-xml",
- "aws-types",
- "fastrand",
- "http 0.2.12",
- "regex-lite",
- "tracing",
-]
-
-[[package]]
 name = "aws-sdk-s3"
 version = "1.101.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1559,25 +1536,6 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
-
-[[package]]
-name = "ebs-failover"
-version = "0.1.0"
-dependencies = [
- "aws-config",
- "aws-sdk-dynamodb",
- "aws-sdk-ec2",
- "chrono",
- "clap 4.5.43",
- "env_logger 0.11.8",
- "log",
- "openssl",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "toml 0.8.23",
-]
 
 [[package]]
 name = "ecdsa"

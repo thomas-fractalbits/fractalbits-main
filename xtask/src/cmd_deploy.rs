@@ -119,7 +119,7 @@ pub fn run_cmd_deploy(
         "root_server",
         "rss_admin",
         "fractalbits-bootstrap",
-        "ebs-failover",
+        // "ebs-failover",
         "rewrk_rpc",
     ];
     let arch = if target_arm { "aarch64" } else { "x86_64" };
