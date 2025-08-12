@@ -13,7 +13,7 @@ use crate::{
         },
         get::get_object_content,
         put::put_object_handler,
-        Request,
+        ObjectRequestContext,
     },
     object_layout::*,
     AppState,
@@ -24,7 +24,7 @@ use axum::{
     response::Response,
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
-use bucket_tables::{api_key_table::ApiKey, bucket_table::Bucket, Versioned};
+use bucket_tables::{api_key_table::ApiKey, Versioned};
 use serde::Serialize;
 
 #[allow(dead_code)]
@@ -191,18 +191,21 @@ impl CopyObjectResult {
     }
 }
 
-pub async fn copy_object_handler(
-    app: Arc<AppState>,
-    request: Request,
-    api_key: Versioned<ApiKey>,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let header_opts = HeaderOpts::from_headers(request.headers())?;
+pub async fn copy_object_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let _bucket = ctx.resolve_bucket().await?;
+    let api_key = ctx.api_key.ok_or(S3Error::InternalError)?;
+    let header_opts = HeaderOpts::from_headers(ctx.request.headers())?;
     let (source_obj, body) =
-        get_copy_source_object(app.clone(), api_key, &header_opts.x_amz_copy_source).await?;
+        get_copy_source_object(ctx.app.clone(), &api_key, &header_opts.x_amz_copy_source).await?;
 
-    put_object_handler(app, Request::new(ReqBody::from(body)), bucket, key).await?;
+    let new_ctx = ObjectRequestContext::new(
+        ctx.app,
+        axum::http::Request::new(ReqBody::from(body)),
+        Some(api_key),
+        ctx.bucket_name,
+        ctx.key,
+    );
+    put_object_handler(new_ctx).await?;
 
     Xml(CopyObjectResult::default()
         .etag(source_obj.etag()?)
@@ -213,7 +216,7 @@ pub async fn copy_object_handler(
 
 async fn get_copy_source_object(
     app: Arc<AppState>,
-    api_key: Versioned<ApiKey>,
+    api_key: &Versioned<ApiKey>,
     copy_source: &str,
 ) -> Result<(ObjectLayout, Body), S3Error> {
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;

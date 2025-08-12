@@ -39,6 +39,59 @@ use rpc_client_rss::RpcErrorRss;
 
 pub type Request<T = ReqBody> = http::Request<T>;
 
+pub struct BucketRequestContext {
+    pub app: Arc<AppState>,
+    pub request: Request,
+    pub api_key: Versioned<ApiKey>,
+    pub bucket_name: String,
+}
+
+impl BucketRequestContext {
+    pub fn new(
+        app: Arc<AppState>,
+        request: Request,
+        api_key: Versioned<ApiKey>,
+        bucket_name: String,
+    ) -> Self {
+        Self {
+            app,
+            request,
+            api_key,
+            bucket_name,
+        }
+    }
+}
+
+pub struct ObjectRequestContext {
+    pub app: Arc<AppState>,
+    pub request: Request,
+    pub api_key: Option<Versioned<ApiKey>>,
+    pub bucket_name: String,
+    pub key: String,
+}
+
+impl ObjectRequestContext {
+    pub fn new(
+        app: Arc<AppState>,
+        request: Request,
+        api_key: Option<Versioned<ApiKey>>,
+        bucket_name: String,
+        key: String,
+    ) -> Self {
+        Self {
+            app,
+            request,
+            api_key,
+            bucket_name,
+            key,
+        }
+    }
+
+    pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
+        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone()).await
+    }
+}
+
 macro_rules! extract_or_return {
     ($parts:expr, $app:expr, $extractor:ty) => {
         match <$extractor>::from_request_parts($parts, $app).await {
@@ -232,135 +285,108 @@ async fn any_handler_inner(
 
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
-            bucket_handler(app, request, api_key, bucket_name, bucket_endpoint).await
+            let bucket_ctx = BucketRequestContext::new(app, request, api_key, bucket_name);
+            bucket_handler(bucket_ctx, bucket_endpoint).await
         }
         Endpoint::Head(head_endpoint) => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            head_handler(app, request, &bucket, key, head_endpoint).await
+            let object_ctx = ObjectRequestContext::new(app, request, None, bucket_name, key);
+            head_handler(object_ctx, head_endpoint).await
         }
         Endpoint::Get(get_endpoint) => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            get_handler(app, request, &bucket, key, get_endpoint).await
+            let object_ctx = ObjectRequestContext::new(app, request, None, bucket_name, key);
+            get_handler(object_ctx, get_endpoint).await
         }
         Endpoint::Put(put_endpoint) => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            put_handler(app, request, api_key, &bucket, key, put_endpoint).await
+            let object_ctx =
+                ObjectRequestContext::new(app, request, Some(api_key), bucket_name, key);
+            put_handler(object_ctx, put_endpoint).await
         }
         Endpoint::Post(post_endpoint) => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            post_handler(app, request, &bucket, key, post_endpoint).await
+            let object_ctx = ObjectRequestContext::new(app, request, None, bucket_name, key);
+            post_handler(object_ctx, post_endpoint).await
         }
         Endpoint::Delete(delete_endpoint) => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            delete_handler(app, request, &bucket, key, delete_endpoint).await
+            let object_ctx = ObjectRequestContext::new(app, request, None, bucket_name, key);
+            delete_handler(object_ctx, delete_endpoint).await
         }
     }
 }
 
 async fn bucket_handler(
-    app: Arc<AppState>,
-    request: Request,
-    api_key: Versioned<ApiKey>,
-    bucket_name: String,
+    ctx: BucketRequestContext,
     endpoint: BucketEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
-        BucketEndpoint::CreateBucket => {
-            bucket::create_bucket_handler(app, api_key, bucket_name, request).await
-        }
+        BucketEndpoint::CreateBucket => bucket::create_bucket_handler(ctx).await,
         BucketEndpoint::DeleteBucket => {
-            let bucket = bucket::resolve_bucket(app.clone(), bucket_name).await?;
-            bucket::delete_bucket_handler(app, api_key, &bucket, request).await
+            let bucket = bucket::resolve_bucket(ctx.app.clone(), ctx.bucket_name.clone()).await?;
+            bucket::delete_bucket_handler(ctx, &bucket).await
         }
-        BucketEndpoint::HeadBucket => bucket::head_bucket_handler(app, api_key, bucket_name).await,
-        BucketEndpoint::ListBuckets => bucket::list_buckets_handler(app, request).await,
+        BucketEndpoint::HeadBucket => bucket::head_bucket_handler(ctx).await,
+        BucketEndpoint::ListBuckets => bucket::list_buckets_handler(ctx).await,
     }
 }
 
 async fn head_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     endpoint: HeadEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
-        HeadEndpoint::HeadObject => head::head_object_handler(app, request, bucket, key).await,
+        HeadEndpoint::HeadObject => head::head_object_handler(ctx).await,
     }
 }
 
 async fn get_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     endpoint: GetEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
-        GetEndpoint::GetObject => get::get_object_handler(app, request, bucket, key).await,
-        GetEndpoint::GetObjectAttributes => {
-            get::get_object_attributes_handler(app, request, bucket, key).await
-        }
-        GetEndpoint::ListMultipartUploads => {
-            get::list_multipart_uploads_handler(app, request).await
-        }
-        GetEndpoint::ListObjects => get::list_objects_handler(app, request, bucket).await,
-        GetEndpoint::ListObjectsV2 => get::list_objects_v2_handler(app, request, bucket).await,
-        GetEndpoint::ListParts => get::list_parts_handler(app, request, bucket, key).await,
+        GetEndpoint::GetObject => get::get_object_handler(ctx).await,
+        GetEndpoint::GetObjectAttributes => get::get_object_attributes_handler(ctx).await,
+        GetEndpoint::ListMultipartUploads => get::list_multipart_uploads_handler(ctx).await,
+        GetEndpoint::ListObjects => get::list_objects_handler(ctx).await,
+        GetEndpoint::ListObjectsV2 => get::list_objects_v2_handler(ctx).await,
+        GetEndpoint::ListParts => get::list_parts_handler(ctx).await,
     }
 }
 
 async fn put_handler(
-    app: Arc<AppState>,
-    request: Request,
-    api_key: Versioned<ApiKey>,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     endpoint: PutEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
-        PutEndpoint::PutObject => put::put_object_handler(app, request, bucket, key).await,
+        PutEndpoint::PutObject => put::put_object_handler(ctx).await,
         PutEndpoint::UploadPart(part_number, upload_id) => {
-            put::upload_part_handler(app, request, bucket, key, part_number, upload_id).await
+            put::upload_part_handler(ctx, part_number, upload_id).await
         }
-        PutEndpoint::CopyObject => {
-            put::copy_object_handler(app, request, api_key, bucket, key).await
-        }
-        PutEndpoint::RenameFolder => put::rename_folder_handler(app, request, bucket, key).await,
-        PutEndpoint::RenameObject => put::rename_object_handler(app, request, bucket, key).await,
+        PutEndpoint::CopyObject => put::copy_object_handler(ctx).await,
+        PutEndpoint::RenameFolder => put::rename_folder_handler(ctx).await,
+        PutEndpoint::RenameObject => put::rename_object_handler(ctx).await,
     }
 }
 
 async fn post_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     endpoint: PostEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
         PostEndpoint::CompleteMultipartUpload(upload_id) => {
-            post::complete_multipart_upload_handler(app, request, bucket, key, upload_id).await
+            post::complete_multipart_upload_handler(ctx, upload_id).await
         }
-        PostEndpoint::CreateMultipartUpload => {
-            post::create_multipart_upload_handler(app, request, bucket, key).await
-        }
-        PostEndpoint::DeleteObjects => post::delete_objects_handler(app, request, bucket).await,
+        PostEndpoint::CreateMultipartUpload => post::create_multipart_upload_handler(ctx).await,
+        PostEndpoint::DeleteObjects => post::delete_objects_handler(ctx).await,
     }
 }
 
 async fn delete_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     endpoint: DeleteEndpoint,
 ) -> Result<Response, S3Error> {
     match endpoint {
         DeleteEndpoint::AbortMultipartUpload(upload_id) => {
-            delete::abort_multipart_upload_handler(app, request, bucket, key, upload_id).await
+            delete::abort_multipart_upload_handler(ctx, upload_id).await
         }
-        DeleteEndpoint::DeleteObject => delete::delete_object_handler(app, bucket, key).await,
+        DeleteEndpoint::DeleteObject => delete::delete_object_handler(ctx).await,
     }
 }
 

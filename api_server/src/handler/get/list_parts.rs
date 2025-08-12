@@ -8,14 +8,13 @@ use crate::handler::common::{
     signature::checksum::ChecksumValue,
     time,
 };
+use crate::handler::ObjectRequestContext;
 use crate::object_layout::{MpuState, ObjectState};
 use crate::AppState;
 use axum::{extract::Query, response::Response, RequestPartsExt};
 use base64::prelude::*;
 use bucket_tables::bucket_table::Bucket;
 use serde::{Deserialize, Serialize};
-
-use crate::handler::Request;
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
@@ -88,15 +87,11 @@ struct Owner {
     id: String,
 }
 
-pub async fn list_parts_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let Query(query_opts): Query<QueryOpts> = request.into_parts().0.extract().await?;
+pub async fn list_parts_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let Query(query_opts): Query<QueryOpts> = ctx.request.into_parts().0.extract().await?;
     let max_parts = query_opts.max_parts.unwrap_or(1000);
-    let object = get_raw_object(&app, &bucket.root_blob_name, &key).await?;
+    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key).await?;
     if object.version_id.simple().to_string() != query_opts.upload_id {
         return Err(S3Error::NoSuchUpload);
     }
@@ -105,11 +100,12 @@ pub async fn list_parts_handler(
     }
 
     let (parts, next_part_number_marker) =
-        fetch_mpu_parts(app, bucket, key.clone(), &query_opts, max_parts).await?;
+        fetch_mpu_parts(ctx.app, &bucket, ctx.key.clone(), &query_opts, max_parts).await?;
 
     let resp = ListPartsResult {
         bucket: bucket.bucket_name.to_string(),
-        key: key
+        key: ctx
+            .key
             .strip_prefix("/")
             .ok_or(S3Error::InternalError)?
             .to_owned(),

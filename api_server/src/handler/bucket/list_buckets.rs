@@ -14,7 +14,7 @@ use crate::{
             s3_error::S3Error,
             time::format_timestamp,
         },
-        Request,
+        BucketRequestContext,
     },
     AppState,
 };
@@ -83,18 +83,15 @@ struct Owner {
     id: String,
 }
 
-pub async fn list_buckets_handler(
-    app: Arc<AppState>,
-    request: Request,
-) -> Result<Response, S3Error> {
-    let Query(_opts): Query<ListBucketsOptions> = request.into_parts().0.extract().await?;
+pub async fn list_buckets_handler(ctx: BucketRequestContext) -> Result<Response, S3Error> {
+    let Query(_opts): Query<ListBucketsOptions> = ctx.request.into_parts().0.extract().await?;
     let bucket_table: Table<Arc<AppState>, BucketTable> =
-        Table::new(app.clone(), Some(app.cache.clone()));
+        Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
     let buckets: Vec<Bucket> = bucket_table
-        .list(Some(app.config.rpc_timeout()))
+        .list(Some(ctx.app.config.rpc_timeout()))
         .await?
         .iter()
-        .map(|bucket| Bucket::from_table_with_region(bucket, &app.config.region))
+        .map(|bucket| Bucket::from_table_with_region(bucket, &ctx.app.config.region))
         .collect();
     Xml(ListAllMyBucketsResult::from(buckets)).try_into()
 }

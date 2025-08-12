@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{body::Body, http::header, response::Response};
 use bucket_tables::{
-    api_key_table::{ApiKey, ApiKeyTable},
+    api_key_table::ApiKeyTable,
     bucket_table::{Bucket, BucketTable},
     permission::BucketKeyPerm,
     table::Table,
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::{
-    handler::{common::s3_error::S3Error, Request},
+    handler::{common::s3_error::S3Error, BucketRequestContext},
     AppState,
 };
 
@@ -47,39 +47,43 @@ struct BucketConfig {
     bucket_type: String,
 }
 
-pub async fn create_bucket_handler(
-    app: Arc<AppState>,
-    api_key: Versioned<ApiKey>,
-    bucket_name: String,
-    request: Request,
-) -> Result<Response, S3Error> {
-    info!("handling create_bucket request: {bucket_name}");
+pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response, S3Error> {
+    info!("handling create_bucket request: {}", ctx.bucket_name);
     let api_key_id = {
-        if api_key.data.authorized_buckets.contains_key(&bucket_name) {
+        if ctx
+            .api_key
+            .data
+            .authorized_buckets
+            .contains_key(&ctx.bucket_name)
+        {
             return Err(S3Error::BucketAlreadyOwnedByYou);
         }
-        if !api_key.data.allow_create_bucket {
+        if !ctx.api_key.data.allow_create_bucket {
             return Err(S3Error::AccessDenied);
         }
-        api_key.data.key_id.clone()
+        ctx.api_key.data.key_id.clone()
     };
 
-    if !is_valid_bucket_name(&bucket_name) {
+    if !is_valid_bucket_name(&ctx.bucket_name) {
         return Err(S3Error::InvalidBucketName);
     }
 
-    let body = request.into_body().collect().await?;
+    let body = ctx.request.into_body().collect().await?;
     if !body.is_empty() {
         let create_bucket_conf: CreateBucketConfiguration =
             quick_xml::de::from_reader(body.reader())?;
         let location_constraint = create_bucket_conf.location_constraint;
-        if !location_constraint.is_empty() && location_constraint != app.config.region {
+        if !location_constraint.is_empty() && location_constraint != ctx.app.config.region {
             return Err(S3Error::InvalidLocationConstraint);
         }
     }
 
-    let rpc_timeout = app.config.rpc_timeout();
-    let resp = nss_rpc_retry!(app, create_root_inode(&bucket_name, Some(rpc_timeout))).await?;
+    let rpc_timeout = ctx.app.config.rpc_timeout();
+    let resp = nss_rpc_retry!(
+        ctx.app,
+        create_root_inode(&ctx.bucket_name, Some(rpc_timeout))
+    )
+    .await?;
     let root_blob_name = match resp.result.unwrap() {
         create_root_inode_response::Result::Ok(res) => res,
         create_root_inode_response::Result::Err(e) => {
@@ -91,17 +95,19 @@ pub async fn create_bucket_handler(
     let retry_times = 10;
     for i in 0..retry_times {
         let bucket_table: Table<Arc<AppState>, BucketTable> =
-            Table::new(app.clone(), Some(app.cache.clone()));
+            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
         if bucket_table
-            .get(bucket_name.clone(), false, Some(rpc_timeout))
+            .get(ctx.bucket_name.clone(), false, Some(rpc_timeout))
             .await
             .is_ok()
         {
             return Err(S3Error::BucketAlreadyExists);
         }
 
-        let mut bucket =
-            Versioned::new(0, Bucket::new(bucket_name.clone(), root_blob_name.clone()));
+        let mut bucket = Versioned::new(
+            0,
+            Bucket::new(ctx.bucket_name.clone(), root_blob_name.clone()),
+        );
         let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
         bucket
             .data
@@ -109,18 +115,18 @@ pub async fn create_bucket_handler(
             .insert(api_key_id.clone(), bucket_key_perm);
 
         let api_key_table: Table<Arc<AppState>, ApiKeyTable> =
-            Table::new(app.clone(), Some(app.cache.clone()));
+            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
         let mut api_key = api_key_table
             .get(api_key_id.clone(), false, Some(rpc_timeout))
             .await?;
         api_key
             .data
             .authorized_buckets
-            .insert(bucket_name.clone(), bucket_key_perm);
+            .insert(ctx.bucket_name.clone(), bucket_key_perm);
 
         tracing::debug!(
             "Inserting {} into api_key {} (retry={})",
-            bucket_name.clone(),
+            ctx.bucket_name.clone(),
             api_key_id.clone(),
             i,
         );
@@ -136,13 +142,16 @@ pub async fn create_bucket_handler(
             }
             Ok(()) => {
                 return Ok(Response::builder()
-                    .header(header::LOCATION, format!("/{bucket_name}"))
+                    .header(header::LOCATION, format!("/{}", ctx.bucket_name))
                     .body(Body::empty())?);
             }
         }
     }
 
-    tracing::error!("Inserting {bucket_name} into api_key {api_key_id} failed after retrying {retry_times} times");
+    tracing::error!(
+        "Inserting {} into api_key {api_key_id} failed after retrying {retry_times} times",
+        ctx.bucket_name
+    );
     Err(S3Error::InternalError)
 }
 

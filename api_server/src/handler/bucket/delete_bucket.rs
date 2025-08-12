@@ -3,39 +3,37 @@ use std::sync::Arc;
 
 use axum::{body::Body, response::Response};
 use bucket_tables::{
-    api_key_table::{ApiKey, ApiKeyTable},
+    api_key_table::ApiKeyTable,
     bucket_table::{Bucket, BucketTable},
     table::Table,
-    Versioned,
 };
 use rpc_client_nss::rpc::delete_root_inode_response;
 use rpc_client_rss::RpcErrorRss;
 use tracing::info;
 
-use crate::handler::{common::s3_error::S3Error, Request};
+use crate::handler::{common::s3_error::S3Error, BucketRequestContext};
 use crate::AppState;
 
 pub async fn delete_bucket_handler(
-    app: Arc<AppState>,
-    api_key: Versioned<ApiKey>,
+    ctx: BucketRequestContext,
     bucket: &Bucket,
-    _request: Request,
 ) -> Result<Response, S3Error> {
     info!("handling delete_bucket request: {}", bucket.bucket_name);
-    let rpc_timeout = app.config.rpc_timeout();
+    let rpc_timeout = ctx.app.config.rpc_timeout();
     let api_key_id = {
-        if !api_key
+        if !ctx
+            .api_key
             .data
             .authorized_buckets
             .contains_key(&bucket.bucket_name)
         {
             return Err(S3Error::AccessDenied);
         }
-        api_key.data.key_id.clone()
+        ctx.api_key.data.key_id.clone()
     };
 
     let resp = nss_rpc_retry!(
-        app,
+        ctx.app,
         delete_root_inode(&bucket.root_blob_name, Some(rpc_timeout))
     )
     .await?;
@@ -53,9 +51,9 @@ pub async fn delete_bucket_handler(
     let retry_times = 10;
     for i in 0..retry_times {
         let bucket_table: Table<Arc<AppState>, BucketTable> =
-            Table::new(app.clone(), Some(app.cache.clone()));
+            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
         let api_key_table: Table<Arc<AppState>, ApiKeyTable> =
-            Table::new(app.clone(), Some(app.cache.clone()));
+            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
         let mut api_key = api_key_table
             .get(api_key_id.clone(), false, Some(rpc_timeout))
             .await?;

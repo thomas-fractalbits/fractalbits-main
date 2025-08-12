@@ -1,17 +1,14 @@
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashSet;
 
-use crate::{
-    handler::{
-        common::{
-            get_raw_object,
-            response::xml::{Xml, XmlnsS3},
-            s3_error::S3Error,
-            signature::checksum::ChecksumValue,
-            time, xheader,
-        },
-        Request,
+use crate::handler::{
+    common::{
+        get_raw_object,
+        response::xml::{Xml, XmlnsS3},
+        s3_error::S3Error,
+        signature::checksum::ChecksumValue,
+        time, xheader,
     },
-    AppState,
+    ObjectRequestContext,
 };
 use axum::{
     extract::Query,
@@ -20,7 +17,6 @@ use axum::{
     RequestPartsExt,
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
-use bucket_tables::bucket_table::Bucket;
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
@@ -177,16 +173,12 @@ struct Part {
     size: usize,
 }
 
-pub async fn get_object_attributes_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let mut parts = request.into_parts().0;
+pub async fn get_object_attributes_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let mut parts = ctx.request.into_parts().0;
     let Query(_query_opts): Query<QueryOpts> = parts.extract().await?;
     let header_opts = HeaderOpts::from_headers(&parts.headers)?;
-    let obj = get_raw_object(&app, &bucket.root_blob_name, &key).await?;
+    let obj = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key).await?;
     let last_modified = time::format_http_date(obj.timestamp);
 
     let mut resp = GetObjectAttributesOutput::default();

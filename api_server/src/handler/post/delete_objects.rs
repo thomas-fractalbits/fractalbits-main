@@ -1,16 +1,10 @@
-use std::sync::Arc;
-
-use crate::handler::delete::delete_object_handler;
-use crate::handler::Request;
-use crate::{
-    handler::common::{
-        response::xml::{Xml, XmlnsS3},
-        s3_error::S3Error,
-    },
-    AppState,
+use crate::handler::common::{
+    response::xml::{Xml, XmlnsS3},
+    s3_error::S3Error,
 };
+use crate::handler::delete::delete_object_handler;
+use crate::handler::ObjectRequestContext;
 use axum::response::Response;
-use bucket_tables::bucket_table::Bucket;
 use bytes::Buf;
 use serde::{Deserialize, Serialize};
 
@@ -70,17 +64,23 @@ struct Error {
     version_id: String,
 }
 
-pub async fn delete_objects_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-) -> Result<Response, S3Error> {
-    let body = request.into_body().collect().await?;
+pub async fn delete_objects_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let _bucket = ctx.resolve_bucket().await?;
+    let body = ctx.request.into_body().collect().await?;
     let to_be_deleted: Delete = quick_xml::de::from_reader(body.reader())?;
     let mut delete_result = DeleteResult::default();
     for obj in to_be_deleted.object {
         let key = format!("/{}\0", obj.key);
-        match delete_object_handler(app.clone(), bucket, key).await {
+        let delete_ctx = ObjectRequestContext::new(
+            ctx.app.clone(),
+            axum::http::Request::new(crate::handler::common::signature::body::ReqBody::from(
+                axum::body::Body::empty(),
+            )),
+            None,
+            ctx.bucket_name.clone(),
+            key,
+        );
+        match delete_object_handler(delete_ctx).await {
             Ok(_) => {
                 let deleted = Deleted {
                     key: obj.key,

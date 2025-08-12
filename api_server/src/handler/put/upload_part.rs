@@ -1,12 +1,8 @@
-use std::sync::Arc;
-
 use crate::handler::common::{mpu_get_part_prefix, s3_error::S3Error};
 use crate::handler::put::put_object_handler;
-use crate::handler::Request;
-use crate::AppState;
+use crate::handler::ObjectRequestContext;
 use axum::response::Response;
 use axum::{http::HeaderValue, response};
-use bucket_tables::bucket_table::Bucket;
 use serde::Serialize;
 
 #[allow(dead_code)]
@@ -29,10 +25,7 @@ struct ResponseHeaders {
 }
 
 pub async fn upload_part_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     part_number: u64,
     upload_id: String,
 ) -> Result<Response, S3Error> {
@@ -41,8 +34,10 @@ pub async fn upload_part_handler(
     }
     // TODO: check upload_id
 
-    let key = mpu_get_part_prefix(key, part_number);
-    put_object_handler(app, request, bucket, key).await?;
+    let key = mpu_get_part_prefix(ctx.key, part_number);
+    let new_ctx =
+        ObjectRequestContext::new(ctx.app, ctx.request, ctx.api_key, ctx.bucket_name, key);
+    put_object_handler(new_ctx).await?;
 
     let mut resp = response::Response::default();
     let etag = format!("{upload_id}{part_number}");

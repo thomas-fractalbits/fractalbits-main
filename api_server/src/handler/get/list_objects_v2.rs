@@ -8,7 +8,7 @@ use crate::{
             s3_error::S3Error,
             time::format_timestamp,
         },
-        Request,
+        ObjectRequestContext,
     },
     AppState,
 };
@@ -193,12 +193,9 @@ pub struct Prefix {
     prefix: String,
 }
 
-pub async fn list_objects_v2_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-) -> Result<Response, S3Error> {
-    let Query(opts): Query<QueryOpts> = request.into_parts().0.extract().await?;
+pub async fn list_objects_v2_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let Query(opts): Query<QueryOpts> = ctx.request.into_parts().0.extract().await?;
     tracing::debug!("list_objects_v2 {opts:?}");
 
     // Sanity checks
@@ -236,7 +233,7 @@ pub async fn list_objects_v2_handler(
     }
 
     let (objs, common_prefixes, next_continuation_token) =
-        list_objects(app, bucket, max_keys, prefix, delimiter, start_after).await?;
+        list_objects(ctx.app, &bucket, max_keys, prefix, delimiter, start_after).await?;
 
     Xml(ListBucketResult::default()
         .key_count(objs.len())

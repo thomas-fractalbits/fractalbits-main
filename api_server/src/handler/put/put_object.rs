@@ -1,10 +1,7 @@
 use bytes::Bytes;
 use metrics::histogram;
 use rpc_client_common::{nss_rpc_retry, rpc_retry};
-use std::{
-    sync::Arc,
-    time::{Instant, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
     handler::{
@@ -16,17 +13,15 @@ use crate::{
             },
             xheader,
         },
-        Request,
+        ObjectRequestContext,
     },
     object_layout::*,
-    AppState,
 };
 use axum::{
     body::Body,
     http::{header, HeaderValue},
     response::Response,
 };
-use bucket_tables::bucket_table::Bucket;
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_nss::rpc::put_inode_response;
@@ -34,31 +29,27 @@ use uuid::Uuid;
 
 use super::block_data_stream::BlockDataStream;
 
-pub async fn put_object_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let blob_deletion = app.get_blob_deletion();
+pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let blob_deletion = ctx.app.get_blob_deletion();
     let start = Instant::now();
-    let headers = extract_metadata_headers(request.headers())?;
+    let headers = extract_metadata_headers(ctx.request.headers())?;
     let expected_checksums = ExpectedChecksums {
-        md5: match request.headers().get("content-md5") {
+        md5: match ctx.request.headers().get("content-md5") {
             Some(x) => Some(x.to_str()?.to_string()),
             None => None,
         },
         sha256: None,
-        extra: request_checksum_value(request.headers())?,
+        extra: request_checksum_value(ctx.request.headers())?,
     };
 
-    let trailer_checksum_algorithm = request_trailer_checksum_algorithm(request.headers())?;
-    let mut req_body = request.into_body();
+    let trailer_checksum_algorithm = request_trailer_checksum_algorithm(ctx.request.headers())?;
+    let mut req_body = ctx.request.into_body();
     req_body.add_expected_checksums(expected_checksums.clone());
     let (body_stream, checksummer) = req_body.streaming_with_checksums();
     let body_data_stream = Body::from_stream(body_stream).into_data_stream();
     let blob_id = Uuid::now_v7();
-    let blob_client = app.get_blob_client();
+    let blob_client = ctx.app.get_blob_client();
     let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
         .enumerate()
         .map(|(i, block_data)| {
@@ -116,12 +107,12 @@ pub async fn put_object_handler(
     let resp = {
         let start = Instant::now();
         let res = nss_rpc_retry!(
-            app,
+            ctx.app,
             put_inode(
                 &bucket.root_blob_name,
-                &key,
+                &ctx.key,
                 object_layout_bytes.clone(),
-                Some(app.config.rpc_timeout())
+                Some(ctx.app.config.rpc_timeout())
             )
         )
         .await;

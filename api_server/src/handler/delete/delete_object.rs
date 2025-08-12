@@ -1,6 +1,5 @@
 use metrics::histogram;
 use rpc_client_common::{nss_rpc_retry, rpc_retry};
-use std::sync::Arc;
 
 use axum::{
     body::Body,
@@ -12,33 +11,40 @@ use rpc_client_nss::rpc::delete_inode_response;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
-    handler::common::{list_raw_objects, mpu_get_part_prefix, s3_error::S3Error},
+    handler::{
+        common::{list_raw_objects, mpu_get_part_prefix, s3_error::S3Error},
+        ObjectRequestContext,
+    },
     object_layout::{MpuState, ObjectLayout, ObjectState},
-    AppState, BlobId,
+    BlobId,
 };
-use bucket_tables::bucket_table::Bucket;
 
-pub async fn delete_object_handler(
-    app: Arc<AppState>,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let blob_deletion = app.get_blob_deletion();
-    let rpc_timeout = app.config.rpc_timeout();
+pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let blob_deletion = ctx.app.get_blob_deletion();
+    let rpc_timeout = ctx.app.config.rpc_timeout();
     let resp = nss_rpc_retry!(
-        app,
-        delete_inode(&bucket.root_blob_name, &key, Some(rpc_timeout))
+        ctx.app,
+        delete_inode(&bucket.root_blob_name, &ctx.key, Some(rpc_timeout))
     )
     .await?;
 
     let object_bytes = match resp.result.unwrap() {
         // S3 allow delete non-existing object
         delete_inode_response::Result::ErrNotFound(()) => {
-            tracing::debug!("delete non-existing object {}/{key}", bucket.bucket_name);
+            tracing::debug!(
+                "delete non-existing object {}/{}",
+                bucket.bucket_name,
+                ctx.key
+            );
             return Ok(Response::new(Body::empty()));
         }
         delete_inode_response::Result::ErrAlreadyDeleted(()) => {
-            tracing::warn!("object {}/{key} is already deleted", bucket.bucket_name);
+            tracing::warn!(
+                "object {}/{} is already deleted",
+                bucket.bucket_name,
+                ctx.key
+            );
             return Ok(Response::new(Body::empty()));
         }
         delete_inode_response::Result::Ok(res) => res,
@@ -66,9 +72,9 @@ pub async fn delete_object_handler(
                 return Err(S3Error::InvalidObjectState);
             }
             MpuState::Completed { .. } => {
-                let mpu_prefix = mpu_get_part_prefix(key, 0);
+                let mpu_prefix = mpu_get_part_prefix(ctx.key.clone(), 0);
                 let mpus = list_raw_objects(
-                    &app,
+                    &ctx.app,
                     &bucket.root_blob_name,
                     10000,
                     &mpu_prefix,
@@ -79,7 +85,7 @@ pub async fn delete_object_handler(
                 .await?;
                 for (mpu_key, mpu_obj) in mpus.iter() {
                     nss_rpc_retry!(
-                        app,
+                        ctx.app,
                         delete_inode(&bucket.root_blob_name, &mpu_key, Some(rpc_timeout))
                     )
                     .await?;

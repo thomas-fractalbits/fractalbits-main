@@ -1,16 +1,14 @@
 use bytes::Bytes;
 use rpc_client_common::{nss_rpc_retry, rpc_retry};
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::handler::common::s3_error::S3Error;
 use crate::handler::{
     common::response::xml::{Xml, XmlnsS3},
-    Request,
+    ObjectRequestContext,
 };
-use crate::{object_layout::*, AppState};
+use crate::object_layout::*;
 use axum::response::Response;
-use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use serde::Serialize;
 
@@ -42,11 +40,9 @@ struct InitiateMultipartUploadResult {
 }
 
 pub async fn create_multipart_upload_handler(
-    app: Arc<AppState>,
-    _request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
 ) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -60,19 +56,19 @@ pub async fn create_multipart_upload_handler(
     };
     let object_layout_bytes: Bytes = to_bytes_in::<_, Error>(&object_layout, Vec::new())?.into();
     let _resp = nss_rpc_retry!(
-        app,
+        ctx.app,
         put_inode(
             &bucket.root_blob_name,
-            &key,
+            &ctx.key,
             object_layout_bytes.clone(),
-            Some(app.config.rpc_timeout())
+            Some(ctx.app.config.rpc_timeout())
         )
     )
     .await?;
     let init_mpu_res = InitiateMultipartUploadResult {
         xmlns: Default::default(),
         bucket: bucket.bucket_name.clone(),
-        key,
+        key: ctx.key,
         upload_id: version_id.simple().to_string(),
     };
     Xml(init_mpu_res).try_into()

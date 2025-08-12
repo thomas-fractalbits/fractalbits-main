@@ -1,18 +1,12 @@
-use std::sync::Arc;
-
 use super::{list_objects, Object, Prefix};
-use crate::{
-    handler::{
-        common::{
-            response::xml::{Xml, XmlnsS3},
-            s3_error::S3Error,
-        },
-        Request,
+use crate::handler::{
+    common::{
+        response::xml::{Xml, XmlnsS3},
+        s3_error::S3Error,
     },
-    AppState,
+    ObjectRequestContext,
 };
 use axum::{extract::Query, response::Response, RequestPartsExt};
-use bucket_tables::bucket_table::Bucket;
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
@@ -108,12 +102,9 @@ impl ListBucketResult {
     }
 }
 
-pub async fn list_objects_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-) -> Result<Response, S3Error> {
-    let Query(opts): Query<QueryOpts> = request.into_parts().0.extract().await?;
+pub async fn list_objects_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let Query(opts): Query<QueryOpts> = ctx.request.into_parts().0.extract().await?;
     tracing::debug!("list_objects {opts:?}");
 
     if let Some(encoding_type) = opts.encoding_type {
@@ -139,8 +130,8 @@ pub async fn list_objects_handler(
     };
 
     let (objs, common_prefixes, next_continuation_token) = list_objects(
-        app,
-        bucket,
+        ctx.app,
+        &bucket,
         max_keys,
         prefix.clone(),
         delimiter.clone(),

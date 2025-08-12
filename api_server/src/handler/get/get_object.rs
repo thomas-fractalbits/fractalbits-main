@@ -18,7 +18,7 @@ use crate::{
             get_raw_object, list_raw_objects, mpu_get_part_prefix, object_headers,
             s3_error::S3Error, xheader,
         },
-        Request,
+        ObjectRequestContext,
     },
     object_layout::ObjectLayout,
 };
@@ -85,16 +85,12 @@ impl<'a> HeaderOpts<'a> {
     }
 }
 
-pub async fn get_object_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
-) -> Result<Response, S3Error> {
-    let mut parts = request.into_parts().0;
+pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
+    let mut parts = ctx.request.into_parts().0;
     let Query(query_opts): Query<QueryOpts> = parts.extract().await?;
     let header_opts = HeaderOpts::from_headers(&parts.headers)?;
-    let object = get_raw_object(&app, &bucket.root_blob_name, &key).await?;
+    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key).await?;
     let total_size = object.size()?;
     histogram!("object_size", "operation" => "get").record(total_size as f64);
     let range = parse_range_header(header_opts.range, total_size)?;
@@ -102,7 +98,8 @@ pub async fn get_object_handler(
     match (query_opts.part_number, range) {
         (_, None) => {
             let (body, body_size) =
-                get_object_content(app, bucket, &object, key, query_opts.part_number).await?;
+                get_object_content(ctx.app, &bucket, &object, ctx.key, query_opts.part_number)
+                    .await?;
 
             let mut resp = Response::new(body);
             object_headers(&mut resp, &object, checksum_mode_enabled)?;
@@ -116,7 +113,7 @@ pub async fn get_object_handler(
         }
 
         (None, Some(range)) => {
-            let body = get_object_range_content(app, bucket, &object, key, &range).await?;
+            let body = get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range).await?;
 
             let mut resp = Response::new(body);
             resp.headers_mut().insert(

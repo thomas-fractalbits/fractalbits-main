@@ -1,6 +1,6 @@
 use rpc_client_common::{nss_rpc_retry, rpc_retry};
+use std::collections::HashSet;
 use std::hash::Hasher;
-use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     handler::{
@@ -15,14 +15,12 @@ use crate::{
             },
         },
         delete::delete_object_handler,
-        Request,
+        ObjectRequestContext,
     },
     object_layout::{MpuState, ObjectCoreMetaData, ObjectState},
-    AppState,
 };
 use axum::{http::HeaderValue, response::Response};
 use base64::{prelude::BASE64_STANDARD, Engine};
-use bucket_tables::bucket_table::Bucket;
 use bytes::{Buf, Bytes};
 use crc32c::Crc32cHasher as Crc32c;
 use crc32fast::Hasher as Crc32;
@@ -214,20 +212,18 @@ impl MpuChecksummer {
 }
 
 pub async fn complete_multipart_upload_handler(
-    app: Arc<AppState>,
-    request: Request,
-    bucket: &Bucket,
-    key: String,
+    ctx: ObjectRequestContext,
     upload_id: String,
 ) -> Result<Response, S3Error> {
-    let headers = extract_metadata_headers(request.headers())?;
-    let expected_checksum = request_checksum_value(request.headers())?;
-    let body = request.into_body().collect().await.unwrap();
+    let bucket = ctx.resolve_bucket().await?;
+    let headers = extract_metadata_headers(ctx.request.headers())?;
+    let expected_checksum = request_checksum_value(ctx.request.headers())?;
+    let body = ctx.request.into_body().collect().await.unwrap();
     let req_body: CompleteMultipartUpload = quick_xml::de::from_reader(body.reader())?;
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let mut object = get_raw_object(&app, &bucket.root_blob_name, &key).await?;
+    let mut object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchVersion);
     }
@@ -236,9 +232,9 @@ pub async fn complete_multipart_upload_handler(
     }
 
     let max_parts = 10000;
-    let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
+    let mpu_prefix = mpu_get_part_prefix(ctx.key.clone(), 0);
     let mpu_objs = list_raw_objects(
-        &app,
+        &ctx.app,
         &bucket.root_blob_name,
         max_parts,
         &mpu_prefix,
@@ -271,7 +267,16 @@ pub async fn complete_multipart_upload_handler(
         return Err(S3Error::InvalidPart);
     }
     for mpu_key in invalid_part_keys.iter() {
-        delete_object_handler(app.clone(), bucket, mpu_key.clone()).await?;
+        let delete_ctx = ObjectRequestContext::new(
+            ctx.app.clone(),
+            axum::http::Request::new(crate::handler::common::signature::body::ReqBody::from(
+                axum::body::Body::empty(),
+            )),
+            None,
+            ctx.bucket_name.clone(),
+            mpu_key.clone(),
+        );
+        delete_object_handler(delete_ctx).await?;
     }
 
     let etag = gen_etag();
@@ -283,12 +288,12 @@ pub async fn complete_multipart_upload_handler(
     }));
     let new_object_bytes: Bytes = to_bytes_in::<_, Error>(&object, Vec::new())?.into();
     let resp = nss_rpc_retry!(
-        app,
+        ctx.app,
         put_inode(
             &bucket.root_blob_name,
-            &key,
+            &ctx.key,
             new_object_bytes.clone(),
-            Some(app.config.rpc_timeout())
+            Some(ctx.app.config.rpc_timeout())
         )
     )
     .await?;
@@ -302,7 +307,7 @@ pub async fn complete_multipart_upload_handler(
 
     let resp = CompleteMultipartUploadResult::default()
         .bucket(bucket.bucket_name.clone())
-        .key(key)
+        .key(ctx.key)
         .etag(object.etag()?)
         .checksum(object.checksum()?);
     Xml(resp).try_into()
