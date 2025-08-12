@@ -63,13 +63,24 @@ pub fn build_zig_servers(mode: BuildMode) -> CmdResult {
 
 pub fn build_rust_servers(mode: BuildMode) -> CmdResult {
     let build_info = BUILD_INFO.get().unwrap();
-    let opts = match mode {
-        BuildMode::Debug => "",
-        BuildMode::Release => "--release",
-    };
-    run_cmd! {
-        info "Building rust-based servers ...";
-        BUILD_INFO=$build_info cargo build $opts;
+    match mode {
+        BuildMode::Debug => {
+            run_cmd! {
+                info "Building rust-based servers in debug mode ...";
+                BUILD_INFO=$build_info cargo build --workspace
+                    --exclude ebs-failover
+                    --exclude rss_admin
+                    --exclude xtask_tools
+                    --exclude fractalbits-bootstrap
+                    --exclude rewrk*;
+            }
+        }
+        BuildMode::Release => {
+            run_cmd! {
+                info "Building rust-based servers in release mode ...";
+                BUILD_INFO=$build_info cargo build --release;
+            }
+        }
     }
 }
 

@@ -172,7 +172,9 @@ fn main() -> CmdResult {
             let build_mode = build_mode(release);
             cmd_build::build_rust_servers(build_mode)?;
             cmd_build::build_zig_servers(build_mode)?;
-            cmd_build::build_rewrk_rpc()?;
+            if release {
+                cmd_build::build_rewrk_rpc()?;
+            }
             cmd_build::build_ui(UI_DEFAULT_REGION)?;
         }
         Cmd::Precheckin { s3_api_only } => cmd_precheckin::run_cmd_precheckin(s3_api_only)?,
