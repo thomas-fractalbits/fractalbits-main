@@ -26,7 +26,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    net::TcpStream,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
 };
@@ -103,9 +102,19 @@ impl AppState {
         nss_conn_num: u16,
     ) -> ConnPool<Arc<RpcClientNss>, SocketAddr> {
         let rpc_clients_nss = ConnPool::new();
-        for _ in 0..nss_conn_num as usize {
-            let stream = TcpStream::connect(nss_addr).await.unwrap();
-            let client = Arc::new(RpcClientNss::new(stream).await.unwrap());
+
+        // Use the Poolable trait's retry logic instead of manual retry
+        for i in 0..nss_conn_num as usize {
+            info!(
+                "Connecting to NSS server at {nss_addr} (connection {}/{})",
+                i + 1,
+                nss_conn_num
+            );
+            let client = Arc::new(
+                <RpcClientNss as slotmap_conn_pool::Poolable>::new(nss_addr)
+                    .await
+                    .unwrap(),
+            );
             rpc_clients_nss.pooled(nss_addr, client);
         }
 
@@ -118,9 +127,19 @@ impl AppState {
         rss_conn_num: u16,
     ) -> ConnPool<Arc<RpcClientRss>, SocketAddr> {
         let rpc_clients_rss = ConnPool::new();
-        for _ in 0..rss_conn_num as usize {
-            let stream = TcpStream::connect(rss_addr).await.unwrap();
-            let client = Arc::new(RpcClientRss::new(stream).await.unwrap());
+
+        // Use the Poolable trait's retry logic
+        for i in 0..rss_conn_num as usize {
+            info!(
+                "Connecting to RSS server at {rss_addr} (connection {}/{})",
+                i + 1,
+                rss_conn_num
+            );
+            let client = Arc::new(
+                <RpcClientRss as slotmap_conn_pool::Poolable>::new(rss_addr)
+                    .await
+                    .unwrap(),
+            );
             rpc_clients_rss.pooled(rss_addr, client);
         }
 
@@ -166,9 +185,19 @@ impl BlobClient {
         rpc_timeout: Duration,
     ) -> Self {
         let clients_bss = ConnPool::new();
-        for _ in 0..bss_conn_num as usize {
-            let stream = TcpStream::connect(bss_addr).await.unwrap();
-            let client = Arc::new(RpcClientBss::new(stream).await.unwrap());
+
+        // Use the Poolable trait's retry logic
+        for i in 0..bss_conn_num as usize {
+            info!(
+                "Connecting to BSS server at {bss_addr} (connection {}/{})",
+                i + 1,
+                bss_conn_num
+            );
+            let client = Arc::new(
+                <RpcClientBss as slotmap_conn_pool::Poolable>::new(bss_addr)
+                    .await
+                    .unwrap(),
+            );
             clients_bss.pooled(bss_addr, client);
         }
 

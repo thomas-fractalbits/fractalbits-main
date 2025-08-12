@@ -159,13 +159,7 @@ pub fn start_services(service: ServiceName, build_mode: BuildMode, for_gui: bool
         ServiceName::NssRoleAgent => start_nss_role_agent_service(build_mode)?,
         ServiceName::Rss => start_rss_service(build_mode)?,
         ServiceName::ApiServer => start_api_server(build_mode, for_gui)?,
-        ServiceName::All => {
-            start_rss_service(build_mode)?;
-            start_bss_service(build_mode)?;
-            start_nss_service(build_mode, false)?;
-            start_nss_role_agent_service(build_mode)?;
-            start_api_server(build_mode, for_gui)?;
-        }
+        ServiceName::All => start_all_services(build_mode, for_gui)?,
         ServiceName::Minio => start_minio_service()?,
         ServiceName::DdbLocal => start_ddb_local_service()?,
     }
@@ -175,12 +169,8 @@ pub fn start_services(service: ServiceName, build_mode: BuildMode, for_gui: bool
 pub fn start_bss_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::Bss, build_mode, None)?;
 
-    let bss_wait_secs = 10;
-    run_cmd! {
-        systemctl --user start bss.service;
-        info "Waiting ${bss_wait_secs}s for bss server up";
-        sleep $bss_wait_secs;
-    }?;
+    run_cmd!(systemctl --user start bss.service)?;
+    wait_for_service_ready(ServiceName::Bss, 15)?;
 
     let bss_server_pid = run_fun!(pidof bss_server)?;
     check_pids(ServiceName::Bss, &bss_server_pid)?;
@@ -203,12 +193,9 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
     };
     create_systemd_unit_file(ServiceName::Nss, build_mode, config_file)?;
 
-    let nss_wait_secs = 10;
-    run_cmd! {
-        systemctl --user start nss.service;
-        info "Waiting ${nss_wait_secs}s for nss server up";
-        sleep $nss_wait_secs;
-    }?;
+    run_cmd!(systemctl --user start nss.service)?;
+    wait_for_service_ready(ServiceName::Nss, 15)?;
+
     let nss_server_pid = run_fun!(pidof nss_server)?;
     check_pids(ServiceName::Nss, &nss_server_pid)?;
     info!("nss server (pid={nss_server_pid}) started");
@@ -218,12 +205,9 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
 pub fn start_nss_role_agent_service(build_mode: BuildMode) -> CmdResult {
     create_systemd_unit_file(ServiceName::NssRoleAgent, build_mode, None)?;
 
-    let wait_secs = 10;
-    run_cmd! {
-        systemctl --user start nss_role_agent.service;
-        info "Waiting ${wait_secs}s for nss_role_agent server up";
-        sleep $wait_secs;
-    }?;
+    run_cmd!(systemctl --user start nss_role_agent.service)?;
+    wait_for_service_ready(ServiceName::NssRoleAgent, 15)?;
+
     let server_pid = run_fun!(pidof nss_role_agent)?;
     check_pids(ServiceName::NssRoleAgent, &server_pid)?;
     info!("nss_role_agent server (pid={server_pid}) started");
@@ -237,14 +221,11 @@ pub fn start_rss_service(build_mode: BuildMode) -> CmdResult {
     }
 
     create_systemd_unit_file(ServiceName::Rss, build_mode, None)?;
-    let rss_wait_secs = 10;
-    run_cmd! {
-        systemctl --user start rss.service;
-        info "Waiting ${rss_wait_secs}s for root server up";
-        sleep $rss_wait_secs;
-    }?;
+    run_cmd!(systemctl --user start rss.service)?;
+    wait_for_service_ready(ServiceName::Rss, 15)?;
+
     let rss_server_pid = run_fun!(pidof root_server)?;
-    check_pids(ServiceName::Nss, &rss_server_pid)?;
+    check_pids(ServiceName::Rss, &rss_server_pid)?;
     info!("root server (pid={rss_server_pid}) started");
     Ok(())
 }
@@ -273,7 +254,6 @@ WorkingDirectory={working_dir}
 "##
     );
 
-    let ddb_local_wait_secs = 5;
     run_cmd! {
         mkdir -p $working_dir;
         mkdir -p etc;
@@ -281,10 +261,8 @@ WorkingDirectory={working_dir}
         info "Linking $service_file into ~/.config/systemd/user";
         systemctl --user link $service_file --force --quiet;
         systemctl --user start ddb_local.service;
-        info "Waiting ${ddb_local_wait_secs}s for ddb_local up";
-        sleep $ddb_local_wait_secs;
-        systemctl --user is-active --quiet ddb_local.service;
     }?;
+    wait_for_service_ready(ServiceName::DdbLocal, 10)?;
 
     Ok(())
 }
@@ -306,7 +284,6 @@ Restart=always
 WorkingDirectory={pwd}/data
 "##
     );
-    let minio_wait_secs = 5;
     let minio_url = "http://localhost:9000";
     let bucket_name = "fractalbits-bucket";
     let my_bucket = format!("s3://{bucket_name}");
@@ -316,8 +293,10 @@ WorkingDirectory={pwd}/data
         info "Linking $service_file into ~/.config/systemd/user";
         systemctl --user link $service_file --force --quiet;
         systemctl --user start minio.service;
-        info "Waiting ${minio_wait_secs}s for minio up";
-        sleep $minio_wait_secs;
+    }?;
+    wait_for_service_ready(ServiceName::Minio, 10)?;
+
+    run_cmd! {
         info "Creating s3 bucket (\"$bucket_name\") in minio ...";
         ignore AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
             aws s3 mb $my_bucket &>/dev/null;
@@ -352,15 +331,55 @@ pub fn start_api_server(build_mode: BuildMode, for_gui: bool) -> CmdResult {
     };
     create_systemd_unit_file(ServiceName::ApiServer, build_mode, config_file)?;
 
-    let api_server_wait_secs = 5;
-    run_cmd! {
-        systemctl --user start api_server.service;
-        info "Waiting ${api_server_wait_secs}s for api server up";
-        sleep $api_server_wait_secs;
-    }?;
+    run_cmd!(systemctl --user start api_server.service)?;
+    wait_for_service_ready(ServiceName::ApiServer, 10)?;
+
     let api_server_pid = run_fun!(pidof api_server)?;
     check_pids(ServiceName::ApiServer, &api_server_pid)?;
     info!("api server (pid={api_server_pid}) started");
+    Ok(())
+}
+
+pub fn start_all_services(build_mode: BuildMode, for_gui: bool) -> CmdResult {
+    info!("Starting all services with systemd dependency management");
+
+    // Create all systemd unit files first
+    let pwd = run_fun!(pwd)?;
+    let api_config_file = match for_gui {
+        false => None,
+        true => Some(format!("{pwd}/etc/{API_SERVER_GUI_CONFIG}")),
+    };
+
+    create_systemd_unit_file(ServiceName::Rss, build_mode, None)?;
+    create_systemd_unit_file(ServiceName::Bss, build_mode, None)?;
+
+    let nss_config_file = match build_mode {
+        BuildMode::Debug => None,
+        BuildMode::Release => Some(format!("{pwd}/etc/{NSS_SERVER_BENCH_CONFIG}")),
+    };
+    create_systemd_unit_file(ServiceName::Nss, build_mode, nss_config_file)?;
+    create_systemd_unit_file(ServiceName::NssRoleAgent, build_mode, None)?;
+    create_systemd_unit_file(ServiceName::ApiServer, build_mode, api_config_file)?;
+
+    // Start supporting services first
+    info!("Starting supporting services (ddb_local, minio)");
+    run_cmd!(systemctl --user start ddb_local.service minio.service)?;
+
+    wait_for_service_ready(ServiceName::DdbLocal, 10)?;
+    wait_for_service_ready(ServiceName::Minio, 10)?;
+
+    // Start all main services - systemd dependencies will handle ordering
+    info!("Starting all main services (systemd will handle dependency ordering)");
+    run_cmd!(systemctl --user start rss.service bss.service nss.service nss_role_agent.service api_server.service)?;
+
+    // Wait for all services to be ready in dependency order
+    wait_for_service_ready(ServiceName::Rss, 15)?;
+    wait_for_service_ready(ServiceName::Bss, 15)?;
+    wait_for_service_ready(ServiceName::Nss, 15)?;
+    wait_for_service_ready(ServiceName::NssRoleAgent, 15)?;
+    wait_for_service_ready(ServiceName::ApiServer, 15)?;
+
+    info!("All services started successfully!");
     Ok(())
 }
 
@@ -417,10 +436,21 @@ Environment="AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000""##
         exec_start += &format!(" -c {config}");
     }
     let working_dir = run_fun!(realpath $pwd)?;
+
+    // Add systemd dependencies based on service type
+    let dependencies = match service {
+        ServiceName::Rss => "After=ddb_local.service\nWants=ddb_local.service\n",
+        ServiceName::Nss => "After=minio.service\nWants=minio.service\n",
+        ServiceName::ApiServer => {
+            "After=rss.service bss.service nss.service\nWants=rss.service bss.service nss.service\n"
+        }
+        _ => "",
+    };
+
     let systemd_unit_content = format!(
         r##"[Unit]
 Description={service_name} Service
-
+{dependencies}
 [Service]
 LimitNOFILE=1000000
 LimitCORE=infinity
@@ -477,4 +507,44 @@ fn create_dirs_for_bss_server() -> CmdResult {
     }
 
     Ok(())
+}
+
+fn wait_for_service_ready(service: ServiceName, timeout_secs: u32) -> CmdResult {
+    use std::time::{Duration, Instant};
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs as u64);
+    let service_name = service.as_ref();
+
+    info!("Waiting for {service_name} to be ready (timeout: {timeout_secs}s)");
+
+    while start.elapsed() < timeout {
+        // Check if systemd reports service as active
+        if run_cmd!(systemctl --user is-active --quiet $service_name.service).is_ok() {
+            // For network services, also check port availability
+            let port_ready = match service {
+                ServiceName::DdbLocal => check_port_ready(8000),
+                ServiceName::Minio => check_port_ready(9000),
+                ServiceName::Rss => check_port_ready(8086),
+                ServiceName::Bss => check_port_ready(8088),
+                ServiceName::Nss => check_port_ready(8087),
+                ServiceName::ApiServer => check_port_ready(8080),
+                ServiceName::NssRoleAgent => true, // No network port for this service
+                ServiceName::All => unreachable!("Should not check readiness for All"),
+            };
+
+            if port_ready {
+                info!("{service_name} is ready");
+                return Ok(());
+            }
+        }
+
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    cmd_die!("Timeout waiting for ${service_name} to be ready after ${timeout_secs}s")
+}
+
+fn check_port_ready(port: u16) -> bool {
+    run_cmd!(nc -z localhost $port).is_ok()
 }
