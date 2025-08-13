@@ -2,11 +2,7 @@ use rpc_client_common::{nss_rpc_retry, rpc_retry};
 use std::sync::Arc;
 
 use axum::{body::Body, response::Response};
-use bucket_tables::{
-    api_key_table::ApiKeyTable,
-    bucket_table::{Bucket, BucketTable},
-    table::Table,
-};
+use bucket_tables::{api_key_table::ApiKeyTable, bucket_table::BucketTable, table::Table};
 use rpc_client_nss::rpc::delete_root_inode_response;
 use rpc_client_rss::RpcErrorRss;
 use tracing::info;
@@ -14,10 +10,8 @@ use tracing::info;
 use crate::handler::{common::s3_error::S3Error, BucketRequestContext};
 use crate::AppState;
 
-pub async fn delete_bucket_handler(
-    ctx: BucketRequestContext,
-    bucket: &Bucket,
-) -> Result<Response, S3Error> {
+pub async fn delete_bucket_handler(ctx: BucketRequestContext) -> Result<Response, S3Error> {
+    let bucket = ctx.resolve_bucket().await?;
     info!("handling delete_bucket request: {}", bucket.bucket_name);
     let rpc_timeout = ctx.app.config.rpc_timeout();
     let api_key_id = {
@@ -66,7 +60,7 @@ pub async fn delete_bucket_handler(
         );
 
         match bucket_table
-            .delete_with_extra::<ApiKeyTable>(bucket, &api_key, Some(rpc_timeout))
+            .delete_with_extra::<ApiKeyTable>(&bucket, &api_key, Some(rpc_timeout))
             .await
         {
             Err(RpcErrorRss::Retry) => continue,

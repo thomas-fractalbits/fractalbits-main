@@ -60,6 +60,10 @@ impl BucketRequestContext {
             bucket_name,
         }
     }
+
+    pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
+        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone()).await
+    }
 }
 
 pub struct ObjectRequestContext {
@@ -311,10 +315,7 @@ async fn bucket_handler(
 ) -> Result<Response, S3Error> {
     match endpoint {
         BucketEndpoint::CreateBucket => bucket::create_bucket_handler(ctx).await,
-        BucketEndpoint::DeleteBucket => {
-            let bucket = bucket::resolve_bucket(ctx.app.clone(), ctx.bucket_name.clone()).await?;
-            bucket::delete_bucket_handler(ctx, &bucket).await
-        }
+        BucketEndpoint::DeleteBucket => bucket::delete_bucket_handler(ctx).await,
         BucketEndpoint::HeadBucket => bucket::head_bucket_handler(ctx).await,
         BucketEndpoint::ListBuckets => bucket::list_buckets_handler(ctx).await,
     }
