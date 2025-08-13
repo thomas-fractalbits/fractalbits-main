@@ -91,7 +91,7 @@ metrics-exporter-prometheus = "0.17.2"
 tokio-retry = "0.3"
 moka = { version = "0.12", features = ["future"] }
 slotmap = "1.0"
-mimalloc = "0.1.47"
+tikv-jemallocator = "0.6"
 parking_lot = "0.12"
 arrayvec = "0.7"
 config = {version = "0.15", features = ["toml"]}

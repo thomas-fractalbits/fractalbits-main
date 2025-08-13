@@ -66,7 +66,7 @@ metrics-exporter-statsd = { workspace = true, optional = true }
 metrics-exporter-prometheus = { workspace = true, optional = true }
 tokio-retry.workspace = true
 moka.workspace = true
-mimalloc.workspace = true
+tikv-jemallocator.workspace = true
 arrayvec.workspace = true
 
 [dev-dependencies]
