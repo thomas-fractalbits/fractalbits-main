@@ -22,7 +22,10 @@ static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 #[clap(name = "api_server", about = "API server")]
 struct Opt {
     #[clap(short = 'c', long = "config", long_help = "Config file path")]
-    pub config_file: Option<PathBuf>,
+    config_file: PathBuf,
+
+    #[clap(long = "gui", long_help = "Web root serve as gui server")]
+    gui_web_root: Option<String>,
 }
 
 #[tokio::main]
@@ -51,21 +54,13 @@ async fn main() {
     );
 
     let opt = Opt::parse();
-    let config = match opt.config_file {
-        Some(config_file) => config::Config::builder()
-            .add_source(config::File::from(config_file).required(true))
-            .add_source(config::Environment::with_prefix("APP"))
-            .build()
-            .unwrap()
-            .try_deserialize()
-            .unwrap(),
-        None => config::Config::builder()
-            .add_source(config::Environment::with_prefix("APP"))
-            .build()
-            .unwrap()
-            .try_deserialize()
-            .unwrap_or_else(|_| Config::default()),
-    };
+    let config: Config = config::Config::builder()
+        .add_source(config::File::from(opt.config_file).required(true))
+        .add_source(config::Environment::with_prefix("APP"))
+        .build()
+        .unwrap()
+        .try_deserialize()
+        .unwrap();
 
     if config.with_metrics {
         #[cfg(feature = "metrics_statsd")]
@@ -93,7 +88,6 @@ async fn main() {
     }
 
     let port = config.port;
-    let web_root = &config.web_root.clone();
     let app_state = AppState::new(Arc::new(config)).await;
 
     let api_key_routes = Router::new()
@@ -101,7 +95,7 @@ async fn main() {
         .route("/", get(api_key_routes::list_api_keys))
         .route("/{key_id}", delete(api_key_routes::delete_api_key));
 
-    let router = if let Some(web_root) = web_root {
+    let router = if let Some(web_root) = opt.gui_web_root {
         Router::new()
             .nest_service("/ui", ServeDir::new(web_root))
             .nest("/api_keys", api_key_routes)

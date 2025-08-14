@@ -56,12 +56,10 @@ pub fn bootstrap(bucket_name: &str, nss_ip: &str, rss_ip: &str, for_bench: bool)
     Ok(())
 }
 
-fn create_config(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
+pub fn create_config(bucket_name: &str, bss_ip: &str, nss_ip: &str, rss_ip: &str) -> CmdResult {
     let aws_region = get_current_aws_region()?;
     let aws_az = get_current_aws_az()?;
     let num_cores = run_fun!(nproc)?;
-
-    // Check if we're using S3 Express One Zone
     let is_s3_express = bucket_name.ends_with("--x-s3");
 
     let config_content = if is_s3_express {

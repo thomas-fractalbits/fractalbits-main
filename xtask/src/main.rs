@@ -85,7 +85,7 @@ enum Cmd {
 
         #[clap(
             long,
-            long_help = "Data blob storage mode: hybrid or s3_express",
+            long_help = "Data blob storage mode: hybrid_single_az, s3_express_single_az or s3_express_multi_az",
             default_value = "s3_express_single_az"
         )]
         data_blob_storage: DataBlobStorage,

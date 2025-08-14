@@ -126,6 +126,7 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
             init_bss()?;
             init_nss()?;
             init_mirrord()?;
+            init_minio()?;
             init_minio_local_az()?;
             init_minio_remote_az()?;
         }
@@ -181,12 +182,12 @@ pub fn start_services(
         ServiceName::NssRoleAgentA => start_nss_role_agent_service(build_mode, "A")?,
         ServiceName::NssRoleAgentB => start_nss_role_agent_service(build_mode, "B")?,
         ServiceName::Rss => start_rss_service(build_mode)?,
-        ServiceName::ApiServer => start_api_server(build_mode, for_gui)?,
+        ServiceName::ApiServer => start_api_server(build_mode, data_blob_storage, for_gui)?,
         ServiceName::DataBlobResyncServer => {
             info!("DataBlobResyncServer is a standalone CLI tool, not a service. Use 'cargo run -p data_blob_resync_server' instead.");
         }
         ServiceName::All => start_all_services(build_mode, for_gui, data_blob_storage)?,
-        ServiceName::Minio => start_minio_service(data_blob_storage)?,
+        ServiceName::Minio => start_minio_service()?,
         ServiceName::MinioLocalAz => start_minio_local_az_service()?,
         ServiceName::MinioRemoteAz => start_minio_remote_az_service()?,
         ServiceName::DdbLocal => start_ddb_local_service()?,
@@ -225,7 +226,7 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
     if !data_on_local {
         // Start minio to simulate local s3 service
         if run_cmd!(systemctl --user is-active --quiet minio.service).is_err() {
-            start_minio_service(DataBlobStorage::HybridSingleAz)?;
+            start_minio_service()?;
         }
     }
 
@@ -333,7 +334,7 @@ WorkingDirectory={working_dir}
     Ok(())
 }
 
-pub fn start_minio_service(data_blob_storage: DataBlobStorage) -> CmdResult {
+pub fn start_minio_service() -> CmdResult {
     let pwd = run_fun!(pwd)?;
     let service_file = "etc/minio.service";
     let service_file_content = format!(
@@ -351,20 +352,6 @@ WorkingDirectory={pwd}/data
 "##
     );
     let minio_url = "http://localhost:9000";
-    let (local_bucket_name, remote_bucket_name) = match data_blob_storage {
-        DataBlobStorage::HybridSingleAz => ("fractalbits-bucket", "fractalbits-bucket"),
-        DataBlobStorage::S3ExpressMultiAz => (
-            "fractalbits-local-az-data-bucket",
-            "fractalbits-remote-az-data-bucket",
-        ),
-        DataBlobStorage::S3ExpressSingleAz => (
-            "fractalbits-single-az-data-bucket",
-            "fractalbits-single-az-data-bucket",
-        ),
-    };
-    let local_bucket = format!("s3://{local_bucket_name}");
-    let remote_bucket = format!("s3://{remote_bucket_name}");
-
     run_cmd! {
         mkdir -p etc;
         echo $service_file_content > $service_file;
@@ -374,37 +361,31 @@ WorkingDirectory={pwd}/data
     }?;
     wait_for_service_ready(ServiceName::Minio, 10)?;
 
+    let bucket_name = "fractalbits-bucket";
     run_cmd! {
-        info "Creating s3 buckets (\"$local_bucket_name\" and \"$remote_bucket_name\") in minio ...";
+        info "Creating s3 buckets (\"$bucket_name\") in minio ...";
         ignore AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
-            aws s3 mb $local_bucket &>/dev/null;
-        ignore AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
-            aws s3 mb $remote_bucket &>/dev/null;
+            aws s3 mb "s3://${bucket_name}" &>/dev/null;
     }?;
 
-    let mut wait_new_buckets_secs = 0;
+    let mut wait_new_bucket_secs = 0;
     const TIMEOUT_SECS: i32 = 5;
     loop {
-        let local_ready = run_cmd! (
+        let bucket_ready = run_cmd! (
             AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
-            aws s3api head-bucket --bucket $local_bucket_name &>/dev/null
+            aws s3api head-bucket --bucket $bucket_name &>/dev/null
         ).is_ok();
 
-        let remote_ready = run_cmd! (
-            AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
-            aws s3api head-bucket --bucket $remote_bucket_name &>/dev/null
-        ).is_ok();
-
-        if local_ready && remote_ready {
+        if bucket_ready {
             break;
         }
 
-        wait_new_buckets_secs += 1;
-        if wait_new_buckets_secs >= TIMEOUT_SECS {
-            cmd_die!("timeout waiting for newly created buckets {local_bucket_name} and {remote_bucket_name}");
+        wait_new_bucket_secs += 1;
+        if wait_new_bucket_secs >= TIMEOUT_SECS {
+            cmd_die!("timeout waiting for newly created bucket {bucket_name}");
         }
 
-        info!("waiting for newly created buckets {local_bucket_name} and {remote_bucket_name}: {wait_new_buckets_secs}s");
+        info!("waiting for newly created bucket {bucket_name}: {wait_new_bucket_secs}s");
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     Ok(())
@@ -528,13 +509,36 @@ WorkingDirectory={pwd}/data
     Ok(())
 }
 
-pub fn start_api_server(build_mode: BuildMode, for_gui: bool) -> CmdResult {
-    let pwd = run_fun!(pwd)?;
-    let config_file = match for_gui {
-        false => None,
-        true => Some(format!("{pwd}/etc/{API_SERVER_GUI_CONFIG}")),
+fn create_api_server_systemd_unit_file(
+    build_mode: BuildMode,
+    data_blob_storage: DataBlobStorage,
+    for_gui: bool,
+) -> CmdResult {
+    let extra_start_opts = match for_gui {
+        false => "",
+        true => "--gui ui/dist",
     };
-    create_systemd_unit_file(ServiceName::ApiServer, build_mode, config_file)?;
+    let config_file = match data_blob_storage {
+        DataBlobStorage::HybridSingleAz => "etc/api_server_hybrid_single_az.toml".into(),
+        DataBlobStorage::S3ExpressMultiAz => "etc/api_server_s3_express_multi_az.toml".into(),
+        DataBlobStorage::S3ExpressSingleAz => "etc/api_server_s3_express_single_az.toml".into(),
+    };
+    create_systemd_unit_file_with_extra_start_opts(
+        ServiceName::ApiServer,
+        build_mode,
+        Some(config_file),
+        extra_start_opts,
+    )?;
+
+    Ok(())
+}
+
+pub fn start_api_server(
+    build_mode: BuildMode,
+    data_blob_storage: DataBlobStorage,
+    for_gui: bool,
+) -> CmdResult {
+    create_api_server_systemd_unit_file(build_mode, data_blob_storage, for_gui)?;
 
     run_cmd!(systemctl --user start api_server.service)?;
     wait_for_service_ready(ServiceName::ApiServer, 10)?;
@@ -553,12 +557,6 @@ pub fn start_all_services(
     info!("Starting all services with systemd dependency management");
 
     // Create all systemd unit files first
-    let pwd = run_fun!(pwd)?;
-    let api_config_file = match for_gui {
-        false => None,
-        true => Some(format!("{pwd}/etc/{API_SERVER_GUI_CONFIG}")),
-    };
-
     create_systemd_unit_file(ServiceName::Rss, build_mode, None)?;
 
     // Only create BSS systemd unit file if we're in hybrid mode
@@ -580,12 +578,12 @@ pub fn start_all_services(
     create_systemd_unit_file(ServiceName::NssRoleAgentB, build_mode, None)?;
     create_systemd_unit_file(ServiceName::Mirrord, build_mode, None)?;
 
-    create_systemd_unit_file(ServiceName::ApiServer, build_mode, api_config_file)?;
+    create_api_server_systemd_unit_file(build_mode, data_blob_storage, for_gui)?;
 
     // Start supporting services first
     info!("Starting supporting services (ddb_local, minio instances)");
     start_ddb_local_service()?;
-    start_minio_service(data_blob_storage)?; // Original minio for NSS metadata (port 9000)
+    start_minio_service()?; // Original minio for NSS metadata (port 9000)
     if matches!(data_blob_storage, DataBlobStorage::S3ExpressMultiAz) {
         start_minio_local_az_service()?; // Local AZ data blobs (port 9001)
         start_minio_remote_az_service()?; // Remote AZ data blobs (port 9002)
@@ -632,6 +630,15 @@ fn create_systemd_unit_file(
     service: ServiceName,
     build_mode: BuildMode,
     config_file: Option<String>,
+) -> CmdResult {
+    create_systemd_unit_file_with_extra_start_opts(service, build_mode, config_file, "")
+}
+
+fn create_systemd_unit_file_with_extra_start_opts(
+    service: ServiceName,
+    build_mode: BuildMode,
+    config_file: Option<String>,
+    extra_start_opts: &str,
 ) -> CmdResult {
     let pwd = run_fun!(pwd)?;
     let build = build_mode.as_ref();
@@ -684,7 +691,7 @@ Environment="AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000""##
         }
         ServiceName::ApiServer => {
             env_settings += env_rust_log(build_mode);
-            format!("{pwd}/target/{build}/api_server")
+            format!("{pwd}/target/{build}/api_server {extra_start_opts}")
         }
         _ => unreachable!(),
     };

@@ -48,6 +48,14 @@ fn download_binary(file_name: &str) -> CmdResult {
 }
 
 pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResult {
+    create_systemd_unit_file_with_extra_start_opts(service_name, "", enable_now)
+}
+
+pub fn create_systemd_unit_file_with_extra_start_opts(
+    service_name: &str,
+    extra_start_opts: &str,
+    enable_now: bool,
+) -> CmdResult {
     let aws_region = get_current_aws_region()?;
     let working_dir = "/data";
     let mut requires = "";
@@ -57,7 +65,7 @@ pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResu
             env_settings = r##"
 Environment="RUST_LOG=warn""##
                 .to_string();
-            format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG}")
+            format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG} {extra_start_opts}")
         }
         "nss_server" => {
             requires = "data-ebs.mount data-local.mount";
