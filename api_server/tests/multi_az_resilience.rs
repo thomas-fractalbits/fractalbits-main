@@ -317,3 +317,6 @@ async fn wait_for_remote_az_ready(timeout_secs: u32) -> Result<(), Box<dyn std::
         .into()),
     }
 }
+
+// Note: Data blob resync server tests have been moved to /data_blob_resync_server/tests/
+// This file now focuses on basic multi-AZ service interruption and recovery scenarios

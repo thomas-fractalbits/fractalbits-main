@@ -1484,6 +1484,7 @@ dependencies = [
  "aws-sdk-s3",
  "bytes",
  "clap 4.5.43",
+ "cmd_lib",
  "data_blob_tracking",
  "futures",
  "metrics",
