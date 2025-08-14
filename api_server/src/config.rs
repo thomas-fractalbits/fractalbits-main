@@ -34,6 +34,8 @@ pub struct S3ExpressConfig {
     pub s3_region: String,
     pub local_az_bucket: String,
     pub remote_az_bucket: String,
+    pub remote_az_host: Option<String>,
+    pub remote_az_port: Option<u16>,
     pub az: String,
     #[serde(default = "default_express_session_auth")]
     pub express_session_auth: bool,
@@ -51,6 +53,8 @@ impl Default for S3ExpressConfig {
             s3_region: "us-west-1".into(),
             local_az_bucket: "fractalbits-local-az-data-bucket".into(),
             remote_az_bucket: "fractalbits-remote-az-data-bucket".into(),
+            remote_az_host: None,
+            remote_az_port: None,
             az: "us-west-1a".into(),
             express_session_auth: false,
         }

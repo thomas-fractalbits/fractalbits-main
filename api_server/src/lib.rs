@@ -292,6 +292,8 @@ impl BlobClient {
                     s3_region: s3_express_config.s3_region.clone(),
                     local_az_bucket: s3_express_config.local_az_bucket.clone(),
                     remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
+                    remote_az_host: s3_express_config.remote_az_host.clone(),
+                    remote_az_port: s3_express_config.remote_az_port,
                     az: s3_express_config.az.clone(),
                     express_session_auth: s3_express_config.express_session_auth,
                 };

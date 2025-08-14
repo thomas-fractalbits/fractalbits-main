@@ -18,6 +18,8 @@ pub struct S3ExpressWithTrackingConfig {
     pub s3_region: String,
     pub local_az_bucket: String,
     pub remote_az_bucket: String,
+    pub remote_az_host: Option<String>,
+    pub remote_az_port: Option<u16>,
     pub az: String,
     pub express_session_auth: bool,
 }
