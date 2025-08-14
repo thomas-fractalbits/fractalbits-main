@@ -80,15 +80,15 @@ rpc_timeout_seconds = 4
 allow_missing_or_bad_signature = false
 
 [blob_storage]
-backend = "s3_express"
+backend = "s3_express_single_az"
 
-[blob_storage.s3_express]
+[blob_storage.s3_express_single_az]
 s3_host = "https://s3.{aws_region}.amazonaws.com"
 s3_port = 443
 s3_region = "{aws_region}"
 s3_bucket = "{bucket_name}"
 az = "{aws_az}"
-express_session_auth = true
+force_path_style = false
 "##
         )
     } else {
@@ -109,13 +109,13 @@ rpc_timeout_seconds = 4
 allow_missing_or_bad_signature = false
 
 [blob_storage]
-backend = "hybrid"
+backend = "hybrid_single_az"
 
 [blob_storage.bss]
 addr = "{bss_ip}:8088"
 conn_num = {num_cores}
 
-[blob_storage.s3_cache]
+[blob_storage.s3_hybrid]
 s3_host = "http://s3.{aws_region}.amazonaws.com"
 s3_port = 80
 s3_region = "{aws_region}"

@@ -611,9 +611,7 @@ mod tests {
         assert!(stream.try_next().await.is_err());
         match stream.try_next().await {
             Err(StreamingPayloadError::Message(msg)) if msg == "Unexpected EOF" => {}
-            item => panic!(
-                "Unexpected result, expected early EOF error, got {item:?}"
-            ),
+            item => panic!("Unexpected result, expected early EOF error, got {item:?}"),
         }
     }
 }

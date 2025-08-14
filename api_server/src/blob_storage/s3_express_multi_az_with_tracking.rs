@@ -235,7 +235,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         body: Bytes,
     ) -> Result<(), BlobStorageError> {
         // Record overall blob size for backward compatibility
-        histogram!("blob_size", "operation" => "put", "storage" => "s3_express_tracking")
+        histogram!("blob_size", "operation" => "put", "storage" => "s3_express_multi_az_tracking")
             .record(body.len() as f64);
 
         let start = Instant::now();
@@ -294,15 +294,15 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                 }
 
                 // Record metrics
-                histogram!("blob_size", "operation" => "put", "storage" => "s3_express_tracking", "bucket_type" => "local_az")
+                histogram!("blob_size", "operation" => "put", "storage" => "s3_express_multi_az_tracking", "bucket_type" => "local_az")
                     .record(body.len() as f64);
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "put_blob", "bucket_type" => "local_az")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "put_blob", "bucket_type" => "local_az")
                     .record(local_start.elapsed().as_nanos() as f64);
                 counter!("s3_express_operations_total", "operation" => "put", "bucket_type" => "local_az", "result" => "success")
                     .increment(1);
 
                 if remote_success {
-                    histogram!("blob_size", "operation" => "put", "storage" => "s3_express_tracking", "bucket_type" => "remote_az")
+                    histogram!("blob_size", "operation" => "put", "storage" => "s3_express_multi_az_tracking", "bucket_type" => "remote_az")
                         .record(body.len() as f64);
                     counter!("s3_express_operations_total", "operation" => "put", "bucket_type" => "remote_az", "result" => "success")
                         .increment(1);
@@ -341,9 +341,9 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                     .await?;
 
                 // Record metrics
-                histogram!("blob_size", "operation" => "put", "storage" => "s3_express_tracking", "bucket_type" => "local_az")
+                histogram!("blob_size", "operation" => "put", "storage" => "s3_express_multi_az_tracking", "bucket_type" => "local_az")
                     .record(body.len() as f64);
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "put_blob", "bucket_type" => "local_az")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "put_blob", "bucket_type" => "local_az")
                     .record(local_start.elapsed().as_nanos() as f64);
                 counter!("s3_express_operations_total", "operation" => "put", "bucket_type" => "local_az", "result" => "success")
                     .increment(1);
@@ -402,7 +402,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         result?;
 
         // Record overall duration for backward compatibility
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "put_blob")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "put_blob")
             .record(start.elapsed().as_nanos() as f64);
 
         Ok(())
@@ -430,9 +430,9 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             Ok(resp) => resp,
             Err(e) => {
                 // Record failure metrics
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob")
                     .record(start.elapsed().as_nanos() as f64);
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob", "bucket_type" => "local_az")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob", "bucket_type" => "local_az")
                     .record(start.elapsed().as_nanos() as f64);
                 counter!("s3_express_operations_total", "operation" => "get", "bucket_type" => "local_az", "result" => "failure")
                     .increment(1);
@@ -445,9 +445,9 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             Ok(d) => d,
             Err(e) => {
                 // Record failure metrics
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob")
                     .record(start.elapsed().as_nanos() as f64);
-                histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob", "bucket_type" => "local_az")
+                histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob", "bucket_type" => "local_az")
                     .record(start.elapsed().as_nanos() as f64);
                 counter!("s3_express_operations_total", "operation" => "get", "bucket_type" => "local_az", "result" => "failure")
                     .increment(1);
@@ -458,15 +458,15 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         *body = data.into_bytes();
 
         // Record overall metrics for backward compatibility
-        histogram!("blob_size", "operation" => "get", "storage" => "s3_express_tracking")
+        histogram!("blob_size", "operation" => "get", "storage" => "s3_express_multi_az_tracking")
             .record(body.len() as f64);
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob")
             .record(start.elapsed().as_nanos() as f64);
 
         // Record bucket-specific metrics (always reading from local AZ bucket)
-        histogram!("blob_size", "operation" => "get", "storage" => "s3_express_tracking", "bucket_type" => "local_az")
+        histogram!("blob_size", "operation" => "get", "storage" => "s3_express_multi_az_tracking", "bucket_type" => "local_az")
             .record(body.len() as f64);
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "get_blob", "bucket_type" => "local_az")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "get_blob", "bucket_type" => "local_az")
             .record(start.elapsed().as_nanos() as f64);
         counter!("s3_express_operations_total", "operation" => "get", "bucket_type" => "local_az", "result" => "success")
             .increment(1);
@@ -508,9 +508,9 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         let remote_success = remote_result.is_ok();
 
         // Record duration for each bucket operation
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "delete_blob", "bucket_type" => "local_az")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "delete_blob", "bucket_type" => "local_az")
             .record(local_start.elapsed().as_nanos() as f64);
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "delete_blob", "bucket_type" => "remote_az")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "delete_blob", "bucket_type" => "remote_az")
             .record(remote_start.elapsed().as_nanos() as f64);
 
         // Record success/failure counters
@@ -534,7 +534,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         }
 
         // Record overall duration for backward compatibility
-        histogram!("rpc_duration_nanos", "type" => "s3_express_tracking", "name" => "delete_blob")
+        histogram!("rpc_duration_nanos", "type" => "s3_express_multi_az_tracking", "name" => "delete_blob")
             .record(start.elapsed().as_nanos() as f64);
 
         Ok(())

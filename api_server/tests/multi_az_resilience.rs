@@ -311,10 +311,9 @@ async fn wait_for_remote_az_ready(timeout_secs: u32) -> Result<(), Box<dyn std::
     match result {
         Ok(Ok(())) => Ok(()),
         Ok(Err(e)) => Err(e),
-        Err(_) => Err(format!(
-            "Timeout waiting for remote AZ to be ready after {timeout_secs}s"
-        )
-        .into()),
+        Err(_) => {
+            Err(format!("Timeout waiting for remote AZ to be ready after {timeout_secs}s").into())
+        }
     }
 }
 

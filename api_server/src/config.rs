@@ -4,11 +4,12 @@ use std::{net::SocketAddr, time::Duration};
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BlobStorageBackend {
-    BssOnly,
-    S3Express,
+    BssOnlySingleAz,
+    HybridSingleAz,
     #[default]
-    S3ExpressWithTracking,
-    Hybrid,
+    S3ExpressSingleAz,
+    S3ExpressMultiAz,
+    S3ExpressMultiAzWithTracking,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -17,8 +18,9 @@ pub struct BlobStorageConfig {
     pub backend: BlobStorageBackend,
 
     pub bss: Option<BssConfig>,
-    pub s3_cache: Option<S3CacheConfig>,
+    pub s3_hybrid: Option<S3HybridConfig>,
     pub s3_express: Option<S3ExpressConfig>,
+    pub s3_express_single_az: Option<S3ExpressSingleAzConfig>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -43,6 +45,34 @@ pub struct S3ExpressConfig {
 
 fn default_express_session_auth() -> bool {
     false // Default to false for local testing with minio
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct S3ExpressSingleAzConfig {
+    pub s3_host: String,
+    pub s3_port: u16,
+    pub s3_region: String,
+    pub s3_bucket: String,
+    pub az: String,
+    #[serde(default = "default_force_path_style")]
+    pub force_path_style: bool,
+}
+
+fn default_force_path_style() -> bool {
+    true // Default to true for local testing with minio
+}
+
+impl Default for S3ExpressSingleAzConfig {
+    fn default() -> Self {
+        Self {
+            s3_host: "http://127.0.0.1".into(),
+            s3_port: 9000, // local minio port
+            s3_region: "us-west-1".into(),
+            s3_bucket: "fractalbits-single-az-data-bucket".into(),
+            az: "us-west-1a".into(),
+            force_path_style: true,
+        }
+    }
 }
 
 impl Default for S3ExpressConfig {
@@ -91,14 +121,14 @@ impl Config {
 }
 
 #[derive(serde::Deserialize, Debug, Clone)]
-pub struct S3CacheConfig {
+pub struct S3HybridConfig {
     pub s3_host: String,
     pub s3_port: u16,
     pub s3_region: String,
     pub s3_bucket: String,
 }
 
-impl Default for S3CacheConfig {
+impl Default for S3HybridConfig {
     fn default() -> Self {
         Self {
             s3_host: "http://127.0.0.1".into(),
@@ -123,10 +153,11 @@ impl Default for Config {
             http_request_timeout_seconds: 5,
             rpc_timeout_seconds: 4,
             blob_storage: BlobStorageConfig {
-                backend: BlobStorageBackend::S3Express,
+                backend: BlobStorageBackend::S3ExpressSingleAz,
                 bss: None,
-                s3_cache: None,
-                s3_express: Some(S3ExpressConfig::default()),
+                s3_hybrid: None,
+                s3_express: None,
+                s3_express_single_az: Some(S3ExpressSingleAzConfig::default()),
             },
             allow_missing_or_bad_signature: false,
             web_root: None,

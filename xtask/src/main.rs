@@ -86,7 +86,7 @@ enum Cmd {
         #[clap(
             long,
             long_help = "Data blob storage mode: hybrid or s3_express",
-            default_value = "s3_express"
+            default_value = "s3_express_single_az"
         )]
         data_blob_storage: DataBlobStorage,
     },
@@ -162,8 +162,9 @@ pub enum ServiceName {
 #[derive(AsRefStr, EnumString, Copy, Clone)]
 #[strum(serialize_all = "snake_case")]
 pub enum DataBlobStorage {
-    Hybrid,
-    S3Express,
+    HybridSingleAz,
+    S3ExpressMultiAz,
+    S3ExpressSingleAz,
 }
 
 #[derive(Parser, Clone)]
@@ -204,7 +205,7 @@ fn main() -> CmdResult {
                 ServiceName::DdbLocal,
                 BuildMode::Debug,
                 false,
-                DataBlobStorage::S3Express,
+                DataBlobStorage::S3ExpressSingleAz,
             )?;
 
             run_cmd! {
@@ -250,7 +251,7 @@ fn main() -> CmdResult {
                     ServiceAction::Stop,
                     BuildMode::Release,
                     false,
-                    DataBlobStorage::S3Express,
+                    DataBlobStorage::S3ExpressSingleAz,
                 )
                 .unwrap();
             })?;

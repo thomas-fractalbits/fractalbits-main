@@ -5,11 +5,12 @@ mod object_layout;
 
 use blob_storage::{
     BlobStorage, BlobStorageError, BlobStorageImpl, BssOnlySingleAzStorage, HybridSingleAzStorage,
-    S3ExpressMultiAzStorage, S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig,
+    S3ExpressMultiAzStorage, S3ExpressMultiAzWithTracking, S3ExpressSingleAzStorage,
+    S3ExpressWithTrackingConfig,
 };
 use bucket_tables::{table::KvClientProvider, Versioned};
 use bytes::Bytes;
-pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3CacheConfig};
+pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridConfig};
 pub use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
 use futures::stream::{self, StreamExt};
 use metrics::histogram;
@@ -74,7 +75,7 @@ impl AppState {
         // Get clients for tracking backend if needed
         let (rss_client_for_blob, nss_client_for_blob) = if matches!(
             config.blob_storage.backend,
-            BlobStorageBackend::S3ExpressWithTracking
+            BlobStorageBackend::S3ExpressMultiAzWithTracking
         ) {
             let rss_client = Arc::new(
                 <RpcClientRss as slotmap_conn_pool::Poolable>::new(config.rss_addr)
@@ -216,7 +217,7 @@ impl BlobClient {
         nss_client: Option<Arc<RpcClientNss>>,
     ) -> Result<Self, BlobStorageError> {
         let storage = match &blob_storage_config.backend {
-            BlobStorageBackend::BssOnly => {
+            BlobStorageBackend::BssOnlySingleAz => {
                 let bss_config = blob_storage_config.bss.as_ref().ok_or_else(|| {
                     BlobStorageError::Config(
                         "BSS configuration required for BssOnly backend".into(),
@@ -227,11 +228,11 @@ impl BlobClient {
                         .await,
                 )
             }
-            BlobStorageBackend::Hybrid => {
+            BlobStorageBackend::HybridSingleAz => {
                 let bss_config = blob_storage_config.bss.as_ref().ok_or_else(|| {
                     BlobStorageError::Config("BSS configuration required for Hybrid backend".into())
                 })?;
-                let s3_cache_config = blob_storage_config.s3_cache.as_ref().ok_or_else(|| {
+                let s3_cache_config = blob_storage_config.s3_hybrid.as_ref().ok_or_else(|| {
                     BlobStorageError::Config(
                         "S3 cache configuration required for Hybrid backend".into(),
                     )
@@ -246,7 +247,7 @@ impl BlobClient {
                     .await,
                 )
             }
-            BlobStorageBackend::S3Express => {
+            BlobStorageBackend::S3ExpressMultiAz => {
                 let s3_express_config =
                     blob_storage_config.s3_express.as_ref().ok_or_else(|| {
                         BlobStorageError::Config(
@@ -266,7 +267,7 @@ impl BlobClient {
                     S3ExpressMultiAzStorage::new(&express_config).await?,
                 )
             }
-            BlobStorageBackend::S3ExpressWithTracking => {
+            BlobStorageBackend::S3ExpressMultiAzWithTracking => {
                 let s3_express_config =
                     blob_storage_config.s3_express.as_ref().ok_or_else(|| {
                         BlobStorageError::Config(
@@ -308,6 +309,28 @@ impl BlobClient {
                         nss_client,
                     )
                     .await?,
+                )
+            }
+            BlobStorageBackend::S3ExpressSingleAz => {
+                let s3_express_single_az_config = blob_storage_config
+                    .s3_express_single_az
+                    .as_ref()
+                    .ok_or_else(|| {
+                        BlobStorageError::Config(
+                            "S3 Express Single AZ configuration required for S3ExpressSingleAz backend"
+                                .into(),
+                        )
+                    })?;
+                let single_az_config = blob_storage::S3ExpressSingleAzConfig {
+                    s3_host: s3_express_single_az_config.s3_host.clone(),
+                    s3_port: s3_express_single_az_config.s3_port,
+                    s3_region: s3_express_single_az_config.s3_region.clone(),
+                    s3_bucket: s3_express_single_az_config.s3_bucket.clone(),
+                    az: s3_express_single_az_config.az.clone(),
+                    force_path_style: s3_express_single_az_config.force_path_style,
+                };
+                BlobStorageImpl::S3ExpressSingleAz(
+                    S3ExpressSingleAzStorage::new(&single_az_config).await?,
                 )
             }
         };

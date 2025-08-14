@@ -197,11 +197,15 @@ pub fn start_services(
 
 pub fn start_bss_service(build_mode: BuildMode, data_blob_storage: DataBlobStorage) -> CmdResult {
     match data_blob_storage {
-        DataBlobStorage::S3Express => {
-            info!("Skipping bss_server in s3_express mode");
+        DataBlobStorage::S3ExpressMultiAz => {
+            info!("Skipping bss_server in s3_express_multi_az mode");
             return Ok(());
         }
-        DataBlobStorage::Hybrid => {
+        DataBlobStorage::S3ExpressSingleAz => {
+            info!("Skipping bss_server in s3_express_single_az mode");
+            return Ok(());
+        }
+        DataBlobStorage::HybridSingleAz => {
             // Continue with normal BSS server startup
         }
     }
@@ -221,7 +225,7 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
     if !data_on_local {
         // Start minio to simulate local s3 service
         if run_cmd!(systemctl --user is-active --quiet minio.service).is_err() {
-            start_minio_service(DataBlobStorage::Hybrid)?;
+            start_minio_service(DataBlobStorage::HybridSingleAz)?;
         }
     }
 
@@ -348,10 +352,14 @@ WorkingDirectory={pwd}/data
     );
     let minio_url = "http://localhost:9000";
     let (local_bucket_name, remote_bucket_name) = match data_blob_storage {
-        DataBlobStorage::Hybrid => ("fractalbits-bucket", "fractalbits-bucket"),
-        DataBlobStorage::S3Express => (
+        DataBlobStorage::HybridSingleAz => ("fractalbits-bucket", "fractalbits-bucket"),
+        DataBlobStorage::S3ExpressMultiAz => (
             "fractalbits-local-az-data-bucket",
             "fractalbits-remote-az-data-bucket",
+        ),
+        DataBlobStorage::S3ExpressSingleAz => (
+            "fractalbits-single-az-data-bucket",
+            "fractalbits-single-az-data-bucket",
         ),
     };
     let local_bucket = format!("s3://{local_bucket_name}");
@@ -555,11 +563,14 @@ pub fn start_all_services(
 
     // Only create BSS systemd unit file if we're in hybrid mode
     match data_blob_storage {
-        DataBlobStorage::Hybrid => {
+        DataBlobStorage::HybridSingleAz => {
             create_systemd_unit_file(ServiceName::Bss, build_mode, None)?;
         }
-        DataBlobStorage::S3Express => {
-            info!("Skipping BSS systemd unit file creation in s3_express mode");
+        DataBlobStorage::S3ExpressMultiAz => {
+            info!("Skipping BSS systemd unit file creation in s3_express_multi_az mode");
+        }
+        DataBlobStorage::S3ExpressSingleAz => {
+            info!("Skipping BSS systemd unit file creation in s3_express_single_az mode");
         }
     }
 
@@ -575,14 +586,16 @@ pub fn start_all_services(
     info!("Starting supporting services (ddb_local, minio instances)");
     start_ddb_local_service()?;
     start_minio_service(data_blob_storage)?; // Original minio for NSS metadata (port 9000)
-    start_minio_local_az_service()?; // Local AZ data blobs (port 9001)
-    start_minio_remote_az_service()?; // Remote AZ data blobs (port 9002)
+    if matches!(data_blob_storage, DataBlobStorage::S3ExpressMultiAz) {
+        start_minio_local_az_service()?; // Local AZ data blobs (port 9001)
+        start_minio_remote_az_service()?; // Remote AZ data blobs (port 9002)
+    }
 
     wait_for_service_ready(ServiceName::DdbLocal, 10)?;
 
     // Start all main services - systemd dependencies will handle ordering
     match data_blob_storage {
-        DataBlobStorage::Hybrid => {
+        DataBlobStorage::HybridSingleAz => {
             info!("Starting all main services (systemd will handle dependency ordering)");
             run_cmd!(systemctl --user start rss.service bss.service nss_role_agent_a.service nss_role_agent_b.service api_server.service)?;
 
@@ -593,8 +606,13 @@ pub fn start_all_services(
             wait_for_service_ready(ServiceName::NssRoleAgentB, 15)?;
             wait_for_service_ready(ServiceName::ApiServer, 15)?;
         }
-        DataBlobStorage::S3Express => {
-            info!("Starting main services (skipping BSS in s3_express mode)");
+        DataBlobStorage::S3ExpressMultiAz | DataBlobStorage::S3ExpressSingleAz => {
+            let mode = if matches!(data_blob_storage, DataBlobStorage::S3ExpressMultiAz) {
+                "s3_express_multi_az"
+            } else {
+                "s3_express_single_az"
+            };
+            info!("Starting main services (skipping BSS in {} mode)", mode);
             run_cmd!(systemctl --user start rss.service nss_role_agent_a.service nss_role_agent_b.service api_server.service)?;
 
             // Wait for all services to be ready in dependency order (excluding BSS)

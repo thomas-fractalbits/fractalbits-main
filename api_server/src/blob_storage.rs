@@ -2,6 +2,7 @@ mod bss_only_single_az_storage;
 mod hybrid_single_az_storage;
 mod s3_express_multi_az_storage;
 mod s3_express_multi_az_with_tracking;
+mod s3_express_single_az_storage;
 
 pub use bss_only_single_az_storage::BssOnlySingleAzStorage;
 pub use hybrid_single_az_storage::HybridSingleAzStorage;
@@ -9,12 +10,14 @@ pub use s3_express_multi_az_storage::{S3ExpressMultiAzConfig, S3ExpressMultiAzSt
 pub use s3_express_multi_az_with_tracking::{
     S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig,
 };
+pub use s3_express_single_az_storage::{S3ExpressSingleAzConfig, S3ExpressSingleAzStorage};
 
 pub enum BlobStorageImpl {
     BssOnlySingleAz(BssOnlySingleAzStorage),
     HybridSingleAz(HybridSingleAzStorage),
     S3ExpressMultiAz(S3ExpressMultiAzStorage),
     S3ExpressMultiAzWithTracking(S3ExpressMultiAzWithTracking),
+    S3ExpressSingleAz(S3ExpressSingleAzStorage),
 }
 
 use aws_config::BehaviorVersion;
@@ -138,6 +141,9 @@ impl BlobStorage for BlobStorageImpl {
             BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
                 storage.put_blob(blob_id, block_number, body).await
             }
+            BlobStorageImpl::S3ExpressSingleAz(storage) => {
+                storage.put_blob(blob_id, block_number, body).await
+            }
         }
     }
 
@@ -160,6 +166,9 @@ impl BlobStorage for BlobStorageImpl {
             BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
                 storage.get_blob(blob_id, block_number, body).await
             }
+            BlobStorageImpl::S3ExpressSingleAz(storage) => {
+                storage.get_blob(blob_id, block_number, body).await
+            }
         }
     }
 
@@ -175,6 +184,9 @@ impl BlobStorage for BlobStorageImpl {
                 storage.delete_blob(blob_id, block_number).await
             }
             BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
+                storage.delete_blob(blob_id, block_number).await
+            }
+            BlobStorageImpl::S3ExpressSingleAz(storage) => {
                 storage.delete_blob(blob_id, block_number).await
             }
         }
