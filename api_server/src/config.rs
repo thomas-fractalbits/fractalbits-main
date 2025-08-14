@@ -5,8 +5,8 @@ use std::{net::SocketAddr, time::Duration};
 #[serde(rename_all = "snake_case")]
 pub enum BlobStorageBackend {
     BssOnly,
-    #[default]
     S3Express,
+    #[default]
     S3ExpressWithTracking,
     Hybrid,
 }
