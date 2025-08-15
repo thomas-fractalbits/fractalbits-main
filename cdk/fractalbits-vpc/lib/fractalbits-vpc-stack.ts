@@ -88,12 +88,9 @@ export class FractalbitsVpcStack extends cdk.Stack {
       });
 
       const zoneId = azMappings.findInMap(az, 'zoneId');
-      const bucketName = cdk.Fn.sub('fractalbits-express--${ZoneId}--x-s3', {
-        ZoneId: zoneId
-      });
 
       dataBlobBucket = new s3express.CfnDirectoryBucket(this, 'DataBlobExpressBucket', {
-        bucketName: bucketName,
+        // Remove bucketName property to let CDK auto-generate
         dataRedundancy: 'SingleAvailabilityZone',
         locationName: zoneId,
         // Note: CfnDirectoryBucket doesn't support removalPolicy/autoDeleteObjects like regular buckets
@@ -195,7 +192,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     }
 
     // Create api_server(s) in a ASG group
-    const dataBlobBucketName = dataBlobStorage === 's3Express' ? dataBlobBucket!.bucketName! : bucket.bucketName;
+    const dataBlobBucketName = dataBlobStorage === 's3Express' ? dataBlobBucket!.ref : bucket.bucketName;
     const apiServerBootstrapOptions = `${forBenchFlag} api_server --bucket=${dataBlobBucketName} --nss_ip=${instances["nss_server_primary"].instancePrivateIp} --rss_ip=${instances["root_server"].instancePrivateIp}`;
     const apiServerAsg = createEc2Asg(
       this,
@@ -300,7 +297,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     if (dataBlobBucket) {
       new cdk.CfnOutput(this, 'DataBlobExpressBucketName', {
-        value: dataBlobBucket.bucketName!,
+        value: dataBlobBucket.ref,
         description: 'S3 Express One Zone bucket for data blobs',
       });
     }
