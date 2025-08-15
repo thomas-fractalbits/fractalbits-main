@@ -106,7 +106,24 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
     let init_minio_local_az = || run_cmd!(mkdir -p data/s3-local-az);
     let init_minio_remote_az = || run_cmd!(mkdir -p data/s3-remote-az);
     let init_bss = || create_dirs_for_bss_server();
-    let init_mirrord = || run_cmd!(mkdir -p data/nss-standby);
+    let init_mirrord = || -> CmdResult {
+        let pwd = run_fun!(pwd)?;
+        let format_log = "data/logs/format_mirrord.log";
+        create_dirs_for_mirrord_server()?;
+        match build_mode {
+            BuildMode::Debug => run_cmd! {
+                info "formatting mirrord with default configs";
+                ${pwd}/zig-out/bin/nss_server format -w "./data/nss-standby"
+                    |& ts -m $TS_FMT >$format_log;
+            }?,
+            BuildMode::Release => run_cmd! {
+                info "formatting mirrord for benchmarking";
+                ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG -w "./data/nss-standby"
+                    |& ts -m $TS_FMT >$format_log;
+            }?,
+        }
+        Ok(())
+    };
 
     match service {
         ServiceName::ApiServer => {}
@@ -759,6 +776,21 @@ fn create_dirs_for_nss_server() -> CmdResult {
     }?;
     for i in 0..256 {
         run_cmd!(mkdir -p data/nss-active/local/meta_cache/blobs/dir$i)?;
+    }
+
+    Ok(())
+}
+
+fn create_dirs_for_mirrord_server() -> CmdResult {
+    info!("Creating necessary directories for mirrord");
+    run_cmd! {
+        mkdir -p data/logs;
+        mkdir -p data/nss-standby/ebs;
+        mkdir -p data/nss-standby/local/stats;
+        mkdir -p data/nss-standby/local/meta_cache/blobs;
+    }?; 
+    for i in 0..256 {
+        run_cmd!(mkdir -p data/nss-standby/local/meta_cache/blobs/dir$i)?;
     }
 
     Ok(())
