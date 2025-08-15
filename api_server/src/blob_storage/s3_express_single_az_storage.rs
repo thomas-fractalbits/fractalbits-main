@@ -1,6 +1,8 @@
-use super::{blob_key, create_s3_client, retry, BlobStorage, BlobStorageError};
+use super::{
+    blob_key, create_rate_limited_s3_client, retry, BlobStorage, BlobStorageError,
+    RateLimitedS3Client, S3RateLimitConfig,
+};
 use crate::s3_retry;
-use aws_sdk_s3::Client as S3Client;
 use bytes::Bytes;
 use metrics::{counter, histogram};
 use std::time::Instant;
@@ -15,10 +17,11 @@ pub struct S3ExpressSingleAzConfig {
     pub s3_bucket: String,
     pub az: String,
     pub force_path_style: bool,
+    pub rate_limit_config: S3RateLimitConfig,
 }
 
 pub struct S3ExpressSingleAzStorage {
-    client_s3: S3Client,
+    client_s3: RateLimitedS3Client,
     s3_bucket: String,
     retry_config: retry::RetryConfig,
 }
@@ -30,11 +33,12 @@ impl S3ExpressSingleAzStorage {
             config.s3_bucket, config.az
         );
 
-        let client_s3 = create_s3_client(
+        let client_s3 = create_rate_limited_s3_client(
             &config.s3_host,
             config.s3_port,
             &config.s3_region,
             config.force_path_style,
+            &config.rate_limit_config,
         )
         .await;
 
@@ -47,7 +51,7 @@ impl S3ExpressSingleAzStorage {
         Ok(Self {
             client_s3,
             s3_bucket: config.s3_bucket.clone(),
-            retry_config: retry::RetryConfig::default(),
+            retry_config: retry::RetryConfig::rate_limited(),
         })
     }
 }
@@ -73,6 +77,7 @@ impl BlobStorage for S3ExpressSingleAzStorage {
             &self.retry_config,
             self.client_s3
                 .put_object()
+                .await
                 .bucket(&self.s3_bucket)
                 .key(&s3_key)
                 .body(body.clone().into())
@@ -111,6 +116,7 @@ impl BlobStorage for S3ExpressSingleAzStorage {
             &self.retry_config,
             self.client_s3
                 .get_object()
+                .await
                 .bucket(&self.s3_bucket)
                 .key(&s3_key)
                 .send()
@@ -146,6 +152,7 @@ impl BlobStorage for S3ExpressSingleAzStorage {
             &self.retry_config,
             self.client_s3
                 .delete_object()
+                .await
                 .bucket(&self.s3_bucket)
                 .key(&s3_key)
                 .send()

@@ -267,6 +267,7 @@ impl BlobClient {
                     remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
                     az: s3_express_config.az.clone(),
                     express_session_auth: s3_express_config.express_session_auth,
+                    rate_limit_config: blob_storage::S3RateLimitConfig::default(),
                 };
                 BlobStorageImpl::S3ExpressMultiAz(
                     S3ExpressMultiAzStorage::new(&express_config).await?,
@@ -307,6 +308,7 @@ impl BlobClient {
                     remote_az_port: s3_express_config.remote_az_port,
                     az: s3_express_config.az.clone(),
                     express_session_auth: s3_express_config.express_session_auth,
+                    rate_limit_config: blob_storage::S3RateLimitConfig::default(),
                 };
                 BlobStorageImpl::S3ExpressMultiAzWithTracking(
                     S3ExpressMultiAzWithTracking::new(
@@ -335,6 +337,7 @@ impl BlobClient {
                     s3_bucket: s3_express_single_az_config.s3_bucket.clone(),
                     az: s3_express_single_az_config.az.clone(),
                     force_path_style: s3_express_single_az_config.force_path_style,
+                    rate_limit_config: blob_storage::S3RateLimitConfig::default(),
                 };
                 BlobStorageImpl::S3ExpressSingleAz(
                     S3ExpressSingleAzStorage::new(&single_az_config).await?,

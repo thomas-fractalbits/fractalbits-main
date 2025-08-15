@@ -69,6 +69,7 @@ tokio-retry.workspace = true
 moka.workspace = true
 tikv-jemallocator.workspace = true
 arrayvec.workspace = true
+governor.workspace = true
 
 [dev-dependencies]
 cmd_lib.workspace = true

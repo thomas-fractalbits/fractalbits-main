@@ -13,6 +13,8 @@ pub use s3_express_multi_az_with_tracking::{
 };
 pub use s3_express_single_az_storage::{S3ExpressSingleAzConfig, S3ExpressSingleAzStorage};
 
+// Rate limiting types are defined in this module
+
 pub enum BlobStorageImpl {
     BssOnlySingleAz(BssOnlySingleAzStorage),
     HybridSingleAz(HybridSingleAzStorage),
@@ -31,6 +33,9 @@ use aws_sdk_s3::{
     Client as S3Client, Config as S3Config,
 };
 use bytes::Bytes;
+use governor::{Quota, RateLimiter};
+use std::num::NonZeroU32;
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// S3 operation retry macro - similar to rpc_retry but for S3 operations
@@ -52,6 +57,90 @@ macro_rules! s3_retry {
 /// Generate a consistent S3 key format for blob storage
 pub fn blob_key(blob_id: Uuid, block_number: u32) -> String {
     format!("{blob_id}-p{block_number}")
+}
+
+/// Rate limiting configuration for S3 operations
+#[derive(Clone, Debug)]
+pub struct S3RateLimitConfig {
+    pub put_qps: u32,
+    pub get_qps: u32,
+    pub delete_qps: u32,
+}
+
+impl Default for S3RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            put_qps: 7000,    // Based on initial testing results
+            get_qps: 10000,   // Higher for reads
+            delete_qps: 5000, // Lower for deletes
+        }
+    }
+}
+
+/// S3 client wrapper with per-operation rate limiting
+#[derive(Clone)]
+pub struct RateLimitedS3Client {
+    client: S3Client,
+    put_rate_limiter: Arc<governor::DefaultDirectRateLimiter>,
+    get_rate_limiter: Arc<governor::DefaultDirectRateLimiter>,
+    delete_rate_limiter: Arc<governor::DefaultDirectRateLimiter>,
+}
+
+impl RateLimitedS3Client {
+    pub fn new(client: S3Client, config: &S3RateLimitConfig) -> Self {
+        let put_quota = Quota::per_second(
+            NonZeroU32::new(config.put_qps).unwrap_or(NonZeroU32::new(1).unwrap()),
+        );
+        let get_quota = Quota::per_second(
+            NonZeroU32::new(config.get_qps).unwrap_or(NonZeroU32::new(1).unwrap()),
+        );
+        let delete_quota = Quota::per_second(
+            NonZeroU32::new(config.delete_qps).unwrap_or(NonZeroU32::new(1).unwrap()),
+        );
+
+        Self {
+            client,
+            put_rate_limiter: Arc::new(RateLimiter::direct(put_quota)),
+            get_rate_limiter: Arc::new(RateLimiter::direct(get_quota)),
+            delete_rate_limiter: Arc::new(RateLimiter::direct(delete_quota)),
+        }
+    }
+
+    /// Rate-limited put_object operation
+    pub async fn put_object(
+        &self,
+    ) -> aws_sdk_s3::operation::put_object::builders::PutObjectFluentBuilder {
+        self.put_rate_limiter.until_ready().await;
+        self.client.put_object()
+    }
+
+    /// Rate-limited get_object operation
+    pub async fn get_object(
+        &self,
+    ) -> aws_sdk_s3::operation::get_object::builders::GetObjectFluentBuilder {
+        self.get_rate_limiter.until_ready().await;
+        self.client.get_object()
+    }
+
+    /// Rate-limited delete_object operation
+    pub async fn delete_object(
+        &self,
+    ) -> aws_sdk_s3::operation::delete_object::builders::DeleteObjectFluentBuilder {
+        self.delete_rate_limiter.until_ready().await;
+        self.client.delete_object()
+    }
+}
+
+/// Create a rate-limited S3 client configured for either AWS S3 or local minio
+pub async fn create_rate_limited_s3_client(
+    s3_host: &str,
+    s3_port: u16,
+    s3_region: &str,
+    force_path_style: bool,
+    rate_limit_config: &S3RateLimitConfig,
+) -> RateLimitedS3Client {
+    let s3_client = create_s3_client(s3_host, s3_port, s3_region, force_path_style).await;
+    RateLimitedS3Client::new(s3_client, rate_limit_config)
 }
 
 /// Create an S3 client configured for either AWS S3 or local minio

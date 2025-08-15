@@ -97,6 +97,8 @@ slotmap = "1.0"
 tikv-jemallocator = "0.6"
 parking_lot = "0.12"
 arrayvec = "0.7"
+governor = "0.6"
+nonzero_ext = "0.3"
 config = {version = "0.15", features = ["toml"]}
 
 # Dev dependencies

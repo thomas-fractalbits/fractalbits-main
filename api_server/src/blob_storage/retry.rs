@@ -8,8 +8,8 @@ use tracing::{debug, warn};
 #[derive(Clone, Debug)]
 pub struct RetryConfig {
     pub max_attempts: u32,
-    pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64,
+    pub initial_backoff_us: u64,
+    pub max_backoff_us: u64,
     pub backoff_multiplier: f64,
 }
 
@@ -17,9 +17,21 @@ impl Default for RetryConfig {
     fn default() -> Self {
         Self {
             max_attempts: 8,
-            initial_backoff_ms: 15,
-            max_backoff_ms: 2000,
+            initial_backoff_us: 15_000,
+            max_backoff_us: 2_000_000,
             backoff_multiplier: 1.8,
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Configuration optimized for rate-limited S3 operations
+    pub fn rate_limited() -> Self {
+        Self {
+            max_attempts: 15,
+            initial_backoff_us: 50,  // 50 microseconds
+            max_backoff_us: 500,     // 500 microseconds (0.5ms cap)
+            backoff_multiplier: 1.0, // no exponential growth
         }
     }
 }
@@ -142,14 +154,14 @@ where
 /// Calculate backoff with jitter
 pub fn calculate_backoff(attempt: u32, config: &RetryConfig) -> Duration {
     let base_backoff =
-        config.initial_backoff_ms as f64 * config.backoff_multiplier.powi(attempt as i32 - 1);
-    let capped_backoff = base_backoff.min(config.max_backoff_ms as f64);
+        config.initial_backoff_us as f64 * config.backoff_multiplier.powi(attempt as i32 - 1);
+    let capped_backoff = base_backoff.min(config.max_backoff_us as f64);
 
-    // Add jitter (0.5x to 1.5x the backoff)
-    let jitter = rand::thread_rng().gen_range(0.5..1.5);
+    // Add jitter (0.8x to 1.2x for tighter control)
+    let jitter = rand::thread_rng().gen_range(0.8..1.2);
     let final_backoff = (capped_backoff * jitter) as u64;
 
-    Duration::from_millis(final_backoff)
+    Duration::from_micros(final_backoff)
 }
 
 /// Execute an S3 operation with retry logic

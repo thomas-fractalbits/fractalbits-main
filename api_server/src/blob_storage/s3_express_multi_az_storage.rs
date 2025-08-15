@@ -1,6 +1,8 @@
-use super::{blob_key, create_s3_client, retry, BlobStorage, BlobStorageError};
+use super::{
+    blob_key, create_rate_limited_s3_client, retry, BlobStorage, BlobStorageError,
+    RateLimitedS3Client, S3RateLimitConfig,
+};
 use crate::s3_retry;
-use aws_sdk_s3::Client as S3Client;
 use bytes::Bytes;
 use metrics::{counter, histogram};
 use std::time::Instant;
@@ -16,10 +18,11 @@ pub struct S3ExpressMultiAzConfig {
     pub remote_az_bucket: String,
     pub az: String,
     pub express_session_auth: bool,
+    pub rate_limit_config: S3RateLimitConfig,
 }
 
 pub struct S3ExpressMultiAzStorage {
-    client_s3: S3Client,
+    client_s3: RateLimitedS3Client,
     local_az_bucket: String,
     remote_az_bucket: String,
     retry_config: retry::RetryConfig,
@@ -34,20 +37,22 @@ impl S3ExpressMultiAzStorage {
 
         let client_s3 = if config.express_session_auth {
             // For real AWS S3 Express with session auth
-            create_s3_client(
+            create_rate_limited_s3_client(
                 &config.local_az_host,
                 config.local_az_port,
                 &config.s3_region,
                 false,
+                &config.rate_limit_config,
             )
             .await
         } else {
             // For local minio testing - use common client creation with force_path_style=true
-            create_s3_client(
+            create_rate_limited_s3_client(
                 &config.local_az_host,
                 config.local_az_port,
                 &config.s3_region,
                 true, // force_path_style for minio
+                &config.rate_limit_config,
             )
             .await
         };
@@ -62,7 +67,7 @@ impl S3ExpressMultiAzStorage {
             client_s3,
             local_az_bucket: config.local_az_bucket.clone(),
             remote_az_bucket: config.remote_az_bucket.clone(),
-            retry_config: retry::RetryConfig::default(),
+            retry_config: retry::RetryConfig::rate_limited(),
         })
     }
 }
@@ -98,6 +103,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
             &self.retry_config,
             self.client_s3
                 .put_object()
+                .await
                 .bucket(&self.local_az_bucket)
                 .key(&s3_key)
                 .body(body.clone().into())
@@ -112,6 +118,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
             &self.retry_config,
             self.client_s3
                 .put_object()
+                .await
                 .bucket(&self.remote_az_bucket)
                 .key(&s3_key)
                 .body(body.clone().into())
@@ -190,6 +197,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
             &self.retry_config,
             self.client_s3
                 .get_object()
+                .await
                 .bucket(&self.local_az_bucket)
                 .key(&s3_key)
                 .send()
@@ -214,6 +222,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
                     &self.retry_config,
                     self.client_s3
                         .get_object()
+                        .await
                         .bucket(&self.remote_az_bucket)
                         .key(&s3_key)
                         .send()
@@ -266,6 +275,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
             &self.retry_config,
             self.client_s3
                 .delete_object()
+                .await
                 .bucket(&self.local_az_bucket)
                 .key(&s3_key)
                 .send()
@@ -279,6 +289,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
             &self.retry_config,
             self.client_s3
                 .delete_object()
+                .await
                 .bucket(&self.remote_az_bucket)
                 .key(&s3_key)
                 .send()
