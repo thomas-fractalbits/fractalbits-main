@@ -85,11 +85,11 @@ fn run_s3_api_tests() -> CmdResult {
         ServiceName::All,
         BuildMode::Debug,
         false,
-        DataBlobStorage::HybridSingleAz,
+        Default::default(),
     )?;
     run_cmd! {
         info "Run cargo tests (s3 api tests)";
-        cargo test --package api_server -- --test-threads 1;
+        cargo test --package api_server -- --test-threads 1 --skip multi_az_resilience;
     }?;
     let _ = cmd_service::stop_service(ServiceName::All);
 

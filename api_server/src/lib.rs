@@ -232,11 +232,14 @@ impl BlobClient {
                 let bss_config = blob_storage_config.bss.as_ref().ok_or_else(|| {
                     BlobStorageError::Config("BSS configuration required for Hybrid backend".into())
                 })?;
-                let s3_cache_config = blob_storage_config.s3_hybrid.as_ref().ok_or_else(|| {
-                    BlobStorageError::Config(
-                        "S3 cache configuration required for Hybrid backend".into(),
-                    )
-                })?;
+                let s3_cache_config = blob_storage_config
+                    .s3_hybrid_single_az
+                    .as_ref()
+                    .ok_or_else(|| {
+                        BlobStorageError::Config(
+                            "S3 hybrid configuration required for Hybrid backend".into(),
+                        )
+                    })?;
                 BlobStorageImpl::HybridSingleAz(
                     HybridSingleAzStorage::new(
                         bss_config.addr,
@@ -248,8 +251,10 @@ impl BlobClient {
                 )
             }
             BlobStorageBackend::S3ExpressMultiAz => {
-                let s3_express_config =
-                    blob_storage_config.s3_express.as_ref().ok_or_else(|| {
+                let s3_express_config = blob_storage_config
+                    .s3_express_multi_az
+                    .as_ref()
+                    .ok_or_else(|| {
                         BlobStorageError::Config(
                             "S3 Express configuration required for S3Express backend".into(),
                         )
@@ -268,8 +273,10 @@ impl BlobClient {
                 )
             }
             BlobStorageBackend::S3ExpressMultiAzWithTracking => {
-                let s3_express_config =
-                    blob_storage_config.s3_express.as_ref().ok_or_else(|| {
+                let s3_express_config = blob_storage_config
+                    .s3_express_multi_az
+                    .as_ref()
+                    .ok_or_else(|| {
                         BlobStorageError::Config(
                             "S3 Express configuration required for S3ExpressWithTracking backend"
                                 .into(),

@@ -85,9 +85,9 @@ enum Cmd {
 
         #[clap(
             long,
-            long_help = "Data blob storage mode: hybrid_single_az, s3_express_single_az or s3_express_multi_az",
-            default_value = "s3_express_single_az"
+            long_help = "Data blob storage mode: hybrid_single_az, s3_express_single_az or s3_express_multi_az"
         )]
+        #[arg(default_value_t)]
         data_blob_storage: DataBlobStorage,
     },
 
@@ -159,12 +159,19 @@ pub enum ServiceName {
     DdbLocal,
 }
 
-#[derive(AsRefStr, EnumString, Copy, Clone)]
+#[derive(AsRefStr, EnumString, Copy, Clone, Default)]
 #[strum(serialize_all = "snake_case")]
 pub enum DataBlobStorage {
     HybridSingleAz,
     S3ExpressMultiAz,
+    #[default]
     S3ExpressSingleAz,
+}
+
+impl std::fmt::Display for DataBlobStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
 }
 
 #[derive(Parser, Clone)]
@@ -205,7 +212,7 @@ fn main() -> CmdResult {
                 ServiceName::DdbLocal,
                 BuildMode::Debug,
                 false,
-                DataBlobStorage::S3ExpressSingleAz,
+                Default::default(),
             )?;
 
             run_cmd! {
@@ -251,7 +258,7 @@ fn main() -> CmdResult {
                     ServiceAction::Stop,
                     BuildMode::Release,
                     false,
-                    DataBlobStorage::S3ExpressSingleAz,
+                    Default::default(),
                 )
                 .unwrap();
             })?;

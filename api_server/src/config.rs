@@ -1,11 +1,12 @@
 use serde::Deserialize;
 use std::{net::SocketAddr, time::Duration};
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BlobStorageBackend {
     BssOnlySingleAz,
     HybridSingleAz,
+    #[default]
     S3ExpressSingleAz,
     S3ExpressMultiAz,
     S3ExpressMultiAzWithTracking,
@@ -16,8 +17,8 @@ pub struct BlobStorageConfig {
     pub backend: BlobStorageBackend,
 
     pub bss: Option<BssConfig>,
-    pub s3_hybrid: Option<S3HybridConfig>,
-    pub s3_express: Option<S3ExpressMultiAzConfig>,
+    pub s3_hybrid_single_az: Option<S3HybridConfig>,
+    pub s3_express_multi_az: Option<S3ExpressMultiAzConfig>,
     pub s3_express_single_az: Option<S3ExpressSingleAzConfig>,
 }
 
@@ -60,6 +61,19 @@ fn default_force_path_style() -> bool {
     true // Default to true for local testing with minio
 }
 
+impl Default for S3ExpressSingleAzConfig {
+    fn default() -> Self {
+        Self {
+            s3_host: "http://127.0.0.1".into(),
+            s3_port: 9000, // local minio port
+            s3_region: "us-west-1".into(),
+            s3_bucket: "fractalbits-bucket".into(),
+            az: "us-west-1a".into(),
+            force_path_style: true,
+        }
+    }
+}
+
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     pub nss_addr: SocketAddr,
@@ -94,4 +108,29 @@ pub struct S3HybridConfig {
     pub s3_port: u16,
     pub s3_region: String,
     pub s3_bucket: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            nss_addr: "127.0.0.1:8087".parse().unwrap(),
+            rss_addr: "127.0.0.1:8086".parse().unwrap(),
+            nss_conn_num: 2,
+            rss_conn_num: 1,
+            port: 8080,
+            region: "us-west-1".into(),
+            root_domain: ".localhost".into(),
+            with_metrics: true,
+            http_request_timeout_seconds: 5,
+            rpc_timeout_seconds: 4,
+            blob_storage: BlobStorageConfig {
+                backend: BlobStorageBackend::S3ExpressSingleAz,
+                bss: None,
+                s3_hybrid_single_az: None,
+                s3_express_multi_az: None,
+                s3_express_single_az: Some(S3ExpressSingleAzConfig::default()),
+            },
+            allow_missing_or_bad_signature: false,
+        }
+    }
 }
