@@ -174,15 +174,22 @@ pub fn stop_service(service: ServiceName) -> CmdResult {
 
     info!("Killing previous service(s) (if any) ...");
     for service in services {
-        if run_cmd!(systemctl --user is-active --quiet $service.service).is_err() {
+        // For nss service, we need to stop the template instance
+        let service_to_stop = if service == "nss" {
+            "nss@active".to_string()
+        } else {
+            service.clone()
+        };
+
+        if run_cmd!(systemctl --user is-active --quiet $service_to_stop.service).is_err() {
             continue;
         }
 
-        run_cmd!(systemctl --user stop $service.service)?;
+        run_cmd!(systemctl --user stop $service_to_stop.service)?;
 
         // make sure the process is really killed
-        if run_cmd!(systemctl --user is-active --quiet $service.service).is_ok() {
-            cmd_die!("Failed to stop $service: service is still running");
+        if run_cmd!(systemctl --user is-active --quiet $service_to_stop.service).is_ok() {
+            cmd_die!("Failed to stop $service_to_stop: service is still running");
         }
     }
 
@@ -210,22 +217,41 @@ pub fn show_service_status(service: ServiceName, data_blob_storage: DataBlobStor
             ];
 
             for svc in all_services {
-                let service_name = match svc {
-                    ServiceName::NssRoleAgentA => "nss_role_agent_a",
-                    ServiceName::NssRoleAgentB => "nss_role_agent_b",
-                    _ => svc.as_ref(),
+                let mut display_name = match svc {
+                    ServiceName::NssRoleAgentA => "nss_role_agent_a".to_string(),
+                    ServiceName::NssRoleAgentB => "nss_role_agent_b".to_string(),
+                    _ => svc.as_ref().to_string(),
                 };
 
-                let status = if run_cmd!(systemctl --user list-unit-files --quiet $service_name.service | grep -q $service_name).is_ok() {
+                // For nss service, check which template instance is running
+                let service_to_check = if svc == ServiceName::Nss {
+                    // Check which template instance is active
+                    if run_cmd!(systemctl --user is-active --quiet nss@active.service).is_ok() {
+                        display_name = "nss@active".to_string();
+                        "nss@active"
+                    } else if run_cmd!(systemctl --user is-active --quiet nss@solo.service).is_ok()
+                    {
+                        display_name = "nss@solo".to_string();
+                        "nss@solo"
+                    } else {
+                        // Default to checking active if neither is running
+                        "nss@active"
+                    }
+                } else {
+                    &display_name
+                };
+
+                let status = if run_cmd!(systemctl --user list-unit-files --quiet $service_to_check.service | grep -q $service_to_check).is_ok() ||
+                                (svc == ServiceName::Nss && run_cmd!(systemctl --user list-unit-files --quiet "nss@.service" | grep -q "nss@").is_ok()) {
                     // Service exists, get its status
-                    match run_fun!(systemctl --user is-active $service_name.service 2>/dev/null) {
+                    match run_fun!(systemctl --user is-active $service_to_check.service 2>/dev/null) {
                         Ok(output) => match output.trim() {
                             "active" => "active".green().to_string(),
                             status => status.yellow().to_string(),
                         },
                         Err(_) => {
                             // Command failed, try to get the actual status
-                            if run_cmd!(systemctl --user is-failed --quiet $service_name.service).is_ok() {
+                            if run_cmd!(systemctl --user is-failed --quiet $service_to_check.service).is_ok() {
                                 // Check if this is BSS service and it shouldn't be running in current storage mode
                                 if svc == ServiceName::Bss && matches!(data_blob_storage, DataBlobStorage::S3ExpressSingleAz | DataBlobStorage::S3ExpressMultiAz) {
                                     "not needed".bright_black().to_string()
@@ -241,7 +267,7 @@ pub fn show_service_status(service: ServiceName, data_blob_storage: DataBlobStor
                     "not installed".bright_black().to_string()
                 };
 
-                println!("{service_name:<16}: {status}");
+                println!("{display_name:<16}: {status}");
             }
         }
         single_service => {
@@ -249,6 +275,7 @@ pub fn show_service_status(service: ServiceName, data_blob_storage: DataBlobStor
             let service_name = match single_service {
                 ServiceName::NssRoleAgentA => "nss_role_agent_a",
                 ServiceName::NssRoleAgentB => "nss_role_agent_b",
+                ServiceName::Nss => "nss@active",
                 _ => single_service.as_ref(),
             };
 
@@ -326,7 +353,7 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
     };
     create_systemd_unit_file(ServiceName::Nss, build_mode, config_file)?;
 
-    run_cmd!(systemctl --user start nss.service)?;
+    run_cmd!(systemctl --user start nss@active.service)?;
     wait_for_service_ready(ServiceName::Nss, 15)?;
 
     let nss_server_pid = run_fun!(pidof nss_server)?;
@@ -741,7 +768,7 @@ Environment="RUST_LOG=warn""##
     let mut exec_start = match service {
         ServiceName::Bss => format!("{pwd}/zig-out/bin/bss_server"),
         ServiceName::Nss => match build_mode {
-            BuildMode::Debug => format!("{pwd}/zig-out/bin/nss_server serve"),
+            BuildMode::Debug => format!("{pwd}/zig-out/bin/nss_server serve --nss_role %i"),
             BuildMode::Release => {
                 format!("{pwd}/zig-out/bin/nss_server serve -c {pwd}/etc/{NSS_SERVER_BENCH_CONFIG}")
             }
@@ -814,6 +841,7 @@ WantedBy=multi-user.target
     let service_file = match service {
         ServiceName::NssRoleAgentA => "nss_role_agent_a.service".to_string(),
         ServiceName::NssRoleAgentB => "nss_role_agent_b.service".to_string(),
+        ServiceName::Nss => "nss@.service".to_string(),
         _ => format!("{service_name}.service"),
     };
 
@@ -883,7 +911,11 @@ fn wait_for_service_ready(service: ServiceName, timeout_secs: u32) -> CmdResult 
 
     while start.elapsed() < timeout {
         // Check if systemd reports service as active
-        if run_cmd!(systemctl --user is-active --quiet $service_name.service).is_ok() {
+        let service_to_check = match service {
+            ServiceName::Nss => "nss@active",
+            _ => service_name,
+        };
+        if run_cmd!(systemctl --user is-active --quiet $service_to_check.service).is_ok() {
             // For network services, also check port availability
             let port_ready = match service {
                 ServiceName::DdbLocal => check_port_ready(8000),
