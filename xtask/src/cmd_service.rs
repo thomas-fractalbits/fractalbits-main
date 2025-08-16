@@ -113,12 +113,12 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
         match build_mode {
             BuildMode::Debug => run_cmd! {
                 info "formatting mirrord with default configs";
-                ${pwd}/zig-out/bin/nss_server format -w "./data/nss-standby"
+                ${pwd}/zig-out/bin/nss_server format -w "./data/nss-B"
                     |& ts -m $TS_FMT >$format_log;
             }?,
             BuildMode::Release => run_cmd! {
                 info "formatting mirrord for benchmarking";
-                ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG -w "./data/nss-standby"
+                ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG -w "./data/nss-B"
                     |& ts -m $TS_FMT >$format_log;
             }?,
         }
@@ -768,31 +768,24 @@ fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
 
 fn create_dirs_for_nss_server() -> CmdResult {
     info!("Creating necessary directories for nss_server");
-    run_cmd! {
-        mkdir -p data/logs;
-        mkdir -p data/nss-active/ebs;
-        mkdir -p data/nss-active/local/stats;
-        mkdir -p data/nss-active/local/meta_cache/blobs;
-    }?;
-    for i in 0..256 {
-        run_cmd!(mkdir -p data/nss-active/local/meta_cache/blobs/dir$i)?;
-    }
-
-    Ok(())
+    create_nss_dirs("nss-A")
 }
 
 fn create_dirs_for_mirrord_server() -> CmdResult {
     info!("Creating necessary directories for mirrord");
+    create_nss_dirs("nss-B")
+}
+
+fn create_nss_dirs(dir_name: &str) -> CmdResult {
     run_cmd! {
         mkdir -p data/logs;
-        mkdir -p data/nss-standby/ebs;
-        mkdir -p data/nss-standby/local/stats;
-        mkdir -p data/nss-standby/local/meta_cache/blobs;
+        mkdir -p data/$dir_name/ebs;
+        mkdir -p data/$dir_name/local/stats;
+        mkdir -p data/$dir_name/local/meta_cache/blobs;
     }?;
     for i in 0..256 {
-        run_cmd!(mkdir -p data/nss-standby/local/meta_cache/blobs/dir$i)?;
+        run_cmd!(mkdir -p data/$dir_name/local/meta_cache/blobs/dir$i)?;
     }
-
     Ok(())
 }
 
