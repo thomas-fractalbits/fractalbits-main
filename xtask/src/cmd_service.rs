@@ -694,17 +694,10 @@ pub fn start_all_services(
             wait_for_service_ready(ServiceName::ApiServer, 15)?;
         }
         DataBlobStorage::S3ExpressMultiAz | DataBlobStorage::S3ExpressSingleAz => {
-            let mode = if matches!(data_blob_storage, DataBlobStorage::S3ExpressMultiAz) {
-                "s3_express_multi_az"
-            } else {
-                "s3_express_single_az"
-            };
+            let mode = data_blob_storage.as_ref();
             info!("Starting main services (skipping BSS in {} mode)", mode);
             run_cmd!(systemctl --user start rss.service nss_role_agent_a.service nss_role_agent_b.service api_server.service)?;
-
-            // Wait for all services to be ready in dependency order (excluding BSS)
             wait_for_service_ready(ServiceName::Rss, 15)?;
-            info!("Skipping BSS service readiness check in s3_express mode");
             wait_for_service_ready(ServiceName::NssRoleAgentA, 15)?;
             wait_for_service_ready(ServiceName::NssRoleAgentB, 15)?;
             wait_for_service_ready(ServiceName::ApiServer, 15)?;
@@ -793,9 +786,7 @@ Environment="AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000""##
     let dependencies = match service {
         ServiceName::Rss => "After=ddb_local.service\nWants=ddb_local.service\n",
         ServiceName::Nss => "After=minio.service\nWants=minio.service\n",
-        ServiceName::ApiServer => {
-            "After=rss.service bss.service nss.service\nWants=rss.service bss.service nss.service\n"
-        }
+        ServiceName::ApiServer => "After=rss.service nss.service\nWants=rss.service nss.service\n",
         _ => "",
     };
 

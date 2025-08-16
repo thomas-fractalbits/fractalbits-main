@@ -7,8 +7,8 @@ use std::{net::SocketAddr, time::Duration};
 pub enum BlobStorageBackend {
     BssOnlySingleAz,
     HybridSingleAz,
-    #[default]
     S3ExpressSingleAz,
+    #[default]
     S3ExpressMultiAz,
     S3ExpressMultiAzWithTracking,
 }
