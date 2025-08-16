@@ -7,7 +7,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as autoscaling from 'aws-cdk-lib/aws-autoscaling';
 
-import {createInstance, createUserData, createEc2Asg, createEbsVolume, createServiceDiscoveryTable, createEc2Role, createVpcEndpoints} from './ec2-utils';
+import {createInstance, createUserData, createEc2Asg, createEbsVolume, createServiceDiscoveryTable, createEc2Role, createVpcEndpoints, createPrivateLinkNlb} from './ec2-utils';
 
 export interface FractalbitsVpcStackProps extends cdk.StackProps {
   numApiServers: number;
@@ -218,17 +218,26 @@ export class FractalbitsVpcStack extends cdk.Stack {
       );
     }
 
-    // Create api_server(s) in a ASG group
+    // Prepare variables for later ASG creation
     const dataBlobBucketName = dataBlobOnS3Express ? dataBlobBucket!.ref : bucket.bucketName;
     const dataBlobBucketName2 = dataBlobStorage === 's3ExpressMultiAz' && dataBlobBucket2 ? dataBlobBucket2.ref : '';
     const remoteBucketParam = dataBlobBucketName2 ? `--remote_bucket=${dataBlobBucketName2}` : '';
+
+
+    // Create PrivateLink setup for NSS and RSS services
+    const servicePort = 8088;
+    const nssPrivateLink = createPrivateLinkNlb(this, 'Nss', this.vpc, instances['nss_server_primary'], servicePort);
+    const rssPrivateLink = createPrivateLinkNlb(this, 'Rss', this.vpc, instances['root_server'], servicePort);
+
     // Reusable function to create bootstrap options for api_server and gui_server
     const createBootstrapOptions = (serviceName: string) =>
       `${forBenchFlag} ${serviceName} ` +
       `--bucket=${dataBlobBucketName} ` +
-      `--nss_ip=${instances["nss_server_primary"].instancePrivateIp} ` +
-      `--rss_ip=${instances["root_server"].instancePrivateIp} ` +
+      `--nss_endpoint=${nssPrivateLink.endpointDns} ` +
+      `--rss_endpoint=${rssPrivateLink.endpointDns} ` +
       remoteBucketParam;
+
+    // Create api_server(s) in a ASG group
     const apiServerBootstrapOptions = createBootstrapOptions('api_server');
     const apiServerAsg = createEc2Asg(
       this,

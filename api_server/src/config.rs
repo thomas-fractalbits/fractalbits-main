@@ -1,6 +1,6 @@
 use crate::blob_storage::S3RetryConfig;
 use serde::Deserialize;
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(rename_all = "snake_case")]
@@ -25,7 +25,7 @@ pub struct BlobStorageConfig {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct BssConfig {
-    pub addr: SocketAddr,
+    pub addr: String,
     pub conn_num: u16,
 }
 
@@ -100,8 +100,8 @@ impl Default for S3ExpressSingleAzConfig {
 
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
-    pub nss_addr: SocketAddr,
-    pub rss_addr: SocketAddr,
+    pub nss_addr: String,
+    pub rss_addr: String,
     pub nss_conn_num: u16,
     pub rss_conn_num: u16,
 
@@ -141,8 +141,8 @@ pub struct S3HybridConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            nss_addr: "127.0.0.1:8087".parse().unwrap(),
-            rss_addr: "127.0.0.1:8086".parse().unwrap(),
+            nss_addr: "127.0.0.1:8087".to_string(),
+            rss_addr: "127.0.0.1:8086".to_string(),
             nss_conn_num: 2,
             rss_conn_num: 1,
             port: 8080,

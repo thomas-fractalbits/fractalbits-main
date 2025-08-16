@@ -46,11 +46,11 @@ enum Command {
         #[clap(long, long_help = "S3 remote bucket name used in multi-az setup")]
         remote_bucket: Option<String>,
 
-        #[clap(long, long_help = "primary nss_server IP address")]
-        nss_ip: String,
+        #[clap(long, long_help = "primary nss_server endpoint")]
+        nss_endpoint: String,
 
-        #[clap(long, long_help = "root_server IP address")]
-        rss_ip: String,
+        #[clap(long, long_help = "root_server endpoint")]
+        rss_endpoint: String,
     },
 
     #[clap(about = "Run on api_server instance to bootstrap fractalbits service(s)")]
@@ -61,11 +61,11 @@ enum Command {
         #[clap(long, long_help = "S3 remote bucket name, used in multi-az setup")]
         remote_bucket: Option<String>,
 
-        #[clap(long, long_help = "primary nss_server IP address")]
-        nss_ip: String,
+        #[clap(long, long_help = "primary nss_server endpoint")]
+        nss_endpoint: String,
 
-        #[clap(long, long_help = "root_server IP address")]
-        rss_ip: String,
+        #[clap(long, long_help = "root_server endpoint")]
+        rss_endpoint: String,
     },
 
     #[clap(about = "Run on bss_server instance to bootstrap fractalbits service(s)")]
@@ -171,21 +171,26 @@ fn main() -> CmdResult {
         Command::ApiServer {
             bucket,
             remote_bucket,
-            nss_ip,
-            rss_ip,
+            nss_endpoint,
+            rss_endpoint,
         } => api_server::bootstrap(
             &bucket,
             remote_bucket.as_deref(),
-            &nss_ip,
-            &rss_ip,
+            &nss_endpoint,
+            &rss_endpoint,
             for_bench,
         )?,
         Command::GuiServer {
             bucket,
             remote_bucket,
-            nss_ip,
-            rss_ip,
-        } => gui_server::bootstrap(&bucket, remote_bucket.as_deref(), &nss_ip, &rss_ip)?,
+            nss_endpoint,
+            rss_endpoint,
+        } => gui_server::bootstrap(
+            &bucket,
+            remote_bucket.as_deref(),
+            &nss_endpoint,
+            &rss_endpoint,
+        )?,
         Command::BssServer { meta_stack_testing } => {
             bss_server::bootstrap(meta_stack_testing, for_bench)?
         }

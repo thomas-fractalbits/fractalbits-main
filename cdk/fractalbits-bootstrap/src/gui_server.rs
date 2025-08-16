@@ -3,8 +3,8 @@ use crate::*;
 pub fn bootstrap(
     bucket_name: &str,
     bucket_remote_az: Option<&str>,
-    nss_ip: &str,
-    rss_ip: &str,
+    nss_endpoint: &str,
+    rss_endpoint: &str,
 ) -> CmdResult {
     install_rpms(&["amazon-cloudwatch-agent", "nmap-ncat", "perf"])?;
     download_binaries(&["api_server"])?;
@@ -20,15 +20,15 @@ pub fn bootstrap(
             _ => std::thread::sleep(std::time::Duration::from_secs(1)),
         }
     };
-    for (role, ip) in [("bss", bss_ip.as_str()), ("rss", rss_ip), ("nss", nss_ip)] {
-        info!("Waiting for {role} node with ip {ip} to be ready");
-        while run_cmd!(nc -z $ip 8088 &>/dev/null).is_err() {
+    for (role, endpoint) in [("bss", bss_ip.as_str()), ("rss", rss_endpoint), ("nss", nss_endpoint)] {
+        info!("Waiting for {role} node with endpoint {endpoint} to be ready");
+        while run_cmd!(nc -z $endpoint 8088 &>/dev/null).is_err() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
-        info!("{role} node can be reached (`nc -z {ip} 8088` is ok)");
+        info!("{role} node can be reached (`nc -z {endpoint} 8088` is ok)");
     }
 
-    api_server::create_config(bucket_name, bucket_remote_az, &bss_ip, nss_ip, rss_ip)?;
+    api_server::create_config(bucket_name, bucket_remote_az, &bss_ip, nss_endpoint, rss_endpoint)?;
     // setup_cloudwatch_agent()?;
     let extra_start_opts = format!("--gui {WEB_ROOT}");
     create_systemd_unit_file_with_extra_start_opts("api_server", &extra_start_opts, true)?;

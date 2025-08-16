@@ -20,7 +20,6 @@ use rpc_client_rss::{RpcClientRss, RpcErrorRss};
 
 use slotmap_conn_pool::{ConnPool, Poolable};
 use std::{
-    net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -37,8 +36,8 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub cache: Arc<Cache<String, Versioned<String>>>,
 
-    rpc_clients_nss: ConnPool<Arc<RpcClientNss>, SocketAddr>,
-    rpc_clients_rss: ConnPool<Arc<RpcClientRss>, SocketAddr>,
+    rpc_clients_nss: ConnPool<Arc<RpcClientNss>, String>,
+    rpc_clients_rss: ConnPool<Arc<RpcClientRss>, String>,
 
     blob_client: Arc<BlobClient>,
     blob_deletion: Sender<(BlobId, usize)>,
@@ -55,7 +54,10 @@ impl KvClientProvider for AppState {
         <RpcClientRss as Poolable>::Error,
     > {
         let start = Instant::now();
-        let res = self.rpc_clients_rss.checkout(self.config.rss_addr).await?;
+        let res = self
+            .rpc_clients_rss
+            .checkout(self.config.rss_addr.clone())
+            .await?;
         histogram!("checkout_rpc_client_nanos", "type" => "rss")
             .record(start.elapsed().as_nanos() as f64);
         Ok(res)
@@ -65,9 +67,9 @@ impl KvClientProvider for AppState {
 impl AppState {
     pub async fn new(config: Arc<Config>) -> Self {
         let rpc_clients_rss =
-            Self::new_rpc_clients_pool_rss(config.rss_addr, config.rss_conn_num).await;
+            Self::new_rpc_clients_pool_rss(&config.rss_addr, config.rss_conn_num).await;
         let rpc_clients_nss =
-            Self::new_rpc_clients_pool_nss(config.nss_addr, config.nss_conn_num).await;
+            Self::new_rpc_clients_pool_nss(&config.nss_addr, config.nss_conn_num).await;
 
         let (tx, rx) = mpsc::channel(1024 * 1024);
         let data_blob_tracker = Arc::new(DataBlobTracker::new());
@@ -78,12 +80,12 @@ impl AppState {
             BlobStorageBackend::S3ExpressMultiAzWithTracking
         ) {
             let rss_client = Arc::new(
-                <RpcClientRss as slotmap_conn_pool::Poolable>::new(config.rss_addr)
+                <RpcClientRss as slotmap_conn_pool::Poolable>::new(config.rss_addr.clone())
                     .await
                     .expect("Failed to create RSS client for blob storage"),
             );
             let nss_client = Arc::new(
-                <RpcClientNss as slotmap_conn_pool::Poolable>::new(config.nss_addr)
+                <RpcClientNss as slotmap_conn_pool::Poolable>::new(config.nss_addr.clone())
                     .await
                     .expect("Failed to create NSS client for blob storage"),
             );
@@ -123,9 +125,9 @@ impl AppState {
     }
 
     async fn new_rpc_clients_pool_nss(
-        nss_addr: SocketAddr,
+        nss_addr: &str,
         nss_conn_num: u16,
-    ) -> ConnPool<Arc<RpcClientNss>, SocketAddr> {
+    ) -> ConnPool<Arc<RpcClientNss>, String> {
         let rpc_clients_nss = ConnPool::new();
 
         // Use the Poolable trait's retry logic instead of manual retry
@@ -136,11 +138,11 @@ impl AppState {
                 nss_conn_num
             );
             let client = Arc::new(
-                <RpcClientNss as slotmap_conn_pool::Poolable>::new(nss_addr)
+                <RpcClientNss as slotmap_conn_pool::Poolable>::new(nss_addr.to_string())
                     .await
                     .unwrap(),
             );
-            rpc_clients_nss.pooled(nss_addr, client);
+            rpc_clients_nss.pooled(nss_addr.to_string(), client);
         }
 
         info!("NSS RPC client pool initialized with {nss_conn_num} connections.");
@@ -148,9 +150,9 @@ impl AppState {
     }
 
     async fn new_rpc_clients_pool_rss(
-        rss_addr: SocketAddr,
+        rss_addr: &str,
         rss_conn_num: u16,
-    ) -> ConnPool<Arc<RpcClientRss>, SocketAddr> {
+    ) -> ConnPool<Arc<RpcClientRss>, String> {
         let rpc_clients_rss = ConnPool::new();
 
         // Use the Poolable trait's retry logic
@@ -161,11 +163,11 @@ impl AppState {
                 rss_conn_num
             );
             let client = Arc::new(
-                <RpcClientRss as slotmap_conn_pool::Poolable>::new(rss_addr)
+                <RpcClientRss as slotmap_conn_pool::Poolable>::new(rss_addr.to_string())
                     .await
                     .unwrap(),
             );
-            rpc_clients_rss.pooled(rss_addr, client);
+            rpc_clients_rss.pooled(rss_addr.to_string(), client);
         }
 
         info!("RSS RPC client pool initialized with {rss_conn_num} connections.");
@@ -176,7 +178,10 @@ impl AppState {
         &self,
     ) -> Result<Arc<RpcClientNss>, <RpcClientNss as Poolable>::Error> {
         let start = Instant::now();
-        let res = self.rpc_clients_nss.checkout(self.config.nss_addr).await?;
+        let res = self
+            .rpc_clients_nss
+            .checkout(self.config.nss_addr.clone())
+            .await?;
         histogram!("checkout_rpc_client_nanos", "type" => "nss")
             .record(start.elapsed().as_nanos() as f64);
         Ok(res)
@@ -186,7 +191,10 @@ impl AppState {
         &self,
     ) -> Result<Arc<RpcClientRss>, <RpcClientRss as Poolable>::Error> {
         let start = Instant::now();
-        let res = self.rpc_clients_rss.checkout(self.config.rss_addr).await?;
+        let res = self
+            .rpc_clients_rss
+            .checkout(self.config.rss_addr.clone())
+            .await?;
         histogram!("checkout_rpc_client_nanos", "type" => "rss")
             .record(start.elapsed().as_nanos() as f64);
         Ok(res)
@@ -224,7 +232,7 @@ impl BlobClient {
                     )
                 })?;
                 BlobStorageImpl::BssOnlySingleAz(
-                    BssOnlySingleAzStorage::new(bss_config.addr, bss_config.conn_num, rpc_timeout)
+                    BssOnlySingleAzStorage::new(&bss_config.addr, bss_config.conn_num, rpc_timeout)
                         .await,
                 )
             }
@@ -242,7 +250,7 @@ impl BlobClient {
                     })?;
                 BlobStorageImpl::HybridSingleAz(
                     HybridSingleAzStorage::new(
-                        bss_config.addr,
+                        &bss_config.addr,
                         bss_config.conn_num,
                         s3_cache_config,
                         rpc_timeout,

@@ -5,7 +5,6 @@ use rpc_client_bss::RpcClientBss;
 use rpc_client_common::{bss_rpc_retry, rpc_retry};
 use slotmap_conn_pool::{ConnPool, Poolable};
 use std::{
-    net::SocketAddr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -13,13 +12,13 @@ use tracing::info;
 use uuid::Uuid;
 
 pub struct BssOnlySingleAzStorage {
-    rpc_clients_bss: ConnPool<Arc<RpcClientBss>, SocketAddr>,
-    bss_addr: SocketAddr,
+    rpc_clients_bss: ConnPool<Arc<RpcClientBss>, String>,
+    bss_addr: String,
     rpc_timeout: Duration,
 }
 
 impl BssOnlySingleAzStorage {
-    pub async fn new(bss_addr: SocketAddr, bss_conn_num: u16, rpc_timeout: Duration) -> Self {
+    pub async fn new(bss_addr: &str, bss_conn_num: u16, rpc_timeout: Duration) -> Self {
         let clients_bss = ConnPool::new();
 
         for i in 0..bss_conn_num as usize {
@@ -29,18 +28,18 @@ impl BssOnlySingleAzStorage {
                 bss_conn_num
             );
             let client = Arc::new(
-                <RpcClientBss as slotmap_conn_pool::Poolable>::new(bss_addr)
+                <RpcClientBss as slotmap_conn_pool::Poolable>::new(bss_addr.to_string())
                     .await
                     .unwrap(),
             );
-            clients_bss.pooled(bss_addr, client);
+            clients_bss.pooled(bss_addr.to_string(), client);
         }
 
         info!("BSS RPC client pool initialized with {bss_conn_num} connections.");
 
         Self {
             rpc_clients_bss: clients_bss,
-            bss_addr,
+            bss_addr: bss_addr.to_string(),
             rpc_timeout,
         }
     }
@@ -49,7 +48,7 @@ impl BssOnlySingleAzStorage {
         &self,
     ) -> Result<Arc<RpcClientBss>, <RpcClientBss as Poolable>::Error> {
         let start = Instant::now();
-        let res = self.rpc_clients_bss.checkout(self.bss_addr).await?;
+        let res = self.rpc_clients_bss.checkout(self.bss_addr.clone()).await?;
         histogram!("checkout_rpc_client_nanos", "type" => "bss")
             .record(start.elapsed().as_nanos() as f64);
         Ok(res)

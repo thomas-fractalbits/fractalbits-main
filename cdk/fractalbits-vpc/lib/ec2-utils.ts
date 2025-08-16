@@ -7,6 +7,8 @@ import * as servicediscovery from 'aws-cdk-lib/aws-servicediscovery';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as hooktargets from 'aws-cdk-lib/aws-autoscaling-hooktargets';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
+import * as elbv2_targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import * as path from 'path';
 
 export const createVpcEndpoints = (vpc: ec2.Vpc) => {
@@ -231,5 +233,68 @@ export function addAsgDeregistrationLifecycleHook(
     heartbeatTimeout: cdk.Duration.minutes(5),
     notificationTarget: new hooktargets.FunctionHook(deregisterInstanceLambda),
   });
+}
+
+export interface PrivateLinkSetup {
+  nlb: elbv2.NetworkLoadBalancer;
+  endpointService: ec2.VpcEndpointService;
+  endpoint: ec2.InterfaceVpcEndpoint;
+  endpointDns: string;
+}
+
+export function createPrivateLinkNlb(
+  scope: Construct,
+  id: string,
+  vpc: ec2.Vpc,
+  targetInstance: ec2.Instance,
+  servicePort: number,
+): PrivateLinkSetup {
+  // Create Network Load Balancer
+  const nlb = new elbv2.NetworkLoadBalancer(scope, `${id}Nlb`, {
+    vpc,
+    internetFacing: false,
+    crossZoneEnabled: true,
+    vpcSubnets: {
+      subnets: vpc.isolatedSubnets,
+    }
+  });
+
+  // Add listener and targets
+  const listener = nlb.addListener(`${id}Listener`, {port: servicePort});
+  listener.addTargets(`${id}Targets`, {
+    port: servicePort,
+    targets: [new elbv2_targets.InstanceTarget(targetInstance)],
+  });
+
+  // Create VPC Endpoint Service
+  const endpointService = new ec2.VpcEndpointService(scope, `${id}EndpointService`, {
+    vpcEndpointServiceLoadBalancers: [nlb],
+    allowedPrincipals: [new iam.AccountRootPrincipal()],
+    acceptanceRequired: false,
+  });
+
+  // Create VPC Endpoint
+  const endpoint = new ec2.InterfaceVpcEndpoint(scope, `${id}Endpoint`, {
+    vpc,
+    service: {
+      name: endpointService.vpcEndpointServiceName,
+      port: servicePort,
+    },
+    privateDnsEnabled: false,
+    subnets: {
+      subnets: vpc.isolatedSubnets,
+    },
+  });
+
+  // Extract endpoint DNS name
+  const endpointDnsEntry = cdk.Fn.select(0, endpoint.vpcEndpointDnsEntries);
+  const endpointDns = cdk.Fn.select(1, cdk.Fn.split(':', endpointDnsEntry));
+
+  return {
+    nlb,
+    endpointService,
+    endpoint,
+    endpointDns,
+  };
 }
 

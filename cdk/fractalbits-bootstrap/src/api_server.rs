@@ -3,8 +3,8 @@ use crate::*;
 pub fn bootstrap(
     bucket_name: &str,
     remote_bucket: Option<&str>,
-    nss_ip: &str,
-    rss_ip: &str,
+    nss_endpoint: &str,
+    rss_endpoint: &str,
     for_bench: bool,
 ) -> CmdResult {
     install_rpms(&["amazon-cloudwatch-agent", "nmap-ncat", "perf"])?;
@@ -19,7 +19,11 @@ pub fn bootstrap(
     } else {
         info!("Waiting for bss");
         let bss_ip = get_service_ips("bss-server", 1)[0].clone();
-        for (role, ip) in [("bss", bss_ip.as_str()), ("rss", rss_ip), ("nss", nss_ip)] {
+        for (role, ip) in [
+            ("bss", bss_ip.as_str()),
+            ("rss", rss_endpoint),
+            ("nss", nss_endpoint),
+        ] {
             info!("Waiting for {role} node with ip {ip} to be ready");
             while run_cmd!(nc -z $ip 8088 &>/dev/null).is_err() {
                 std::thread::sleep(std::time::Duration::from_secs(1));
@@ -31,7 +35,7 @@ pub fn bootstrap(
 
     // For S3 Express, only wait for RSS and NSS
     if is_s3_express {
-        for (role, ip) in [("rss", rss_ip), ("nss", nss_ip)] {
+        for (role, ip) in [("rss", rss_endpoint), ("nss", nss_endpoint)] {
             info!("Waiting for {role} node with ip {ip} to be ready");
             while run_cmd!(nc -z $ip 8088 &>/dev/null).is_err() {
                 std::thread::sleep(std::time::Duration::from_secs(1));
@@ -40,7 +44,13 @@ pub fn bootstrap(
         }
     }
 
-    create_config(bucket_name, remote_bucket, &bss_ip, nss_ip, rss_ip)?;
+    create_config(
+        bucket_name,
+        remote_bucket,
+        &bss_ip,
+        nss_endpoint,
+        rss_endpoint,
+    )?;
 
     if for_bench {
         // Try to download tools for micro-benchmarking
@@ -60,8 +70,8 @@ pub fn create_config(
     bucket_name: &str,
     remote_bucket: Option<&str>,
     bss_ip: &str,
-    nss_ip: &str,
-    rss_ip: &str,
+    nss_endpoint: &str,
+    rss_endpoint: &str,
 ) -> CmdResult {
     let aws_region = get_current_aws_region()?;
     let aws_az = get_current_aws_az()?;
@@ -73,8 +83,8 @@ pub fn create_config(
         let remote_bucket = remote_bucket.unwrap();
 
         format!(
-            r##"nss_addr = "{nss_ip}:8088"
-rss_addr = "{rss_ip}:8088"
+            r##"nss_addr = "{nss_endpoint}:8088"
+rss_addr = "{rss_endpoint}:8088"
 nss_conn_num = {num_cores}
 rss_conn_num = 1
 region = "{aws_region}"
@@ -116,8 +126,8 @@ backoff_multiplier = 1.0
     } else if is_s3_express {
         // S3 Express Single-AZ configuration
         format!(
-            r##"nss_addr = "{nss_ip}:8088"
-rss_addr = "{rss_ip}:8088"
+            r##"nss_addr = "{nss_endpoint}:8088"
+rss_addr = "{rss_endpoint}:8088"
 nss_conn_num = {num_cores}
 rss_conn_num = 1
 region = "{aws_region}"
@@ -157,8 +167,8 @@ backoff_multiplier = 1.0
         // Hybrid single az configuration
         format!(
             r##"bss_addr = "{bss_ip}:8088"
-nss_addr = "{nss_ip}:8088"
-rss_addr = "{rss_ip}:8088"
+nss_addr = "{nss_endpoint}:8088"
+rss_addr = "{rss_endpoint}:8088"
 bss_conn_num = {num_cores}
 nss_conn_num = {num_cores}
 rss_conn_num = 1
