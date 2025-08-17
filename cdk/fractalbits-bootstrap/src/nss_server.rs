@@ -26,15 +26,23 @@ pub fn bootstrap(
     meta_stack_testing: bool,
     for_bench: bool,
     iam_role: &str,
-    mirrord_endpoint: Option<&str>,
+    mirrord_endpoint: &str,
+    rss_endpoint: &str,
 ) -> CmdResult {
-    install_rpms(&["nvme-cli", "mdadm", "perf", "lldb"])?;
+    install_rpms(&["nvme-cli", "mdadm", "perf", "lldb", "nmap-ncat"])?;
     if meta_stack_testing || for_bench {
         download_binaries(&["fbs", "test_art", "rewrk_rpc"])?;
     }
     format_local_nvme_disks(false)?;
     download_binaries(&["nss_server", "mirrord", "nss_role_agent"])?;
-    setup_configs(bucket_name, volume_id, iam_role, "nss", mirrord_endpoint)?;
+    setup_configs(
+        bucket_name,
+        volume_id,
+        iam_role,
+        "nss",
+        mirrord_endpoint,
+        rss_endpoint,
+    )?;
 
     // Note for normal deployment, the nss_server service is not started
     // until EBS/nss formatted from root_server
@@ -50,7 +58,8 @@ fn setup_configs(
     volume_id: &str,
     iam_role: &str,
     service_name: &str,
-    mirrord_endpoint: Option<&str>,
+    mirrord_endpoint: &str,
+    rss_endpoint: &str,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
     create_nss_config(bucket_name, &volume_dev, iam_role, mirrord_endpoint)?;
@@ -58,7 +67,7 @@ fn setup_configs(
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
     create_ebs_udev_rule(volume_id, "nss_role_agent")?;
     create_coredump_config()?;
-    create_nss_role_agent_config(mirrord_endpoint)?;
+    create_nss_role_agent_config(mirrord_endpoint, rss_endpoint)?;
     create_systemd_unit_file_with_extra_opts("nss_role_agent", "", false)?;
     create_systemd_unit_file("mirrord", false)?;
     create_systemd_unit_file(service_name, false)?;
@@ -70,7 +79,7 @@ fn create_nss_config(
     bucket_name: &str,
     volume_dev: &str,
     iam_role: &str,
-    mirrord_endpoint: Option<&str>,
+    mirrord_endpoint: &str,
 ) -> CmdResult {
     let aws_region = get_current_aws_region()?;
 
@@ -96,7 +105,7 @@ fn create_nss_config(
     let art_thread_dataop_count = num_cores / 2;
     let art_thread_count = art_thread_dataop_count + 4;
 
-    let mirrord_host = mirrord_endpoint.unwrap_or("127.0.0.1:9999");
+    let mirrord_host = mirrord_endpoint;
     let config_content = format!(
         r##"working_dir = "/data"
 server_port = 8088
@@ -145,19 +154,19 @@ art_journal_segment_size = {art_journal_segment_size}
     Ok(())
 }
 
-fn create_nss_role_agent_config(mirrord_endpoint: Option<&str>) -> CmdResult {
+fn create_nss_role_agent_config(mirrord_endpoint: &str, rss_endpoint: &str) -> CmdResult {
     let instance_id = get_instance_id()?;
-    let rss_addr = "127.0.0.1:8086";
-    let mirrord_addr = mirrord_endpoint.unwrap_or("127.0.0.1:9999");
 
     let config_content = format!(
-        r##"rss_addr = "{rss_addr}"
+        r##"rss_addr = "{rss_endpoint}:8088"
 rpc_timeout_seconds = 4
 heartbeat_interval_seconds = 10
 state_check_interval_seconds = 1
 instance_id = "{instance_id}"
 service_type = "unknown"
-mirrord_endpoint = "{mirrord_addr}"
+mirrord_endpoint = "{mirrord_endpoint}"
+nss_port = 8088
+mirrord_port = 9999
 "##
     );
 

@@ -89,7 +89,10 @@ enum Command {
         meta_stack_testing: bool,
 
         #[clap(long, long_help = "Mirrord endpoint for NSS communication")]
-        mirrord_endpoint: Option<String>,
+        mirrord_endpoint: String,
+
+        #[clap(long, long_help = "Root server (RSS) endpoint")]
+        rss_endpoint: String,
     },
 
     #[clap(about = "Run on root_server instance to bootstrap fractalbits service(s)")]
@@ -206,13 +209,15 @@ fn main() -> CmdResult {
             meta_stack_testing,
             iam_role,
             mirrord_endpoint,
+            rss_endpoint,
         } => nss_server::bootstrap(
             &bucket,
             &volume_id,
             meta_stack_testing,
             for_bench,
             &iam_role,
-            mirrord_endpoint.as_deref(),
+            &mirrord_endpoint,
+            &rss_endpoint,
         )?,
         Command::RootServer {
             nss_a_id,

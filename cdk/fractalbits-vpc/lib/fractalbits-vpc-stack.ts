@@ -233,7 +233,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const rssPrivateLink = createPrivateLinkNlb(this, 'Rss', this.vpc, [instances['root_server']], servicePort);
 
     // Reusable function to create bootstrap options for api_server and gui_server
-    const createBootstrapOptions = (serviceName: string) =>
+    const createApiServerBootstrapOptions = (serviceName: string) =>
       `${forBenchFlag} ${serviceName} ` +
       `--bucket=${dataBlobBucketName} ` +
       `--nss_endpoint=${nssPrivateLink.endpointDns} ` +
@@ -241,7 +241,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       remoteBucketParam;
 
     // Create api_server(s) in a ASG group
-    const apiServerBootstrapOptions = createBootstrapOptions('api_server');
+    const apiServerBootstrapOptions = createApiServerBootstrapOptions('api_server');
     const apiServerAsg = createEc2Asg(
       this,
       'ApiServerAsg',
@@ -280,6 +280,21 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const nssB = instances['nss-B'].instanceId;
     const ebsVolumeAId = ebsVolumeA.volumeId;
     const ebsVolumeBId = ebsVolumeB.volumeId;
+
+    // Shared function to create NSS bootstrap options
+    const createNssBootstrapOptions = (volumeId: string) => {
+      const params = [
+        forBenchFlag,
+        'nss_server',
+        `--bucket=${bucketName}`,
+        `--volume_id=${volumeId}`,
+        `--iam_role=${ec2Role.roleName}`,
+        `--mirrord_endpoint=${mirrordPrivateLink.endpointDns}`,
+        `--rss_endpoint=${rssPrivateLink.endpointDns}`
+      ];
+      return params.filter(p => p).join(' ');
+    };
+
     const instanceBootstrapOptions = [
       {
         id: 'root_server',
@@ -287,11 +302,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
       },
       {
         id: 'nss-A',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeAId} --iam_role=${ec2Role.roleName} --mirrord_endpoint=${mirrordPrivateLink.endpointDns}`
+        bootstrapOptions: createNssBootstrapOptions(ebsVolumeAId)
       },
       {
         id: 'nss-B',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeBId} --iam_role=${ec2Role.roleName} --mirrord_endpoint=${mirrordPrivateLink.endpointDns}`
+        bootstrapOptions: createNssBootstrapOptions(ebsVolumeBId)
       },
     ];
     if (props.benchType === "external") {
@@ -303,7 +318,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     if (props.browserIp) {
       instanceBootstrapOptions.push({
         id: 'gui_server',
-        bootstrapOptions: createBootstrapOptions('gui_server')
+        bootstrapOptions: createApiServerBootstrapOptions('gui_server')
       });
     }
     instanceBootstrapOptions.forEach(({id, bootstrapOptions}) => {
@@ -327,9 +342,19 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: 'DNS name of the API NLB',
     });
 
-    new cdk.CfnOutput(this, 'MirrordNLBDnsName', {
+    new cdk.CfnOutput(this, 'RssEndpointDns', {
+      value: rssPrivateLink.endpointDns,
+      description: 'VPC Endpoint DNS for RSS service',
+    });
+
+    new cdk.CfnOutput(this, 'MirrordEndpointDns', {
       value: mirrordPrivateLink.endpointDns,
-      description: 'DNS name of the Mirrord NLB',
+      description: 'VPC Endpoint DNS for Mirrord service',
+    });
+
+    new cdk.CfnOutput(this, 'NssEndpointDns', {
+      value: nssPrivateLink.endpointDns,
+      description: 'VPC Endpoint DNS for NSS service',
     });
 
     this.nlbLoadBalancerDnsName = nlb ? nlb.loadBalancerDnsName : "";

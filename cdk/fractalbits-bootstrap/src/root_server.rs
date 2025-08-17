@@ -19,28 +19,71 @@ pub fn bootstrap(
     let region = get_current_aws_region()?;
     run_cmd!($BIN_PATH/rss_admin --region=$region api-key init-test)?;
 
+    // Initialize NSS role states in DynamoDB
+    initialize_nss_roles_in_ddb(nss_a_id, nss_b_id)?;
+
     create_rss_config()?;
     // setup_cloudwatch_agent()?;
     create_systemd_unit_file("root_server", true)?;
 
-    for (nss_id, volume_id) in [(nss_b_id, volume_b_id), (nss_a_id, volume_a_id)] {
+    for (nss_id, volume_id, role) in [
+        (nss_b_id, volume_b_id, "standby"),
+        (nss_a_id, volume_a_id, "active"),
+    ] {
+        info!("Formatting NSS instance {nss_id} ({role}) with volume {volume_id}");
         // Format EBS with SSM
         let ebs_dev = get_volume_dev(volume_id);
         wait_for_ssm_ready(nss_id);
         let extra_opt = if for_bench { "--testing_mode" } else { "" };
         let bootstrap_bin = "/opt/fractalbits/bin/fractalbits-bootstrap";
+        info!("Running format_nss on {nss_id} ({role}) with device {ebs_dev}");
         run_cmd_with_ssm(
             nss_id,
             &format!(
                 r##"sudo bash -c "{bootstrap_bin} format_nss --ebs_dev {ebs_dev} {extra_opt} &>>{CLOUD_INIT_LOG}""##
             ),
         )?;
+        info!("Successfully formatted {nss_id} ({role})");
     }
 
     // if nss_b_id != "null" {
     //     bootstrap_ebs_failover_service(nss_a_id, nss_b_id, volume_id)?;
     // }
 
+    Ok(())
+}
+
+fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: &str) -> CmdResult {
+    const DDB_TABLE_NAME: &str = "fractalbits-keys-and-buckets";
+    let region = get_current_aws_region()?;
+
+    info!("Initializing NSS role states in DynamoDB");
+    info!("Setting {nss_a_id} as active");
+    info!("Setting {nss_b_id} as standby");
+
+    // Create items with instance IDs as keys
+    let nss_a_item =
+        format!(r#"{{"id":{{"S":"{nss_a_id}"}},"value":{{"S":"active"}},"version":{{"N":"1"}}}}"#);
+    let nss_b_item =
+        format!(r#"{{"id":{{"S":"{nss_b_id}"}},"value":{{"S":"standby"}},"version":{{"N":"1"}}}}"#);
+
+    // Put active NSS role
+    run_cmd! {
+        aws dynamodb put-item
+            --table-name $DDB_TABLE_NAME
+            --item $nss_a_item
+            --region $region
+    }?;
+
+    // Put standby NSS role
+    run_cmd! {
+        aws dynamodb put-item
+            --table-name $DDB_TABLE_NAME
+            --item $nss_b_item
+            --region $region
+    }?;
+
+    info!("NSS roles initialized in DynamoDB");
     Ok(())
 }
 

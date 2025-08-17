@@ -62,6 +62,7 @@ pub fn create_systemd_unit_file_with_extra_opts(
     let working_dir = "/data";
     let mut requires = "";
     let mut env_settings = String::new();
+    let mut managed_service = false;
     let exec_start = match service_name {
         "api_server" => {
             env_settings = r##"
@@ -70,10 +71,12 @@ Environment="RUST_LOG=info""##
             format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG} {extra_start_opts}")
         }
         "nss" => {
+            managed_service = true;
             requires = "data-ebs.mount data-local.mount";
             format!("{BIN_PATH}nss_server serve -c {ETC_PATH}{NSS_SERVER_CONFIG}")
         }
         "mirrord" => {
+            managed_service = true;
             requires = "data-ebs.mount data-local.mount";
             format!("{BIN_PATH}{service_name} -c {ETC_PATH}{MIRRORD_CONFIG}")
         }
@@ -104,15 +107,21 @@ Environment="RUST_LOG=info""##
         // }
         _ => unreachable!(),
     };
+    let restart_settings = if managed_service {
+        ""
+    } else {
+        r##"# Limit to 3 restarts within a 10-minute (600 second) interval
+StartLimitIntervalSec=600
+StartLimitBurst=3
+        "##
+    };
     let systemd_unit_content = format!(
         r##"[Unit]
 Description={service_name} Service
 After=network-online.target {requires}
 Requires={requires}
 BindsTo={requires}
-# Limit to 3 restarts within a 10-minute (600 second) interval
-StartLimitIntervalSec=600
-StartLimitBurst=3
+{restart_settings}
 
 [Service]
 LimitNOFILE=1000000

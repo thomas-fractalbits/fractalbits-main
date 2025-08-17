@@ -710,26 +710,26 @@ pub fn start_all_services(
 
     wait_for_service_ready(ServiceName::DdbLocal, 10)?;
 
+    start_nss_role_agent_service(build_mode, ServiceName::NssRoleAgentB)?;
+
     // Start all main services - systemd dependencies will handle ordering
     match data_blob_storage {
         DataBlobStorage::HybridSingleAz => {
             info!("Starting all main services (systemd will handle dependency ordering)");
-            run_cmd!(systemctl --user start rss.service bss.service nss_role_agent_a.service nss_role_agent_b.service api_server.service)?;
+            run_cmd!(systemctl --user start rss.service bss.service nss_role_agent_a.service api_server.service)?;
 
             // Wait for all services to be ready in dependency order
             wait_for_service_ready(ServiceName::Rss, 15)?;
             wait_for_service_ready(ServiceName::Bss, 15)?;
             wait_for_service_ready(ServiceName::NssRoleAgentA, 30)?;
-            wait_for_service_ready(ServiceName::NssRoleAgentB, 30)?;
             wait_for_service_ready(ServiceName::ApiServer, 15)?;
         }
         DataBlobStorage::S3ExpressMultiAz | DataBlobStorage::S3ExpressSingleAz => {
             let mode = data_blob_storage.as_ref();
             info!("Starting main services (skipping BSS in {} mode)", mode);
-            run_cmd!(systemctl --user start rss.service nss_role_agent_a.service nss_role_agent_b.service api_server.service)?;
+            run_cmd!(systemctl --user start rss.service nss_role_agent_a.service api_server.service)?;
             wait_for_service_ready(ServiceName::Rss, 15)?;
             wait_for_service_ready(ServiceName::NssRoleAgentA, 30)?;
-            wait_for_service_ready(ServiceName::NssRoleAgentB, 30)?;
             wait_for_service_ready(ServiceName::ApiServer, 15)?;
         }
     }
