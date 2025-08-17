@@ -5,6 +5,21 @@ use std::io::Error;
 const BLOB_DRAM_MEM_PERCENT: f64 = 0.8;
 const EBS_SPACE_PERCENT: f64 = 0.9;
 
+/// Calculate art_journal_segment_size based on EBS volume size
+fn calculate_art_journal_segment_size(volume_dev: &str) -> Result<u64, Error> {
+    // Get total size of volume_dev in bytes
+    let ebs_blockdev_size_str = run_fun!(blockdev --getsize64 ${volume_dev})?;
+    let ebs_blockdev_size = ebs_blockdev_size_str.trim().parse::<u64>().map_err(|_| {
+        Error::other(format!(
+            "invalid ebs blockdev size: {ebs_blockdev_size_str}"
+        ))
+    })?;
+    let ebs_blockdev_mb = ebs_blockdev_size / 1024 / 1024;
+    let art_journal_segment_size =
+        (ebs_blockdev_mb as f64 * EBS_SPACE_PERCENT) as u64 * 1024 * 1024;
+    Ok(art_journal_segment_size)
+}
+
 pub fn bootstrap(
     bucket_name: &str,
     volume_id: &str,
@@ -12,6 +27,7 @@ pub fn bootstrap(
     for_bench: bool,
     iam_role: &str,
     standby: bool,
+    standby_ip: Option<&str>,
 ) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm", "perf", "lldb"])?;
     if meta_stack_testing || for_bench {
@@ -19,7 +35,14 @@ pub fn bootstrap(
     }
     format_local_nvme_disks(false)?;
     download_binaries(&["nss_server", "mirrord", "nss_role_agent"])?;
-    setup_configs(bucket_name, volume_id, iam_role, "nss@", standby)?;
+    setup_configs(
+        bucket_name,
+        volume_id,
+        iam_role,
+        "nss@",
+        standby,
+        standby_ip,
+    )?;
 
     // Note for normal deployment, the nss_server service is not started
     // until EBS/nss formatted from root_server
@@ -36,10 +59,11 @@ fn setup_configs(
     iam_role: &str,
     service_name: &str,
     standby: bool,
+    standby_ip: Option<&str>,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
-    create_nss_config(bucket_name, &volume_dev, iam_role)?;
-    create_mirrord_config()?;
+    create_nss_config(bucket_name, &volume_dev, iam_role, standby_ip)?;
+    create_mirrord_config(&volume_dev)?;
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
     create_ebs_udev_rule(volume_id, "nss_role_agent")?;
     create_coredump_config()?;
@@ -50,7 +74,12 @@ fn setup_configs(
     Ok(())
 }
 
-fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> CmdResult {
+fn create_nss_config(
+    bucket_name: &str,
+    volume_dev: &str,
+    iam_role: &str,
+    standby_ip: Option<&str>,
+) -> CmdResult {
     let aws_region = get_current_aws_region()?;
 
     // Get total memory in kilobytes from /proc/meminfo
@@ -63,16 +92,8 @@ fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> Cmd
     // Calculate total memory for blob_dram_kilo_bytes
     let blob_dram_kilo_bytes = (total_mem_kb as f64 * BLOB_DRAM_MEM_PERCENT) as u64;
 
-    // Get total size of volume_dev in 1M blocks (which rounds down)
-    let ebs_blockdev_size_str = run_fun!(blockdev --getsize64 ${volume_dev})?;
-    let ebs_blockdev_size = ebs_blockdev_size_str.trim().parse::<u64>().map_err(|_| {
-        Error::other(format!(
-            "invalid ebs blockdev size: {ebs_blockdev_size_str}"
-        ))
-    })?;
-    let ebs_blockdev_mb = ebs_blockdev_size / 1024 / 1024;
-    let art_journal_segment_size =
-        (ebs_blockdev_mb as f64 * EBS_SPACE_PERCENT) as u64 * 1024 * 1024;
+    // Calculate art_journal_segment_size based on EBS volume size
+    let art_journal_segment_size = calculate_art_journal_segment_size(volume_dev)?;
 
     let num_cores_str = run_fun!(nproc)?;
     let num_cores = num_cores_str
@@ -83,6 +104,7 @@ fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> Cmd
     let art_thread_dataop_count = num_cores / 2;
     let art_thread_count = art_thread_dataop_count + 4;
 
+    let mirrord_host = standby_ip.unwrap_or("127.0.0.1");
     let config_content = format!(
         r##"working_dir = "/data"
 server_port = 8088
@@ -94,6 +116,8 @@ art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
 iam_role = "{iam_role}"
 nss_role = "solo"
+mirrord_host = "{mirrord_host}"
+mirrord_port = 8088
 
 [s3_cache]
 s3_host = "s3.{aws_region}.amazonaws.com"
@@ -109,13 +133,16 @@ s3_bucket = "{bucket_name}"
     Ok(())
 }
 
-fn create_mirrord_config() -> CmdResult {
+fn create_mirrord_config(volume_dev: &str) -> CmdResult {
     let num_cores = run_fun!(nproc)?;
+    // Calculate art_journal_segment_size based on EBS volume size (same as nss_server)
+    let art_journal_segment_size = calculate_art_journal_segment_size(volume_dev)?;
     let config_content = format!(
         r##"working_dir = "/data"
 server_port = 8088
 num_threads = {num_cores}
 log_level = "info"
+art_journal_segment_size = {art_journal_segment_size}
 "##
     );
     run_cmd! {

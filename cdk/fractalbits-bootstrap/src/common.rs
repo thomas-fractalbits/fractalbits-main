@@ -96,7 +96,7 @@ Environment="RUST_LOG=info""##
                 r##"
 Environment="RUST_LOG=info"
 Environment="APP_AGENT_ID={instance_id}"
-Environment="APP_NSS_ROLE=solo"
+Environment="APP_NSS_ROLE=active"
 Environment="APP_SERVICE_TYPE={}"
 "##,
                 if standby { "mirrord" } else { "nss" }
