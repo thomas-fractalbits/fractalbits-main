@@ -7,9 +7,10 @@ const POLL_INTERVAL_SECONDS: u64 = 5;
 const MAX_POLL_ATTEMPTS: u64 = 60;
 
 pub fn bootstrap(
-    primary_instance_id: &str,
-    _secondary_instance_id: &str,
-    volume_id: &str,
+    nss_a_id: &str,
+    nss_b_id: &str,
+    volume_a_id: &str,
+    volume_b_id: &str,
     for_bench: bool,
 ) -> CmdResult {
     install_rpms(&["amazon-cloudwatch-agent", "perf"])?;
@@ -22,20 +23,22 @@ pub fn bootstrap(
     // setup_cloudwatch_agent()?;
     create_systemd_unit_file("root_server", true)?;
 
-    // Format EBS with SSM
-    let ebs_dev = get_volume_dev(volume_id);
-    wait_for_ssm_ready(primary_instance_id);
-    let extra_opt = if for_bench { "--testing_mode" } else { "" };
-    let bootstrap_bin = "/opt/fractalbits/bin/fractalbits-bootstrap";
-    run_cmd_with_ssm(
-        primary_instance_id,
-        &format!(
-            r##"sudo bash -c "{bootstrap_bin} format_nss --ebs_dev {ebs_dev} {extra_opt} &>>{CLOUD_INIT_LOG}""##
-        ),
-    )?;
+    for (nss_id, volume_id) in [(nss_b_id, volume_b_id), (nss_a_id, volume_a_id)] {
+        // Format EBS with SSM
+        let ebs_dev = get_volume_dev(volume_id);
+        wait_for_ssm_ready(nss_id);
+        let extra_opt = if for_bench { "--testing_mode" } else { "" };
+        let bootstrap_bin = "/opt/fractalbits/bin/fractalbits-bootstrap";
+        run_cmd_with_ssm(
+            nss_id,
+            &format!(
+                r##"sudo bash -c "{bootstrap_bin} format_nss --ebs_dev {ebs_dev} {extra_opt} &>>{CLOUD_INIT_LOG}""##
+            ),
+        )?;
+    }
 
-    // if secondary_instance_id != "null" {
-    //     bootstrap_ebs_failover_service(primary_instance_id, secondary_instance_id, volume_id)?;
+    // if nss_b_id != "null" {
+    //     bootstrap_ebs_failover_service(nss_a_id, nss_b_id, volume_id)?;
     // }
 
     Ok(())
@@ -132,16 +135,12 @@ fn run_cmd_with_ssm(instance_id: &str, cmd: &str) -> CmdResult {
 }
 
 #[allow(unused)]
-fn bootstrap_ebs_failover_service(
-    primary_instance_id: &str,
-    secondary_instance_id: &str,
-    volume_id: &str,
-) -> CmdResult {
+fn bootstrap_ebs_failover_service(nss_a_id: &str, nss_b_id: &str, volume_id: &str) -> CmdResult {
     let service_name = "ebs-failover";
 
     let config_content = format!(
-        r##"primary_instance_id = "{primary_instance_id}"    # Primary instance ID
-secondary_instance_id = "{secondary_instance_id}"  # Secondary instance ID
+        r##"nss_a_id = "{nss_a_id}"    # Primary instance ID
+nss_b_id = "{nss_b_id}"  # Secondary instance ID
 volume_id = "{volume_id}"            # EBS volume ID
 device_name = "/dev/xvdf"                      # Device name for OS
 

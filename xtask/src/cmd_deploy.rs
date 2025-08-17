@@ -119,6 +119,7 @@ pub fn run_cmd_deploy(
         "root_server",
         "rss_admin",
         "fractalbits-bootstrap",
+        "nss_role_agent",
         // "ebs-failover",
         "rewrk_rpc",
     ];
@@ -131,6 +132,7 @@ pub fn run_cmd_deploy(
     info!("Uploading Zig-built binaries");
     let zig_bins = [
         "nss_server",
+        "mirrord",
         "fbs",      // to create test art tree for benchmarking nss_rpc
         "test_art", // to create test.data for benchmarking nss_rpc
         "s3_blob_client",

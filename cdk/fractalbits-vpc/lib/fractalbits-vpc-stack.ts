@@ -163,8 +163,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const bucketName = bucket.bucketName;
     const instanceConfigs = [
       {id: 'root_server', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: rssInstanceType, sg: privateSg},
-      {id: 'nss_server_primary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nssInstanceType, sg: privateSg},
-      // { id: 'nss_server_secondary', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nss_instance_type, sg: privateSg },
+      {id: 'nss-A', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nssInstanceType, sg: privateSg},
+      {id: 'nss-B', subnet: ec2.SubnetType.PRIVATE_ISOLATED, instanceType: nssInstanceType, sg: privateSg},
     ];
 
     if (props.browserIp) {
@@ -226,8 +226,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // Create PrivateLink setup for NSS and RSS services
     const servicePort = 8088;
-    const nssPrivateLink = createPrivateLinkNlb(this, 'Nss', this.vpc, instances['nss_server_primary'], servicePort);
-    const rssPrivateLink = createPrivateLinkNlb(this, 'Rss', this.vpc, instances['root_server'], servicePort);
+    const nssPrivateLink = createPrivateLinkNlb(this, 'Nss', this.vpc, [instances['nss-A'], instances['nss-B']], servicePort);
+    const rssPrivateLink = createPrivateLinkNlb(this, 'Rss', this.vpc, [instances['root_server']], servicePort);
 
     // Reusable function to create bootstrap options for api_server and gui_server
     const createBootstrapOptions = (serviceName: string) =>
@@ -268,25 +268,27 @@ export class FractalbitsVpcStack extends cdk.Stack {
       });
     }
 
-    // Create EBS Volume with Multi-Attach for nss_server
-    const ebsVolume = createEbsVolume(this, 'MultiAttachVolume', az, instances['nss_server_primary'].instanceId);
+    // Create EBS Volumes for nss_servers
+    const ebsVolumeA = createEbsVolume(this, 'MultiAttachVolumeA', az, instances['nss-A'].instanceId);
+    const ebsVolumeB = createEbsVolume(this, 'MultiAttachVolumeB', az, instances['nss-B'].instanceId);
 
     // Create UserData: we need to make it a separate step since we want to get the instance/volume ids
-    const primaryNss = instances['nss_server_primary'].instanceId;
-    const secondaryNss = instances['nss_server_secondary']?.instanceId ?? null;
-    const ebsVolumeId = ebsVolume.volumeId;
+    const nssA = instances['nss-A'].instanceId;
+    const nssB = instances['nss-B'].instanceId;
+    const ebsVolumeAId = ebsVolumeA.volumeId;
+    const ebsVolumeBId = ebsVolumeB.volumeId;
     const instanceBootstrapOptions = [
       {
         id: 'root_server',
-        bootstrapOptions: `${forBenchFlag} root_server --primary_instance_id=${primaryNss} --secondary_instance_id=${secondaryNss} --volume_id=${ebsVolumeId} `
+        bootstrapOptions: `${forBenchFlag} root_server --nss_a_id=${nssA} --nss_b_id=${nssB} --volume_a_id=${ebsVolumeAId} --volume_b_id=${ebsVolumeBId} `
       },
       {
-        id: 'nss_server_primary',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId} --iam_role=${ec2Role.roleName} `
+        id: 'nss-A',
+        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeAId} --iam_role=${ec2Role.roleName} `
       },
       {
-        id: 'nss_server_secondary',
-        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeId} --iam_role=${ec2Role.roleName} `
+        id: 'nss-B',
+        bootstrapOptions: `${forBenchFlag} nss_server --bucket=${bucketName} --volume_id=${ebsVolumeBId} --iam_role=${ec2Role.roleName} --standby`
       },
     ];
     if (props.benchType === "external") {
@@ -324,9 +326,14 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     this.nlbLoadBalancerDnsName = nlb ? nlb.loadBalancerDnsName : "";
 
-    new cdk.CfnOutput(this, 'VolumeId', {
-      value: ebsVolumeId,
-      description: 'EBS volume ID',
+    new cdk.CfnOutput(this, 'VolumeAId', {
+      value: ebsVolumeAId,
+      description: 'EBS volume A ID',
+    });
+
+    new cdk.CfnOutput(this, 'VolumeBId', {
+      value: ebsVolumeBId,
+      description: 'EBS volume B ID',
     });
 
     if (bssAsg) {

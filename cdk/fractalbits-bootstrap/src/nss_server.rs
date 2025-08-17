@@ -11,14 +11,15 @@ pub fn bootstrap(
     meta_stack_testing: bool,
     for_bench: bool,
     iam_role: &str,
+    standby: bool,
 ) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm", "perf", "lldb"])?;
     if meta_stack_testing || for_bench {
         download_binaries(&["fbs", "test_art", "rewrk_rpc"])?;
     }
     format_local_nvme_disks(false)?;
-    download_binaries(&["nss_server"])?;
-    setup_configs(bucket_name, volume_id, iam_role, "nss_server")?;
+    download_binaries(&["nss_server", "mirrord", "nss_role_agent"])?;
+    setup_configs(bucket_name, volume_id, iam_role, "nss@", standby)?;
 
     // Note for normal deployment, the nss_server service is not started
     // until EBS/nss formatted from root_server
@@ -34,12 +35,16 @@ fn setup_configs(
     volume_id: &str,
     iam_role: &str,
     service_name: &str,
+    standby: bool,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
     create_nss_config(bucket_name, &volume_dev, iam_role)?;
+    create_mirrord_config()?;
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
-    create_ebs_udev_rule(volume_id, service_name)?;
+    create_ebs_udev_rule(volume_id, "nss_role_agent")?;
     create_coredump_config()?;
+    create_systemd_unit_file_with_extra_opts("nss_role_agent", "", standby, false)?;
+    create_systemd_unit_file("mirrord", false)?;
     create_systemd_unit_file(service_name, false)?;
     create_logrotate_for_stats()?;
     Ok(())
@@ -100,6 +105,22 @@ s3_bucket = "{bucket_name}"
     run_cmd! {
         mkdir -p $ETC_PATH;
         echo $config_content > $ETC_PATH/$NSS_SERVER_CONFIG
+    }?;
+    Ok(())
+}
+
+fn create_mirrord_config() -> CmdResult {
+    let num_cores = run_fun!(nproc)?;
+    let config_content = format!(
+        r##"working_dir = "/data"
+server_port = 8088
+num_threads = {num_cores}
+log_level = "info"
+"##
+    );
+    run_cmd! {
+        mkdir -p $ETC_PATH;
+        echo $config_content > $ETC_PATH/$MIRRORD_CONFIG
     }?;
     Ok(())
 }

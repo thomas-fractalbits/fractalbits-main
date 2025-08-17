@@ -246,7 +246,7 @@ export function createPrivateLinkNlb(
   scope: Construct,
   id: string,
   vpc: ec2.Vpc,
-  targetInstance: ec2.Instance,
+  targetInstances: ec2.Instance[],
   servicePort: number,
 ): PrivateLinkSetup {
   // Create Network Load Balancer
@@ -263,7 +263,7 @@ export function createPrivateLinkNlb(
   const listener = nlb.addListener(`${id}Listener`, {port: servicePort});
   listener.addTargets(`${id}Targets`, {
     port: servicePort,
-    targets: [new elbv2_targets.InstanceTarget(targetInstance)],
+    targets: targetInstances.map(instance => new elbv2_targets.InstanceTarget(instance)),
   });
 
   // Create VPC Endpoint Service

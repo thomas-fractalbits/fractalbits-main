@@ -87,18 +87,24 @@ enum Command {
 
         #[clap(long, default_value = "false", long_help = "For meta stack testing")]
         meta_stack_testing: bool,
+
+        #[clap(long, default_value = "false", long_help = "Standby server")]
+        standby: bool,
     },
 
     #[clap(about = "Run on root_server instance to bootstrap fractalbits service(s)")]
     RootServer {
         #[clap(long, long_help = "Primary nss_server ec2 instance ID")]
-        primary_instance_id: String,
+        nss_a_id: String,
 
         #[clap(long, long_help = "Secondary nss_server ec2 instance ID")]
-        secondary_instance_id: String,
+        nss_b_id: String,
 
-        #[clap(long, long_help = "Multi-attached EBS volume ID")]
-        volume_id: String,
+        #[clap(long, long_help = "EBS volume ID for nss-A")]
+        volume_a_id: String,
+
+        #[clap(long, long_help = "EBS volume ID for nss-B")]
+        volume_b_id: String,
     },
 
     #[clap(
@@ -199,23 +205,21 @@ fn main() -> CmdResult {
             volume_id,
             meta_stack_testing,
             iam_role,
+            standby,
         } => nss_server::bootstrap(
             &bucket,
             &volume_id,
             meta_stack_testing,
             for_bench,
             &iam_role,
+            standby,
         )?,
         Command::RootServer {
-            primary_instance_id,
-            secondary_instance_id,
-            volume_id,
-        } => root_server::bootstrap(
-            &primary_instance_id,
-            &secondary_instance_id,
-            &volume_id,
-            for_bench,
-        )?,
+            nss_a_id,
+            nss_b_id,
+            volume_a_id,
+            volume_b_id,
+        } => root_server::bootstrap(&nss_a_id, &nss_b_id, &volume_a_id, &volume_b_id, for_bench)?,
         Command::FormatNss {
             testing_mode,
             ebs_dev,

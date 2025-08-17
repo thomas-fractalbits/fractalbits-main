@@ -7,6 +7,7 @@ pub const WEB_ROOT: &str = "/opt/fractalbits/www/";
 pub const API_SERVER_CONFIG: &str = "api_server_cloud_config.toml";
 pub const BSS_SERVER_CONFIG: &str = "bss_server_cloud_config.toml";
 pub const NSS_SERVER_CONFIG: &str = "nss_server_cloud_config.toml";
+pub const MIRRORD_CONFIG: &str = "mirrord_cloud_config.toml";
 pub const ROOT_SERVER_CONFIG: &str = "root_server_cloud_config.toml";
 pub const BENCH_SERVER_BENCH_START_SCRIPT: &str = "bench_start.sh";
 pub const BOOTSTRAP_DONE_FILE: &str = "/opt/fractalbits/.bootstrap_done";
@@ -48,15 +49,17 @@ fn download_binary(file_name: &str) -> CmdResult {
 }
 
 pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResult {
-    create_systemd_unit_file_with_extra_start_opts(service_name, "", enable_now)
+    create_systemd_unit_file_with_extra_opts(service_name, "", false, enable_now)
 }
 
-pub fn create_systemd_unit_file_with_extra_start_opts(
+pub fn create_systemd_unit_file_with_extra_opts(
     service_name: &str,
     extra_start_opts: &str,
+    standby: bool,
     enable_now: bool,
 ) -> CmdResult {
     let aws_region = get_current_aws_region()?;
+    let instance_id = get_instance_id()?;
     let working_dir = "/data";
     let mut requires = "";
     let mut env_settings = String::new();
@@ -67,9 +70,13 @@ Environment="RUST_LOG=info""##
                 .to_string();
             format!("{BIN_PATH}{service_name} -c {ETC_PATH}{API_SERVER_CONFIG} {extra_start_opts}")
         }
-        "nss_server" => {
+        "nss@" => {
             requires = "data-ebs.mount data-local.mount";
-            format!("{BIN_PATH}nss_server serve -c {ETC_PATH}{NSS_SERVER_CONFIG}")
+            format!("{BIN_PATH}nss_server serve --nss_role %i -c {ETC_PATH}{NSS_SERVER_CONFIG}")
+        }
+        "mirrord" => {
+            requires = "data-ebs.mount data-local.mount";
+            format!("{BIN_PATH}{service_name} -c {ETC_PATH}{MIRRORD_CONFIG}")
         }
         "root_server" => {
             env_settings = r##"
@@ -83,6 +90,18 @@ Environment="RUST_LOG=info""##
         }
         "bench_client" => {
             format!("{BIN_PATH}warp client")
+        }
+        "nss_role_agent" => {
+            env_settings = format!(
+                r##"
+Environment="RUST_LOG=info"
+Environment="APP_AGENT_ID={instance_id}"
+Environment="APP_NSS_ROLE=solo"
+Environment="APP_SERVICE_TYPE={}"
+"##,
+                if standby { "mirrord" } else { "nss" }
+            );
+            format!("{BIN_PATH}{service_name}")
         }
         // "ebs-failover" => {
         //     env_settings = r##"
@@ -121,10 +140,19 @@ WantedBy=multi-user.target
         mkdir -p /data;
         mkdir -p $ETC_PATH;
         echo $systemd_unit_content > ${ETC_PATH}${service_file};
-        info "Enabling ${ETC_PATH}${service_file} (enable_now=${enable_now})";
-        systemctl enable ${ETC_PATH}${service_file} --force --quiet ${enable_now_opt};
     }?;
 
+    if service_name == "nss@" {
+        run_cmd! {
+            info "Linking ${ETC_PATH}${service_file}";
+            systemctl link ${ETC_PATH}${service_file} --force --quiet;
+        }?;
+    } else {
+        run_cmd! {
+            info "Enabling ${ETC_PATH}${service_file} (enable_now=${enable_now})";
+            systemctl enable ${ETC_PATH}${service_file} --force --quiet ${enable_now_opt};
+        }?;
+    }
     Ok(())
 }
 
@@ -153,6 +181,10 @@ pub fn get_current_aws_region() -> FunResult {
 
 pub fn get_current_aws_az() -> FunResult {
     run_fun!(ec2-metadata --availability-zone | awk r"{print $2}")
+}
+
+pub fn get_instance_id() -> FunResult {
+    run_fun!(ec2-metadata --instance-id | awk r"{print $2}")
 }
 
 // https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/storage-twp.html
