@@ -135,10 +135,7 @@ enum Command {
     #[clap(about = "Run on bench_server instance to benchmark fractalbits service(s)")]
     BenchServer {
         #[clap(long, long_help = "Service endpoint for benchmark")]
-        api_server_service_endpoint: Option<String>,
-
-        #[clap(long, long_help = "Number of api servers")]
-        api_server_num: Option<usize>,
+        api_server_endpoint: String,
 
         #[clap(long, long_help = "Number of bench clients")]
         bench_client_num: usize,
@@ -245,12 +242,10 @@ fn main() -> CmdResult {
             ebs_dev,
         } => nss_server::format_nss(ebs_dev, testing_mode)?,
         Command::BenchServer {
-            api_server_service_endpoint,
-            api_server_num,
+            api_server_endpoint,
             bench_client_num,
         } => bench_server::bootstrap(
-            api_server_service_endpoint,
-            api_server_num,
+            api_server_endpoint,
             bench_client_num,
         )?,
         Command::BenchClient => bench_client::bootstrap()?,

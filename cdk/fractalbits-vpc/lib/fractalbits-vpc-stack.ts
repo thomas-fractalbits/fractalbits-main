@@ -237,22 +237,19 @@ export class FractalbitsVpcStack extends cdk.Stack {
       props.numApiServers
     );
 
-    let nlb: elbv2.NetworkLoadBalancer | undefined;
-    if (props.benchType !== "external") {
-      // NLB for API servers
-      nlb = new elbv2.NetworkLoadBalancer(this, 'ApiNLB', {
-        vpc: this.vpc,
-        internetFacing: false,
-        vpcSubnets: {subnetType: ec2.SubnetType.PRIVATE_ISOLATED},
-      });
+    // NLB for API servers - always create regardless of benchType
+    const nlb = new elbv2.NetworkLoadBalancer(this, 'ApiNLB', {
+      vpc: this.vpc,
+      internetFacing: false,
+      vpcSubnets: {subnetType: ec2.SubnetType.PRIVATE_ISOLATED},
+    });
 
-      const listener = nlb.addListener('ApiListener', {port: 80});
+    const listener = nlb.addListener('ApiListener', {port: 80});
 
-      listener.addTargets('ApiTargets', {
-        port: 80,
-        targets: [apiServerAsg],
-      });
-    }
+    listener.addTargets('ApiTargets', {
+      port: 80,
+      targets: [apiServerAsg],
+    });
 
     // Create EBS Volumes for nss_servers
     const ebsVolumeA = createEbsVolume(this, 'MultiAttachVolumeA', az, instances['nss-A'].instanceId);
@@ -299,7 +296,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     if (props.benchType === "external") {
       instanceBootstrapOptions.push({
         id: 'bench_server',
-        bootstrapOptions: `bench_server --api_server_num=${props.numApiServers} --bench_client_num=${props.numBenchClients} `,
+        bootstrapOptions: `bench_server --api_server_endpoint=${nlb.loadBalancerDnsName} --bench_client_num=${props.numBenchClients} `,
       });
     }
     if (props.browserIp) {
@@ -325,7 +322,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     }
 
     new cdk.CfnOutput(this, 'ApiNLBDnsName', {
-      value: nlb ? nlb.loadBalancerDnsName : 'NLB not created',
+      value: nlb.loadBalancerDnsName,
       description: 'DNS name of the API NLB',
     });
 
@@ -344,7 +341,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: 'VPC Endpoint DNS for NSS service',
     });
 
-    this.nlbLoadBalancerDnsName = nlb ? nlb.loadBalancerDnsName : "";
+    this.nlbLoadBalancerDnsName = nlb.loadBalancerDnsName;
 
     new cdk.CfnOutput(this, 'VolumeAId', {
       value: ebsVolumeAId,

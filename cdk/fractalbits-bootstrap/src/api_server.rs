@@ -61,7 +61,6 @@ pub fn bootstrap(
 
     // setup_cloudwatch_agent()?;
     create_systemd_unit_file("api_server", true)?;
-    create_ddb_register_and_deregister_service("api-server")?;
 
     Ok(())
 }
