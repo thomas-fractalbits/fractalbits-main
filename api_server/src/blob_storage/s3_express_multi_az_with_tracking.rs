@@ -1,6 +1,6 @@
 use super::{
     blob_key, create_s3_client_wrapper, BlobStorage, BlobStorageError, S3ClientWrapper,
-    S3RateLimitConfig, S3RetryConfig,
+    S3RateLimitConfig, S3RetryConfig, SessionPrewarmingConfig, SessionPrewarmingService,
 };
 use crate::s3_retry;
 use aws_sdk_s3::{
@@ -34,6 +34,7 @@ pub struct S3ExpressWithTrackingConfig {
     pub remote_az_port: Option<u16>,
     pub rate_limit_config: S3RateLimitConfig,
     pub retry_config: S3RetryConfig,
+    pub prewarming_config: SessionPrewarmingConfig,
 }
 
 pub struct S3ExpressMultiAzWithTracking {
@@ -46,6 +47,8 @@ pub struct S3ExpressMultiAzWithTracking {
     /// Key for storing AZ availability status in RSS
     az_status_key: String,
     retry_config: S3RetryConfig,
+    _prewarming_service: Option<Arc<SessionPrewarmingService>>,
+    _prewarming_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +102,27 @@ impl S3ExpressMultiAzWithTracking {
         let endpoint_url = format!("{}:{}", config.local_az_host, config.local_az_port);
         info!("S3 client with tracking initialized with endpoint: {endpoint_url}");
 
+        // Initialize session pre-warming service for AWS S3 Express
+        let (prewarming_service, prewarming_task) = if config
+            .local_az_host
+            .ends_with("amazonaws.com")
+            && config.prewarming_config.enabled
+        {
+            let service = Arc::new(SessionPrewarmingService::new(
+                config.prewarming_config.clone(),
+                client_s3.clone(),
+                config.local_az_bucket.clone(),
+                config.remote_az_bucket.clone(),
+            ));
+
+            let task = service.clone().start();
+            info!("Session pre-warming service initialized for S3 Express with tracking");
+            (Some(service), Some(task))
+        } else {
+            info!("Session pre-warming disabled for tracking storage (not AWS S3 Express or disabled in config)");
+            (None, None)
+        };
+
         Ok(Self {
             client_s3,
             local_az_bucket: config.local_az_bucket.clone(),
@@ -108,6 +132,8 @@ impl S3ExpressMultiAzWithTracking {
             nss_client,
             az_status_key: format!("az_status/{}", config.az),
             retry_config: config.retry_config.clone(),
+            _prewarming_service: prewarming_service,
+            _prewarming_task: prewarming_task,
         })
     }
 

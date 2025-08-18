@@ -131,6 +131,7 @@ dependencies = [
  "arrayvec",
  "aws-config",
  "aws-sdk-s3",
+ "aws-smithy-http-client",
  "axum 0.8.4",
  "axum-extra",
  "axum-macros",

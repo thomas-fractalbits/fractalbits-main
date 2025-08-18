@@ -1,10 +1,11 @@
 use super::{
     blob_key, create_s3_client_wrapper, BlobStorage, BlobStorageError, S3ClientWrapper,
-    S3RateLimitConfig, S3RetryConfig,
+    S3RateLimitConfig, S3RetryConfig, SessionPrewarmingConfig, SessionPrewarmingService,
 };
 use crate::s3_retry;
 use bytes::Bytes;
 use metrics::{counter, histogram};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -19,6 +20,7 @@ pub struct S3ExpressMultiAzConfig {
     pub az: String,
     pub rate_limit_config: S3RateLimitConfig,
     pub retry_config: S3RetryConfig,
+    pub prewarming_config: SessionPrewarmingConfig,
 }
 
 pub struct S3ExpressMultiAzStorage {
@@ -26,6 +28,8 @@ pub struct S3ExpressMultiAzStorage {
     local_az_bucket: String,
     remote_az_bucket: String,
     retry_config: S3RetryConfig,
+    _prewarming_service: Option<Arc<SessionPrewarmingService>>,
+    _prewarming_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl S3ExpressMultiAzStorage {
@@ -60,11 +64,34 @@ impl S3ExpressMultiAzStorage {
         let endpoint_url = format!("{}:{}", config.local_az_host, config.local_az_port);
         info!("S3 client initialized with endpoint: {endpoint_url}");
 
+        // Initialize session pre-warming service for AWS S3 Express
+        let (prewarming_service, prewarming_task) = if config
+            .local_az_host
+            .ends_with("amazonaws.com")
+            && config.prewarming_config.enabled
+        {
+            let service = Arc::new(SessionPrewarmingService::new(
+                config.prewarming_config.clone(),
+                client_s3.clone(),
+                config.local_az_bucket.clone(),
+                config.remote_az_bucket.clone(),
+            ));
+
+            let task = service.clone().start();
+            info!("Session pre-warming service initialized for S3 Express");
+            (Some(service), Some(task))
+        } else {
+            info!("Session pre-warming disabled (not AWS S3 Express or disabled in config)");
+            (None, None)
+        };
+
         Ok(Self {
             client_s3,
             local_az_bucket: config.local_az_bucket.clone(),
             remote_az_bucket: config.remote_az_bucket.clone(),
             retry_config: config.retry_config.clone(),
+            _prewarming_service: prewarming_service,
+            _prewarming_task: prewarming_task,
         })
     }
 

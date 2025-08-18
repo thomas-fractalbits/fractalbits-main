@@ -278,6 +278,7 @@ impl BlobClient {
                         &s3_express_config.ratelimit,
                     ),
                     retry_config: s3_express_config.retry_config.clone(),
+                    prewarming_config: blob_storage::SessionPrewarmingConfig::default(),
                 };
                 BlobStorageImpl::S3ExpressMultiAz(
                     S3ExpressMultiAzStorage::new(&express_config).await?,
@@ -321,6 +322,7 @@ impl BlobClient {
                         &s3_express_config.ratelimit,
                     ),
                     retry_config: s3_express_config.retry_config.clone(),
+                    prewarming_config: blob_storage::SessionPrewarmingConfig::default(),
                 };
                 BlobStorageImpl::S3ExpressMultiAzWithTracking(
                     S3ExpressMultiAzWithTracking::new(

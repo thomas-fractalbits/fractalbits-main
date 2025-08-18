@@ -83,6 +83,7 @@ percent-encoding = "2.3.1"
 sync_wrapper = "1.0.2"
 http-range = "0.1.5"
 aws-config = "1.6.3"
+aws-smithy-http-client = "1.0.6"
 openssl = { version = "0.10.72", features = ["vendored"]}
 aws-sdk-dynamodb = "1.78.0"
 # aws-sdk-ec2 = "1.136.0"

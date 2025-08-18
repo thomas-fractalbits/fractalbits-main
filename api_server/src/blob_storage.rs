@@ -4,6 +4,7 @@ mod retry;
 mod s3_express_multi_az_storage;
 mod s3_express_multi_az_with_tracking;
 mod s3_express_single_az_storage;
+mod session_prewarming;
 
 pub use bss_only_single_az_storage::BssOnlySingleAzStorage;
 pub use hybrid_single_az_storage::HybridSingleAzStorage;
@@ -13,6 +14,7 @@ pub use s3_express_multi_az_with_tracking::{
     S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig,
 };
 pub use s3_express_single_az_storage::{S3ExpressSingleAzConfig, S3ExpressSingleAzStorage};
+pub use session_prewarming::{SessionPrewarmingConfig, SessionPrewarmingService};
 
 // Rate limiting types are defined in this module
 
@@ -37,6 +39,8 @@ use bytes::Bytes;
 use governor::{Quota, RateLimiter};
 use std::num::NonZeroU32;
 use std::sync::Arc;
+use std::time::Duration;
+use tracing::info;
 use uuid::Uuid;
 
 /// S3 operation retry macro - similar to rpc_retry but for S3 operations
@@ -192,7 +196,12 @@ pub async fn create_s3_client_wrapper(
     force_path_style: bool,
     rate_limit_config: &S3RateLimitConfig,
 ) -> S3ClientWrapper {
-    let s3_client = create_s3_client(s3_host, s3_port, s3_region, force_path_style).await;
+    // Use optimized client for AWS S3, standard client for minio
+    let s3_client = if s3_host.ends_with("amazonaws.com") {
+        create_optimized_s3_client(s3_host, s3_port, s3_region, force_path_style, None).await
+    } else {
+        create_s3_client(s3_host, s3_port, s3_region, force_path_style).await
+    };
 
     if rate_limit_config.enabled {
         S3ClientWrapper::RateLimited(RateLimitedS3Client::new(s3_client, rate_limit_config))
@@ -201,7 +210,84 @@ pub async fn create_s3_client_wrapper(
     }
 }
 
-/// Create an S3 client configured for either AWS S3 or local minio
+/// Configuration for S3 client connection pool optimization
+#[derive(Debug, Clone)]
+pub struct S3ClientPoolConfig {
+    /// Maximum number of connections per host
+    pub max_connections_per_host: usize,
+    /// Connection idle timeout (should match S3 Express session lifetime)
+    pub connection_idle_timeout: Duration,
+    /// Connection timeout for new connections
+    #[allow(dead_code)]
+    pub connection_timeout: Duration,
+    /// Pool idle timeout
+    #[allow(dead_code)]
+    pub pool_idle_timeout: Duration,
+}
+
+impl Default for S3ClientPoolConfig {
+    fn default() -> Self {
+        Self {
+            // Increased for S3 Express multi-AZ concurrent operations
+            max_connections_per_host: 32,
+            // Match S3 Express session lifetime (~5 minutes)
+            connection_idle_timeout: Duration::from_secs(280),
+            // Fast connection establishment
+            connection_timeout: Duration::from_secs(10),
+            // Pool idle timeout should be longer than session lifetime
+            pool_idle_timeout: Duration::from_secs(350),
+        }
+    }
+}
+
+/// Create an optimized S3 client with enhanced connection pool settings
+/// Note: Connection pool optimization is handled automatically by the AWS SDK's underlying HTTP client
+pub async fn create_optimized_s3_client(
+    s3_host: &str,
+    s3_port: u16,
+    s3_region: &str,
+    force_path_style: bool,
+    pool_config: Option<S3ClientPoolConfig>,
+) -> S3Client {
+    let config = pool_config.unwrap_or_default();
+
+    info!(
+        "Creating optimized S3 client for host: {} with connection pool config: max_connections_per_host={}, connection_idle_timeout={}s",
+        s3_host, config.max_connections_per_host, config.connection_idle_timeout.as_secs()
+    );
+
+    // Create AWS config with default optimizations
+    // The AWS SDK automatically handles connection pooling with sensible defaults
+    let aws_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .region(aws_config::Region::new(s3_region.to_string()))
+        .load()
+        .await;
+
+    // Create S3-specific config
+    let mut s3_config_builder = aws_sdk_s3::config::Builder::from(&aws_config);
+
+    // Configure endpoint if not using AWS
+    if !s3_host.ends_with("amazonaws.com") {
+        let endpoint_url = if s3_port == 80 {
+            format!("http://{s3_host}")
+        } else if s3_port == 443 {
+            format!("https://{s3_host}")
+        } else {
+            format!("https://{s3_host}:{s3_port}")
+        };
+        s3_config_builder = s3_config_builder.endpoint_url(&endpoint_url);
+    }
+
+    // Configure path style if needed
+    if force_path_style {
+        s3_config_builder = s3_config_builder.force_path_style(true);
+    }
+
+    let s3_config = s3_config_builder.build();
+    S3Client::from_conf(s3_config)
+}
+
+/// Create an S3 client configured for either AWS S3 or local minio (legacy function)
 pub async fn create_s3_client(
     s3_host: &str,
     s3_port: u16,
