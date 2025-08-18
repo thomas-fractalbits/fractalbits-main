@@ -11,7 +11,7 @@ pub fn bootstrap(
     nss_b_id: &str,
     volume_a_id: &str,
     volume_b_id: &str,
-    prefer_leader: bool,
+    follower_id: Option<&str>,
     for_bench: bool,
 ) -> CmdResult {
     // download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
@@ -24,12 +24,10 @@ pub fn bootstrap(
 
     create_rss_config()?;
     // setup_cloudwatch_agent()?;
-    create_systemd_unit_file("root_server", true)?;
+    create_systemd_unit_file("root_server", follower_id.is_some())?;
 
-    // Initialize leader election record if prefer_leader is true
-    if prefer_leader {
-        initialize_leader_election_record()?;
-
+    // Initialize NSS formatting and root server startup if follower_id is provided
+    if let Some(follower_id) = follower_id {
         for (nss_id, volume_id, role) in [
             (nss_b_id, volume_b_id, "standby"),
             (nss_a_id, volume_a_id, "active"),
@@ -49,6 +47,10 @@ pub fn bootstrap(
             )?;
             info!("Successfully formatted {nss_id} ({role})");
         }
+
+        wait_for_leadership()?;
+        start_follower_root_server(follower_id)?;
+
         // bootstrap_ebs_failover_service(nss_a_id, nss_b_id, volume_id)?;
     }
     Ok(())
@@ -79,34 +81,54 @@ fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: &str) -> CmdResult {
     Ok(())
 }
 
-fn initialize_leader_election_record() -> CmdResult {
-    const LEADER_ELECTION_TABLE: &str = "fractalbits-leader-election";
-    const LEADER_KEY: &str = "root-server-leader";
-    let region = get_current_aws_region()?;
+fn wait_for_leadership() -> CmdResult {
+    info!("Waiting for local root_server to become leader...");
+    let mut attempt = 0;
+    const HEALTH_PORT: u16 = 18088;
 
-    // Get current instance ID to set as initial leader
-    let instance_id = get_instance_id()?;
-    let current_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-    let lease_expiry = current_time + 30; // 30 seconds lease
+    loop {
+        attempt += 1;
 
-    info!("Initializing leader election record with instance {instance_id} as initial leader");
+        // Check if the health endpoint is responding and reports leadership
+        let health_url = format!("http://localhost:{HEALTH_PORT}");
+        let result = run_fun!(curl -s $health_url 2>/dev/null | jq -r ".is_leader");
 
-    // Create initial leader election record
-    let leader_item = format!(
-        r#"{{"key":{{"S":"{LEADER_KEY}"}}, "leader_id":{{"S":"{instance_id}"}}, "lease_expiry":{{"N":"{lease_expiry}"}}, "last_heartbeat":{{"N":"{current_time}"}}}}"#
-    );
+        match result {
+            Ok(ref response) if response.trim() == "true" => {
+                info!("Local root_server has become the leader");
+                break;
+            }
+            Ok(ref response) => {
+                info!(
+                    "Root_server not yet leader (is_leader: {}), waiting...",
+                    response.trim()
+                );
+            }
+            Err(_) => {
+                info!("Health endpoint not yet responding, waiting...");
+            }
+        }
 
-    run_cmd! {
-        aws dynamodb put-item
-            --table-name $LEADER_ELECTION_TABLE
-            --item $leader_item
-            --region $region
-    }?;
+        if attempt >= MAX_POLL_ATTEMPTS {
+            cmd_die!("Timed out waiting for root_server to become leader");
+        }
 
-    info!("Leader election record initialized with {instance_id} as leader");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    Ok(())
+}
+
+fn start_follower_root_server(follower_id: &str) -> CmdResult {
+    info!("Starting root_server service on follower instance {follower_id}");
+    wait_for_ssm_ready(follower_id);
+
+    // The follower instance should have already run its own bootstrap process
+    // (with no follower_id parameter) to set up configs and systemd unit file
+    // We just need to start the service
+    run_cmd_with_ssm(follower_id, "sudo systemctl start root_server.service")?;
+
+    info!("Successfully started root_server service on follower {follower_id}");
     Ok(())
 }
 
@@ -248,18 +270,20 @@ table_name = "fractalbits-leader-election"
 leader_key = "root-server-leader"
 
 # How long a leader holds the lease before it expires (in seconds)
-# Should be significantly longer than heartbeat_interval_secs
-lease_duration_secs = 30
+# Increased to 60s for better stability against transient network issues
+lease_duration_secs = 60
 
 # How often to send heartbeats and check leadership status (in seconds)
-# Should be less than lease_duration_secs / 2 to ensure reliable renewal
-heartbeat_interval_secs = 10
+# Set to 15s for less aggressive DynamoDB polling while maintaining responsiveness
+# With 50% renewal threshold, renewal happens at 30s, giving 30s buffer
+heartbeat_interval_secs = 15
 
 # Maximum number of retry attempts for DynamoDB operations
+# Increased to 5 for better startup resilience
 max_retry_attempts = 5
 
 # Enable monitoring and metrics collection
-enable_monitoring = false
+enable_monitoring = true
 "##;
     run_cmd! {
         mkdir -p $ETC_PATH;

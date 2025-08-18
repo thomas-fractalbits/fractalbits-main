@@ -3784,9 +3784,12 @@ dependencies = [
  "clap 4.5.43",
  "cmd_lib",
  "hostname",
+ "metrics",
+ "metrics-exporter-prometheus",
  "openssl",
  "prost",
  "prost-build",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -3797,6 +3800,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

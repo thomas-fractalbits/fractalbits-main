@@ -109,12 +109,8 @@ enum Command {
         #[clap(long, long_help = "EBS volume ID for nss-B")]
         volume_b_id: String,
 
-        #[clap(
-            long,
-            default_value = "false",
-            long_help = "Prefer to be leader in leader election"
-        )]
-        prefer_leader: bool,
+        #[clap(long, long_help = "Follower instance ID for root server")]
+        follower_id: Option<String>,
     },
 
     #[clap(
@@ -228,13 +224,13 @@ fn main() -> CmdResult {
             nss_b_id,
             volume_a_id,
             volume_b_id,
-            prefer_leader,
+            follower_id,
         } => root_server::bootstrap(
             &nss_a_id,
             &nss_b_id,
             &volume_a_id,
             &volume_b_id,
-            prefer_leader,
+            follower_id.as_deref(),
             for_bench,
         )?,
         Command::FormatNss {

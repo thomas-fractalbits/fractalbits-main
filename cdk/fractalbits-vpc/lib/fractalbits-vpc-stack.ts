@@ -278,7 +278,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const instanceBootstrapOptions = [
       {
         id: 'rss-A',
-        bootstrapOptions: `${forBenchFlag} root_server --nss_a_id=${nssA} --nss_b_id=${nssB} --volume_a_id=${ebsVolumeAId} --volume_b_id=${ebsVolumeBId} --prefer_leader`
+        bootstrapOptions: `${forBenchFlag} root_server --nss_a_id=${nssA} --nss_b_id=${nssB} --volume_a_id=${ebsVolumeAId} --volume_b_id=${ebsVolumeBId} --follower_id=${instances['rss-B'].instanceId}`
       },
       {
         id: 'rss-B',
