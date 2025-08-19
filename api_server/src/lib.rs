@@ -273,7 +273,7 @@ impl BlobClient {
                     s3_region: s3_express_config.s3_region.clone(),
                     local_az_bucket: s3_express_config.local_az_bucket.clone(),
                     remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
-                    az: s3_express_config.az.clone(),
+                    az: s3_express_config.local_az.clone(),
                     rate_limit_config: blob_storage::S3RateLimitConfig::from(
                         &s3_express_config.ratelimit,
                     ),
@@ -317,7 +317,8 @@ impl BlobClient {
                     remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
                     remote_az_host: s3_express_config.remote_az_host.clone(),
                     remote_az_port: s3_express_config.remote_az_port,
-                    az: s3_express_config.az.clone(),
+                    local_az: s3_express_config.local_az.clone(),
+                    remote_az: s3_express_config.remote_az.clone(),
                     rate_limit_config: blob_storage::S3RateLimitConfig::from(
                         &s3_express_config.ratelimit,
                     ),

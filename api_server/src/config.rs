@@ -8,8 +8,8 @@ pub enum BlobStorageBackend {
     BssOnlySingleAz,
     HybridSingleAz,
     S3ExpressSingleAz,
-    #[default]
     S3ExpressMultiAz,
+    #[default]
     S3ExpressMultiAzWithTracking,
 }
 
@@ -57,11 +57,30 @@ pub struct S3ExpressMultiAzConfig {
     pub remote_az_bucket: String,
     pub remote_az_host: Option<String>,
     pub remote_az_port: Option<u16>,
-    pub az: String,
+    pub local_az: String,
+    pub remote_az: String,
     #[serde(default)]
     pub ratelimit: RatelimitConfig,
     #[serde(default)]
     pub retry_config: S3RetryConfig,
+}
+
+impl Default for S3ExpressMultiAzConfig {
+    fn default() -> Self {
+        Self {
+            local_az_host: "http://127.0.0.1".into(),
+            local_az_port: 9001,
+            s3_region: "us-west-1".into(),
+            local_az_bucket: "fractalbits-local-az-bucket".into(),
+            remote_az_bucket: "fractalbits-remote-az-bucket".into(),
+            remote_az_host: Some("127.0.0.1".into()),
+            remote_az_port: Some(9002),
+            local_az: "az1".into(),
+            remote_az: "az2".into(),
+            ratelimit: RatelimitConfig::default(),
+            retry_config: S3RetryConfig::default(),
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -152,11 +171,11 @@ impl Default for Config {
             http_request_timeout_seconds: 5,
             rpc_timeout_seconds: 4,
             blob_storage: BlobStorageConfig {
-                backend: BlobStorageBackend::S3ExpressSingleAz,
+                backend: BlobStorageBackend::S3ExpressMultiAzWithTracking,
                 bss: None,
                 s3_hybrid_single_az: None,
-                s3_express_multi_az: None,
-                s3_express_single_az: Some(S3ExpressSingleAzConfig::default()),
+                s3_express_multi_az: Some(S3ExpressMultiAzConfig::default()),
+                s3_express_single_az: None,
             },
             allow_missing_or_bad_signature: false,
         }

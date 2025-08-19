@@ -23,7 +23,8 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct S3ExpressWithTrackingConfig {
     pub s3_region: String,
-    pub az: String,
+    pub local_az: String,
+    pub remote_az: String,
     pub local_az_host: String,
     pub local_az_port: u16,
     pub local_az_bucket: String,
@@ -46,6 +47,7 @@ pub struct S3ExpressMultiAzWithTracking {
     nss_client: Arc<RpcClientNss>,
     /// Key for storing AZ availability status in RSS
     az_status_key: String,
+    remote_az: String,
     retry_config: S3RetryConfig,
     _prewarming_service: Option<Arc<SessionPrewarmingService>>,
     _prewarming_task: Option<tokio::task::JoinHandle<()>>,
@@ -74,7 +76,7 @@ impl S3ExpressMultiAzWithTracking {
     ) -> Result<Self, BlobStorageError> {
         info!(
             "Initializing S3 Express One Zone storage with tracking for buckets: {} (local) and {} (remote) in AZ: {} (rate_limit_enabled: {}, retry_enabled: {})",
-            config.local_az_bucket, config.remote_az_bucket, config.az, config.rate_limit_config.enabled, config.retry_config.enabled
+            config.local_az_bucket, config.remote_az_bucket, config.local_az, config.rate_limit_config.enabled, config.retry_config.enabled
         );
 
         let client_s3 = if config.local_az_host.ends_with("amazonaws.com") {
@@ -130,7 +132,8 @@ impl S3ExpressMultiAzWithTracking {
             data_blob_tracker,
             rss_client,
             nss_client,
-            az_status_key: format!("az_status/{}", config.az),
+            az_status_key: format!("az_status/{}", config.local_az),
+            remote_az: config.remote_az.clone(),
             retry_config: config.retry_config.clone(),
             _prewarming_service: prewarming_service,
             _prewarming_task: prewarming_task,
@@ -283,22 +286,6 @@ impl S3ExpressMultiAzWithTracking {
         Ok(())
     }
 
-    /// Check if blob is marked as deleted
-    async fn is_blob_deleted(
-        &self,
-        blob_id: Uuid,
-        block_number: u32,
-    ) -> Result<bool, BlobStorageError> {
-        match self
-            .data_blob_tracker
-            .get_deleted_data_blob(&self.rss_client, &self.nss_client, blob_id, block_number)
-            .await?
-        {
-            Some(_) => Ok(true),
-            None => Ok(false),
-        }
-    }
-
     /// Record single-copy blob
     async fn record_single_copy_blob(
         &self,
@@ -336,31 +323,6 @@ impl S3ExpressMultiAzWithTracking {
             .await?;
         Ok(())
     }
-
-    /// Attempt to write to remote AZ bucket and detect if it's available
-    async fn try_remote_write(&self, s3_key: &str, body: Bytes) -> bool {
-        let result = s3_retry!(
-            "try_remote_write",
-            "s3_express_multi_az_tracking",
-            &self.remote_az_bucket,
-            &self.retry_config,
-            self.client_s3
-                .put_object()
-                .await
-                .bucket(&self.remote_az_bucket)
-                .key(s3_key)
-                .body(body.clone().into())
-                .send()
-        );
-
-        match result {
-            Ok(_) => true,
-            Err(e) => {
-                warn!("Remote AZ bucket write failed: {}", e);
-                false
-            }
-        }
-    }
 }
 
 impl BlobStorage for S3ExpressMultiAzWithTracking {
@@ -378,36 +340,18 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         let local_start = Instant::now();
         let s3_key = blob_key(blob_id, block_number);
 
-        // Check if blob is marked as deleted (should bypass write)
-        if self.is_blob_deleted(blob_id, block_number).await? {
-            warn!(
-                "Bypassing write for deleted blob: {}:{}",
-                blob_id, block_number
-            );
-            return Ok(());
-        }
-
         // Get current AZ status
         let az_status = self.get_az_status().await;
 
         let result: Result<(), BlobStorageError> = match az_status {
             AzStatus::Normal => {
-                // Normal mode: try to write to both buckets
-                // Try local write first
-                let local_result = s3_retry!(
-                    "put_blob",
-                    "s3_express_multi_az_tracking",
-                    &self.local_az_bucket,
-                    &self.retry_config,
-                    self.client_s3
-                        .put_object()
-                        .await
-                        .bucket(&self.local_az_bucket)
-                        .key(&s3_key)
-                        .body(body.clone().into())
-                        .send()
+                // Normal mode: write to both buckets concurrently
+                let (local_result, remote_result) = tokio::join!(
+                    self.put_object_with_retry(&self.local_az_bucket, &s3_key, body.clone()),
+                    self.put_object_with_retry(&self.remote_az_bucket, &s3_key, body.clone())
                 );
 
+                // Check if local write failed (critical)
                 if local_result.is_err() {
                     error!("Local AZ bucket write failed: {:?}", local_result);
                     return Err(BlobStorageError::S3(
@@ -415,17 +359,16 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                     ));
                 }
 
-                // Try remote write
-                let remote_success = self.try_remote_write(&s3_key, body.clone()).await;
-
+                // Check remote write result
+                let remote_success = remote_result.is_ok();
                 if !remote_success {
                     // Remote failed, switch to degraded mode and record single-copy blob
                     warn!("Remote AZ failed, switching to degraded mode");
                     self.set_az_status(AzStatus::Degraded).await?;
 
                     // Record this blob as single-copy
-                    let metadata = format!("size:{}", body.len()).into_bytes();
-                    self.record_single_copy_blob(blob_id, block_number, &metadata)
+                    let metadata = self.remote_az.as_bytes();
+                    self.record_single_copy_blob(blob_id, block_number, metadata)
                         .await?;
                 }
 
@@ -473,8 +416,8 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                 }
 
                 // Record as single-copy blob
-                let metadata = format!("size:{}", body.len()).into_bytes();
-                self.record_single_copy_blob(blob_id, block_number, &metadata)
+                let metadata = self.remote_az.as_bytes();
+                self.record_single_copy_blob(blob_id, block_number, metadata)
                     .await?;
 
                 // Record metrics
@@ -529,8 +472,8 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                 }
 
                 // Record as single-copy blob during resync/sanitize
-                let metadata = format!("size:{}", body.len()).into_bytes();
-                self.record_single_copy_blob(blob_id, block_number, &metadata)
+                let metadata = self.remote_az.as_bytes();
+                self.record_single_copy_blob(blob_id, block_number, metadata)
                     .await?;
 
                 Ok(())

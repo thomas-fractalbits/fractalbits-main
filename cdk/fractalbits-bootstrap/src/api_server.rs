@@ -80,6 +80,10 @@ pub fn create_config(
         // S3 Express Multi-AZ configuration
         let remote_bucket = remote_bucket.unwrap();
 
+        // Extract AZ IDs from bucket names (format: name--azid--x-s3)
+        let local_az = bucket_name.rsplit("--").nth(1).unwrap_or("az1");
+        let remote_az = remote_bucket.rsplit("--").nth(1).unwrap_or("az2");
+
         format!(
             r##"nss_addr = "{nss_endpoint}:8088"
 rss_addr = "{rss_endpoint}:8088"
@@ -94,7 +98,7 @@ rpc_timeout_seconds = 4
 allow_missing_or_bad_signature = false
 
 [blob_storage]
-backend = "s3_express_multi_az"
+backend = "s3_express_multi_az_with_tracking"
 
 [blob_storage.s3_express_multi_az]
 local_az_host = "http://s3.{aws_region}.amazonaws.com"
@@ -104,7 +108,8 @@ remote_az_port = 80
 s3_region = "{aws_region}"
 local_az_bucket = "{bucket_name}"
 remote_az_bucket = "{remote_bucket}"
-az = "{aws_az}"
+local_az = "{local_az}"
+remote_az = "{remote_az}"
 force_path_style = false
 
 [blob_storage.s3_express_multi_az.ratelimit]
