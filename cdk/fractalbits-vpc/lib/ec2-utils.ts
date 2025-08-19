@@ -135,6 +135,7 @@ export const createEc2Asg = (
   bootstrapOptions: string,
   minCapacity: number,
   maxCapacity: number,
+  availabilityZone?: string,
 ): autoscaling.AutoScalingGroup => {
   if (instanceTypeNames.length === 0) {
     throw new Error("instanceTypeNames must not be empty.");
@@ -167,13 +168,15 @@ export const createEc2Asg = (
     instanceType: new ec2.InstanceType(typeName),
   }));
 
+  const vpcSubnets = availabilityZone
+    ? {subnetType: ec2.SubnetType.PRIVATE_ISOLATED, availabilityZones: [availabilityZone]}
+    : {subnetType: ec2.SubnetType.PRIVATE_ISOLATED};
+
   return new autoscaling.AutoScalingGroup(scope, id, {
     vpc: vpc,
     minCapacity: minCapacity,
     maxCapacity: maxCapacity,
-    vpcSubnets: {
-      subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
-    },
+    vpcSubnets,
     newInstancesProtectedFromScaleIn: false,
     mixedInstancesPolicy: {
       instancesDistribution: {

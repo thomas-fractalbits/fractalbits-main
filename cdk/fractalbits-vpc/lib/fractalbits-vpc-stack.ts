@@ -12,7 +12,7 @@ export interface FractalbitsVpcStackProps extends cdk.StackProps {
   numApiServers: number;
   numBenchClients: number;
   benchType?: "service_endpoint" | "external" | null;
-  azPair?: [string, string];
+  azPair: string;
   bssInstanceTypes: string;
   browserIp?: string;
   dataBlobStorage: "hybridSingleAz" | "s3ExpressSingleAz" | "s3ExpressMultiAz";
@@ -28,9 +28,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const dataBlobStorage = props.dataBlobStorage;
 
     // === VPC Configuration ===
-    const defaultAzPair: [string, string] = ['usw2-az3', 'usw2-az4'];
-    const azPair = props.azPair ?? defaultAzPair;
-
+    const azPair = props.azPair.split(',');
     // Map zone IDs to availability zones
     const zoneIdToAzMapping: Record<string, string> = {
       'usw2-az1': 'us-west-2b',
@@ -38,7 +36,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
       'usw2-az3': 'us-west-2c',
       'usw2-az4': 'us-west-2d',
     };
-
     const az1 = zoneIdToAzMapping[azPair[0]];
     const az2 = zoneIdToAzMapping[azPair[1]];
 
@@ -92,41 +89,23 @@ export class FractalbitsVpcStack extends cdk.Stack {
     // Create S3 Express One Zone bucket for high-performance blob storage when in s3Express mode
     let dataBlobBucket: s3express.CfnDirectoryBucket | undefined;
     let dataBlobBucket2: s3express.CfnDirectoryBucket | undefined;
-    let zoneId2: string | undefined;
     const dataBlobOnS3Express = dataBlobStorage === 's3ExpressSingleAz' || dataBlobStorage === 's3ExpressMultiAz';
     if (dataBlobOnS3Express) {
-      // For S3 Express, derive zone ID from availability zone
-      // Map us-west-2[a-d] to usw2-az[1-4] using CloudFormation mappings
-      const azMappings = new cdk.CfnMapping(this, 'AZToZoneIdMapping', {
-        mapping: {
-          'us-west-2a': {zoneId: 'usw2-az2'},
-          'us-west-2b': {zoneId: 'usw2-az1'},
-          'us-west-2c': {zoneId: 'usw2-az3'},
-          'us-west-2d': {zoneId: 'usw2-az4'},
-        },
-        lazy: true,
-      });
-
-      const zoneId = azPair[0];
-
       // Generate a unique base name for the buckets
       const bucketBaseName = `fractalbits-data-${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}`;
 
       dataBlobBucket = new s3express.CfnDirectoryBucket(this, 'DataBlobExpressBucket', {
-        bucketName: `${bucketBaseName}--${zoneId}--x-s3`,
+        bucketName: `${bucketBaseName}--${azPair[0]}--x-s3`,
         dataRedundancy: 'SingleAvailabilityZone',
-        locationName: zoneId,
+        locationName: azPair[0],
         // Note: CfnDirectoryBucket doesn't support removalPolicy/autoDeleteObjects like regular buckets
       });
 
       if (dataBlobStorage === 's3ExpressMultiAz') {
-        // Create second S3 Express bucket in the second AZ from azPair
-        zoneId2 = azPair[1];
-
         dataBlobBucket2 = new s3express.CfnDirectoryBucket(this, 'DataBlobExpressBucket2', {
-          bucketName: `${bucketBaseName}--${zoneId2}--x-s3`,
+          bucketName: `${bucketBaseName}--${azPair[1]}--x-s3`,
           dataRedundancy: 'SingleAvailabilityZone',
-          locationName: zoneId2,
+          locationName: azPair[1],
           // Note: CfnDirectoryBucket doesn't support removalPolicy/autoDeleteObjects like regular buckets
         });
       }
@@ -185,7 +164,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
         ['c8g.xlarge'],
         benchClientBootstrapOptions,
         props.numBenchClients,
-        props.numBenchClients
+        props.numBenchClients,
+        az1
       );
     }
     const instances: Record<string, ec2.Instance> = {};
@@ -206,7 +186,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
         props.bssInstanceTypes.split(','),
         bssBootstrapOptions,
         1,
-        1
+        1,
+        az1
       );
     }
 
@@ -242,7 +223,8 @@ export class FractalbitsVpcStack extends cdk.Stack {
       ['c8g.xlarge'],
       apiServerBootstrapOptions,
       props.numApiServers,
-      props.numApiServers
+      props.numApiServers,
+      az1
     );
 
     // NLB for API servers - always create regardless of benchType
