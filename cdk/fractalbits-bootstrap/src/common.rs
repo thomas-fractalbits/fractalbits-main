@@ -392,11 +392,24 @@ instance_id=$(ec2-metadata -i | awk '{{print $2}}')
 private_ip=$(ec2-metadata -o | awk '{{print $2}}')
 
 echo "Registering itself ($instance_id,$private_ip) to ddb table {DDB_SERVICE_DISCOVERY_TABLE} with service_id $service_id" >&2
-aws dynamodb update-item \
+
+# Try to update existing item
+if aws dynamodb update-item \
     --table-name {DDB_SERVICE_DISCOVERY_TABLE} \
     --key "{{\"service_id\": {{ \"S\": \"$service_id\"}}}} " \
-    --update-expression "ADD ips :ip" \
-    --expression-attribute-values "{{\":ip\": {{ \"SS\": [\"$private_ip\"]}}}} "
+    --update-expression "SET #instances.#instance_id = :ip" \
+    --expression-attribute-names "{{\"#instances\": \"instances\", \"#instance_id\": \"$instance_id\"}}" \
+    --expression-attribute-values "{{\":ip\": {{ \"S\": \"$private_ip\"}}}}" \
+    --condition-expression "attribute_exists(service_id)" 2>/dev/null; then
+    echo "Updated existing service entry" >&2
+else
+    # Create new item if update failed
+    echo "Creating new service entry" >&2
+    aws dynamodb put-item \
+        --table-name {DDB_SERVICE_DISCOVERY_TABLE} \
+        --item "{{\"service_id\": {{\"S\": \"$service_id\"}}, \"instances\": {{\"M\": {{\"$instance_id\": {{\"S\": \"$private_ip\"}}}}}}}}"
+fi
+
 echo "Done" >&2
 "##
     );
@@ -442,8 +455,8 @@ echo "Deregistering itself ($instance_id, $private_ip) from ddb table {DDB_SERVI
 aws dynamodb update-item \
     --table-name {DDB_SERVICE_DISCOVERY_TABLE} \
     --key "{{\"service_id\": {{ \"S\": \"$service_id\"}}}} " \
-    --update-expression "DELETE ips :ip" \
-    --expression-attribute-values "{{\":ip\": {{ \"SS\": [\"$private_ip\"]}}}} "
+    --update-expression "REMOVE instances.#instance_id" \
+    --expression-attribute-names "{{\"#instance_id\": \"$instance_id\"}}"
 echo "Done" >&2
 "##
     );
@@ -471,15 +484,26 @@ pub fn get_service_ips(service_id: &str, expected_min_count: usize) -> Vec<Strin
              aws dynamodb get-item
                  --table-name ${DDB_SERVICE_DISCOVERY_TABLE}
                  --key $key
-                 --projection-expression "ips"
-                 --query "Item.ips.SS"
-                 --output text
+                 --projection-expression "instances"
+                 --query "Item.instances.M"
+                 --output json
         };
         match res {
-            Ok(output) if !output.is_empty() && output != "None" => {
-                let ips: Vec<String> = output.split_whitespace().map(String::from).collect();
+            Ok(output) if !output.is_empty() && output != "None" && output != "null" => {
+                let instances: serde_json::Value =
+                    serde_json::from_str(&output).unwrap_or(serde_json::json!({}));
+                let mut ips = Vec::new();
+                if let Some(obj) = instances.as_object() {
+                    for (_instance_id, value) in obj {
+                        if let Some(ip_obj) = value.get("S") {
+                            if let Some(ip) = ip_obj.as_str() {
+                                ips.push(ip.to_string());
+                            }
+                        }
+                    }
+                }
                 if ips.len() >= expected_min_count {
-                    info!("Found a list of {service_id} clients: {ips:?}");
+                    info!("Found a list of {service_id} services: {ips:?}");
                     return ips;
                 }
             }
