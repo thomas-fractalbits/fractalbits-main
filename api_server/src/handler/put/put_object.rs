@@ -6,7 +6,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use crate::{
     handler::{
         common::{
-            extract_metadata_headers, gen_etag,
+            extract_metadata_headers,
             s3_error::S3Error,
             signature::checksum::{
                 request_checksum_value, request_trailer_checksum_algorithm, ExpectedChecksums,
@@ -87,7 +87,7 @@ pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let etag = gen_etag();
+    let etag = blob_id.simple().to_string();
     let version_id = gen_version_id();
     let object_layout = ObjectLayout {
         version_id,
