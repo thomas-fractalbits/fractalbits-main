@@ -5750,6 +5750,7 @@ dependencies = [
  "strum",
  "test_common",
  "tokio",
+ "uuid",
  "xtask_tools",
 ]
 

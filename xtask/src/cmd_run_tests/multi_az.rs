@@ -4,9 +4,11 @@ use aws_sdk_s3::primitives::ByteStream;
 use cmd_lib::*;
 use colored::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::time::Duration;
 use test_common::*;
 use tokio::time::sleep;
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BlobInfo {
@@ -90,6 +92,7 @@ pub async fn run_multi_az_tests() -> CmdResult {
 
 async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
     let ctx = context();
+    let mut single_copy_blob_ids = HashSet::new();
 
     // Create test bucket
     let bucket_name = ctx.create_bucket("test-multi-az-resilience").await;
@@ -144,7 +147,8 @@ async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
 
     for (key, data) in &degraded_objects {
         println!("  Uploading {key}");
-        ctx.client
+        let put_response = ctx
+            .client
             .put_object()
             .bucket(&bucket_name)
             .key(*key)
@@ -152,6 +156,16 @@ async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
             .send()
             .await
             .expect("Failed to upload object during degraded mode");
+
+        // Extract and save etag (which is now the blob_id in simple format)
+        if let Some(etag) = put_response.e_tag() {
+            let etag_clean = etag.trim_matches('"');
+            // Convert etag back to UUID
+            if let Ok(blob_id) = Uuid::parse_str(etag_clean) {
+                single_copy_blob_ids.insert(blob_id.to_string());
+                println!("    Stored blob_id: {}", blob_id);
+            }
+        }
 
         // Verify we can read it back immediately
         let response = ctx
@@ -172,6 +186,32 @@ async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
     println!(" Step 3.1: Verifying single-copy blob tracking...");
     if let Err(e) = dump_single_copy_blobs_status() {
         warn!("Could not check single-copy blob status: {e}");
+    }
+
+    // List single-copy blobs and verify our blob_ids are included
+    if let Ok(resync_result) = dump_single_copy_blobs_list() {
+        println!("  Found {} single-copy blobs", resync_result.blobs.len());
+        let resync_blob_keys: HashSet<String> = resync_result
+            .blobs
+            .iter()
+            .map(|b| {
+                // Extract just the blob_id part (before the colon)
+                b.blob_key
+                    .split(':')
+                    .next()
+                    .unwrap_or(&b.blob_key)
+                    .to_string()
+            })
+            .collect();
+
+        // Check if our tracked blob_ids are in the resync result
+        for blob_id in &single_copy_blob_ids {
+            if resync_blob_keys.contains(blob_id) {
+                println!("  OK: Blob {} found in single-copy tracking", blob_id);
+            } else {
+                warn!("Blob {blob_id} NOT found in single-copy tracking");
+            }
+        }
     }
 
     // Simulate remote AZ coming back online
@@ -254,6 +294,7 @@ async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
 async fn test_rapid_remote_az_interruptions() -> CmdResult {
     let ctx = context();
     let bucket_name = ctx.create_bucket("test-rapid-interruptions").await;
+    let mut single_copy_blob_ids = HashSet::new();
 
     println!(" Testing rapid remote AZ interruptions...");
 
@@ -267,7 +308,8 @@ async fn test_rapid_remote_az_interruptions() -> CmdResult {
         let outage_key = format!("rapid-outage-{cycle}");
         let outage_data = format!("Data during rapid outage {cycle}");
 
-        ctx.client
+        let put_response = ctx
+            .client
             .put_object()
             .bucket(&bucket_name)
             .key(&outage_key)
@@ -275,6 +317,15 @@ async fn test_rapid_remote_az_interruptions() -> CmdResult {
             .send()
             .await
             .expect("Failed to upload during rapid outage");
+
+        // Extract and save etag
+        if let Some(etag) = put_response.e_tag() {
+            let etag_clean = etag.trim_matches('"');
+            if let Ok(blob_id) = Uuid::parse_str(etag_clean) {
+                single_copy_blob_ids.insert(blob_id.to_string());
+                println!("    Stored blob_id: {}", blob_id);
+            }
+        }
 
         println!("  Cycle {cycle}: Restarting remote AZ");
         start_services(
@@ -312,6 +363,7 @@ async fn test_rapid_remote_az_interruptions() -> CmdResult {
 async fn test_extended_remote_az_outage() -> CmdResult {
     let ctx = context();
     let bucket_name = ctx.create_bucket("test-extended-outage").await;
+    let mut single_copy_blob_ids = HashSet::new();
 
     println!(" Testing extended remote AZ outage (10+ objects during downtime)...");
 
@@ -327,7 +379,8 @@ async fn test_extended_remote_az_outage() -> CmdResult {
         );
 
         println!("  Uploading {key} (during outage)");
-        ctx.client
+        let put_response = ctx
+            .client
             .put_object()
             .bucket(&bucket_name)
             .key(&key)
@@ -335,6 +388,14 @@ async fn test_extended_remote_az_outage() -> CmdResult {
             .send()
             .await
             .expect("Failed to upload during extended outage");
+
+        // Extract and save etag
+        if let Some(etag) = put_response.e_tag() {
+            let etag_clean = etag.trim_matches('"');
+            if let Ok(blob_id) = Uuid::parse_str(etag_clean) {
+                single_copy_blob_ids.insert(blob_id.to_string());
+            }
+        }
 
         // Verify immediate readability
         let response = ctx
@@ -360,6 +421,34 @@ async fn test_extended_remote_az_outage() -> CmdResult {
     let result = dump_single_copy_blobs_list()?;
     let blob_count = result.blobs.len();
     println!("  Found {blob_count} single-copy blobs in tracking system");
+
+    // Compare our tracked blob_ids with ResyncResult
+    let resync_blob_keys: HashSet<String> = result
+        .blobs
+        .iter()
+        .map(|b| {
+            // Extract just the blob_id part (before the colon)
+            b.blob_key
+                .split(':')
+                .next()
+                .unwrap_or(&b.blob_key)
+                .to_string()
+        })
+        .collect();
+
+    let mut found_count = 0;
+    for blob_id in &single_copy_blob_ids {
+        if resync_blob_keys.contains(blob_id) {
+            found_count += 1;
+        } else {
+            warn!("Extended outage blob {blob_id} NOT found in tracking");
+        }
+    }
+    println!(
+        "  Verified {}/{} extended outage blobs in tracking system",
+        found_count,
+        single_copy_blob_ids.len()
+    );
 
     // Expected: 3 (degraded) + 3 (rapid interruption) + 12 (extended outage) = 18 total
     assert_eq!(18, blob_count, "Single-copy blob count mismatch");
