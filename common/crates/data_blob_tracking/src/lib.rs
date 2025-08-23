@@ -3,7 +3,6 @@ use rpc_client_nss::{RpcClientNss, RpcErrorNss};
 use rpc_client_rss::{RpcClientRss, RpcErrorRss};
 use std::collections::HashMap;
 use thiserror::Error;
-use uuid::Uuid;
 
 #[derive(Error, Debug)]
 pub enum DataBlobTrackingError {
@@ -92,18 +91,16 @@ impl DataBlobTracker {
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
         metadata: &[u8],
     ) -> Result<(), DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "single_copy_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
         nss_client
             .put_inode(
                 &root_blob_name,
-                &key,
+                blob_key,
                 Bytes::copy_from_slice(metadata),
                 None,
             )
@@ -116,14 +113,12 @@ impl DataBlobTracker {
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
     ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "single_copy_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
-        match nss_client.get_inode(&root_blob_name, &key, None).await {
+        match nss_client.get_inode(&root_blob_name, blob_key, None).await {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
@@ -147,14 +142,35 @@ impl DataBlobTracker {
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
     ) -> Result<(), DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "single_copy_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
-        match nss_client.delete_inode(&root_blob_name, &key, None).await {
+        match nss_client
+            .delete_inode(&root_blob_name, blob_key, None)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Remove blob from single-copy tracking by blob key (with null terminator handling)
+    pub async fn delete_single_copy_data_blob_by_key(
+        &self,
+        rss_client: &RpcClientRss,
+        nss_client: &RpcClientNss,
+        blob_key: &str,
+    ) -> Result<(), DataBlobTrackingError> {
+        let root_blob_name = self
+            .get_or_create_data_blob_tree_root(rss_client, nss_client, "single_copy_data_blobs")
+            .await?;
+
+        // Use the blob key directly as the NSS key, trimming null terminators
+        let key = blob_key.trim_end_matches('\0');
+        match nss_client.delete_inode(&root_blob_name, key, None).await {
             Ok(_) => Ok(()),
             Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
@@ -166,18 +182,16 @@ impl DataBlobTracker {
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
         timestamp: &[u8],
     ) -> Result<(), DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "deleted_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
         nss_client
             .put_inode(
                 &root_blob_name,
-                &key,
+                blob_key,
                 Bytes::copy_from_slice(timestamp),
                 None,
             )
@@ -190,14 +204,12 @@ impl DataBlobTracker {
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
     ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "deleted_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
-        match nss_client.get_inode(&root_blob_name, &key, None).await {
+        match nss_client.get_inode(&root_blob_name, blob_key, None).await {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
@@ -216,19 +228,47 @@ impl DataBlobTracker {
         }
     }
 
+    /// Get deleted data blob tracking entry by blob key
+    pub async fn get_deleted_data_blob_by_key(
+        &self,
+        rss_client: &RpcClientRss,
+        nss_client: &RpcClientNss,
+        blob_key: &str,
+    ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
+        let root_blob_name = self
+            .get_or_create_data_blob_tree_root(rss_client, nss_client, "deleted_data_blobs")
+            .await?;
+
+        // Use the blob key directly as the NSS key
+        let key = blob_key.trim_end_matches('\0');
+        match nss_client.get_inode(&root_blob_name, key, None).await {
+            Ok(response) => match response.result {
+                Some(rpc_client_nss::rpc::get_inode_response::Result::Ok(bytes)) => {
+                    Ok(Some(bytes.to_vec()))
+                }
+                Some(rpc_client_nss::rpc::get_inode_response::Result::ErrNotFound(_)) => Ok(None),
+                _ => Err(DataBlobTrackingError::Internal(
+                    "Unexpected NSS response".into(),
+                )),
+            },
+            Err(e) => Err(e.into()),
+        }
+    }
+
     /// Remove blob from deleted tracking (used during sanitize)
     pub async fn delete_deleted_data_blob(
         &self,
         rss_client: &RpcClientRss,
         nss_client: &RpcClientNss,
-        blob_id: Uuid,
-        block_num: u32,
+        blob_key: &str,
     ) -> Result<(), DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "deleted_data_blobs")
             .await?;
-        let key = format!("{blob_id}:{block_num}");
-        match nss_client.delete_inode(&root_blob_name, &key, None).await {
+        match nss_client
+            .delete_inode(&root_blob_name, blob_key, None)
+            .await
+        {
             Ok(_) => Ok(()),
             Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
@@ -243,7 +283,7 @@ impl DataBlobTracker {
         prefix: &str,
         start_after: &str,
         max_keys: u32,
-    ) -> Result<Vec<(String, Vec<u8>)>, DataBlobTrackingError> {
+    ) -> Result<Vec<(String, String)>, DataBlobTrackingError> {
         let root_blob_name = self
             .get_or_create_data_blob_tree_root(rss_client, nss_client, "single_copy_data_blobs")
             .await?;
@@ -266,7 +306,10 @@ impl DataBlobTracker {
                 let result = inodes
                     .inodes
                     .into_iter()
-                    .map(|inode| (inode.key, inode.inode.to_vec()))
+                    .map(|inode| {
+                        let missing_az = String::from_utf8_lossy(&inode.inode).to_string();
+                        (inode.key, missing_az)
+                    })
                     .collect();
                 Ok(result)
             }
@@ -315,33 +358,6 @@ impl DataBlobTracker {
                 "Unexpected NSS list response".into(),
             )),
         }
-    }
-
-    /// Parse blob key back to blob_id and block_num
-    pub fn parse_blob_key(key: &str) -> Result<(Uuid, u32), DataBlobTrackingError> {
-        // Trim null terminators that might come from NSS storage
-        let key = key.trim_end_matches('\0');
-        let parts: Vec<&str> = key.split(':').collect();
-        if parts.len() != 2 {
-            return Err(DataBlobTrackingError::Internal(format!(
-                "Invalid blob key format: {key}"
-            )));
-        }
-
-        let blob_id = Uuid::parse_str(parts[0]).map_err(|e| {
-            DataBlobTrackingError::Internal(format!("Invalid UUID in blob key {key}: {e}"))
-        })?;
-
-        let block_num = parts[1].parse::<u32>().map_err(|e| {
-            DataBlobTrackingError::Internal(format!("Invalid block number in blob key {key}: {e}"))
-        })?;
-
-        Ok((blob_id, block_num))
-    }
-
-    /// Create blob key from blob_id and block_num
-    pub fn create_blob_key(blob_id: Uuid, block_num: u32) -> String {
-        format!("{blob_id}:{block_num}")
     }
 
     /// Get current timestamp as bytes for deleted blob tracking

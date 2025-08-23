@@ -7,7 +7,6 @@ edition = "2021"
 tokio = { workspace = true }
 bytes = { workspace = true }
 thiserror = { workspace = true }
-uuid = { workspace = true }
 
 # RPC clients
 rpc_client_nss = { workspace = true }

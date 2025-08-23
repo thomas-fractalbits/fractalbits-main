@@ -194,19 +194,14 @@ async fn test_remote_az_service_interruption_and_recovery() -> CmdResult {
         let resync_blob_keys: HashSet<String> = resync_result
             .blobs
             .iter()
-            .map(|b| {
-                // Extract just the blob_id part (before the colon)
-                b.blob_key
-                    .split(':')
-                    .next()
-                    .unwrap_or(&b.blob_key)
-                    .to_string()
-            })
+            .map(|b| b.blob_key.clone())
             .collect();
 
         // Check if our tracked blob_ids are in the resync result
+        // Convert blob_id to expected blob_key format (blob_id-p0)
         for blob_id in &single_copy_blob_ids {
-            if resync_blob_keys.contains(blob_id) {
+            let expected_blob_key = format!("{}-p0", blob_id);
+            if resync_blob_keys.contains(&expected_blob_key) {
                 println!("  OK: Blob {} found in single-copy tracking", blob_id);
             } else {
                 warn!("Blob {blob_id} NOT found in single-copy tracking");
@@ -423,22 +418,13 @@ async fn test_extended_remote_az_outage() -> CmdResult {
     println!("  Found {blob_count} single-copy blobs in tracking system");
 
     // Compare our tracked blob_ids with ResyncResult
-    let resync_blob_keys: HashSet<String> = result
-        .blobs
-        .iter()
-        .map(|b| {
-            // Extract just the blob_id part (before the colon)
-            b.blob_key
-                .split(':')
-                .next()
-                .unwrap_or(&b.blob_key)
-                .to_string()
-        })
-        .collect();
+    let resync_blob_keys: HashSet<String> =
+        result.blobs.iter().map(|b| b.blob_key.clone()).collect();
 
     let mut found_count = 0;
     for blob_id in &single_copy_blob_ids {
-        if resync_blob_keys.contains(blob_id) {
+        let expected_blob_key = format!("{}-p0", blob_id);
+        if resync_blob_keys.contains(&expected_blob_key) {
             found_count += 1;
         } else {
             warn!("Extended outage blob {blob_id} NOT found in tracking");

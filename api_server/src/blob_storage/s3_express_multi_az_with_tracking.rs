@@ -292,37 +292,20 @@ impl S3ExpressMultiAzWithTracking {
     /// Record single-copy blob
     async fn record_single_copy_blob(
         &self,
-        blob_id: Uuid,
-        block_number: u32,
+        s3_key: &str,
         metadata: &[u8],
     ) -> Result<(), BlobStorageError> {
         self.data_blob_tracker
-            .put_single_copy_data_blob(
-                &self.rss_client,
-                &self.nss_client,
-                blob_id,
-                block_number,
-                metadata,
-            )
+            .put_single_copy_data_blob(&self.rss_client, &self.nss_client, s3_key, metadata)
             .await?;
         Ok(())
     }
 
     /// Record deleted blob
-    async fn record_deleted_blob(
-        &self,
-        blob_id: Uuid,
-        block_number: u32,
-    ) -> Result<(), BlobStorageError> {
+    async fn record_deleted_blob(&self, s3_key: &str) -> Result<(), BlobStorageError> {
         let timestamp = DataBlobTracker::current_timestamp_bytes();
         self.data_blob_tracker
-            .put_deleted_data_blob(
-                &self.rss_client,
-                &self.nss_client,
-                blob_id,
-                block_number,
-                &timestamp,
-            )
+            .put_deleted_data_blob(&self.rss_client, &self.nss_client, s3_key, &timestamp)
             .await?;
         Ok(())
     }
@@ -381,8 +364,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
 
                     // Record this blob as single-copy
                     let metadata = self.remote_az.as_bytes();
-                    self.record_single_copy_blob(blob_id, block_number, metadata)
-                        .await?;
+                    self.record_single_copy_blob(&s3_key, metadata).await?;
                 }
 
                 // Record metrics
@@ -430,8 +412,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
 
                 // Record as single-copy blob
                 let metadata = self.remote_az.as_bytes();
-                self.record_single_copy_blob(blob_id, block_number, metadata)
-                    .await?;
+                self.record_single_copy_blob(&s3_key, metadata).await?;
 
                 // Record metrics
                 histogram!("blob_size", "operation" => "put", "storage" => "s3_express_multi_az_tracking", "bucket_type" => "local_az")
@@ -471,8 +452,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
 
                 // Record as single-copy blob during resync/sanitize
                 let metadata = self.remote_az.as_bytes();
-                self.record_single_copy_blob(blob_id, block_number, metadata)
-                    .await?;
+                self.record_single_copy_blob(&s3_key, metadata).await?;
 
                 Ok(())
             }
@@ -508,8 +488,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                     warn!("Remote AZ failed, switching to degraded mode");
                     self.set_az_status(&self.remote_az, "Degraded").await?;
                     let metadata = self.remote_az.as_bytes();
-                    self.record_single_copy_blob(blob_id, block_number, metadata)
-                        .await?;
+                    self.record_single_copy_blob(&s3_key, metadata).await?;
                 }
 
                 Ok(())
@@ -603,12 +582,12 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         let s3_key = blob_key(blob_id, block_number);
 
         // Record the blob as deleted first
-        self.record_deleted_blob(blob_id, block_number).await?;
+        self.record_deleted_blob(&s3_key).await?;
 
         // Try to delete from single-copy tracking
         let _ = self
             .data_blob_tracker
-            .delete_single_copy_data_blob(&self.rss_client, &self.nss_client, blob_id, block_number)
+            .delete_single_copy_data_blob(&self.rss_client, &self.nss_client, &s3_key)
             .await; // Ignore errors - blob may not be in single-copy tracking
 
         // Delete from both buckets concurrently (best effort)
