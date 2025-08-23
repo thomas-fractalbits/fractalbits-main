@@ -13,6 +13,8 @@ use uuid::Uuid;
 pub struct S3ExpressMultiAzConfig {
     pub local_az_host: String,
     pub local_az_port: u16,
+    pub remote_az_host: String,
+    pub remote_az_port: u16,
     pub s3_region: String,
     pub local_az_bucket: String,
     pub remote_az_bucket: String,
@@ -22,7 +24,8 @@ pub struct S3ExpressMultiAzConfig {
 }
 
 pub struct S3ExpressMultiAzStorage {
-    client_s3: S3ClientWrapper,
+    local_client: S3ClientWrapper,
+    remote_client: S3ClientWrapper,
     local_az_bucket: String,
     remote_az_bucket: String,
     retry_config: S3RetryConfig,
@@ -35,7 +38,8 @@ impl S3ExpressMultiAzStorage {
             config.local_az_bucket, config.remote_az_bucket, config.az, config.rate_limit_config.enabled, config.retry_config.enabled
         );
 
-        let client_s3 = if config.local_az_host.ends_with("amazonaws.com") {
+        // Create local AZ S3 client
+        let local_client = if config.local_az_host.ends_with("amazonaws.com") {
             // For real AWS S3 Express with session auth
             create_s3_client_wrapper(
                 &config.local_az_host,
@@ -57,11 +61,39 @@ impl S3ExpressMultiAzStorage {
             .await
         };
 
-        let endpoint_url = format!("{}:{}", config.local_az_host, config.local_az_port);
-        info!("S3 client initialized with endpoint: {endpoint_url}");
+        // Create remote AZ S3 client
+        let remote_client = if config.remote_az_host.ends_with("amazonaws.com") {
+            // For real AWS S3 Express with session auth
+            create_s3_client_wrapper(
+                &config.remote_az_host,
+                config.remote_az_port,
+                &config.s3_region,
+                false,
+                &config.rate_limit_config,
+            )
+            .await
+        } else {
+            // For local minio testing - use common client creation with force_path_style=true
+            create_s3_client_wrapper(
+                &config.remote_az_host,
+                config.remote_az_port,
+                &config.s3_region,
+                true, // force_path_style for minio
+                &config.rate_limit_config,
+            )
+            .await
+        };
+
+        let local_endpoint = format!("{}:{}", config.local_az_host, config.local_az_port);
+        let remote_endpoint = format!("{}:{}", config.remote_az_host, config.remote_az_port);
+        info!(
+            "S3 clients initialized - local: {}, remote: {}",
+            local_endpoint, remote_endpoint
+        );
 
         Ok(Self {
-            client_s3,
+            local_client,
+            remote_client,
             local_az_bucket: config.local_az_bucket.clone(),
             remote_az_bucket: config.remote_az_bucket.clone(),
             retry_config: config.retry_config.clone(),
@@ -71,6 +103,7 @@ impl S3ExpressMultiAzStorage {
     // Helper method to perform put operation with retry mode handling
     async fn put_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
         body: Bytes,
@@ -80,7 +113,7 @@ impl S3ExpressMultiAzStorage {
     > {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .put_object()
                     .await
                     .bucket(bucket)
@@ -95,7 +128,7 @@ impl S3ExpressMultiAzStorage {
                     "s3_express_multi_az",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
+                    client
                         .put_object()
                         .await
                         .bucket(bucket)
@@ -110,6 +143,7 @@ impl S3ExpressMultiAzStorage {
     // Helper method to perform get operation with retry mode handling
     async fn get_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
     ) -> Result<
@@ -118,7 +152,7 @@ impl S3ExpressMultiAzStorage {
     > {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .get_object()
                     .await
                     .bucket(bucket)
@@ -132,12 +166,7 @@ impl S3ExpressMultiAzStorage {
                     "s3_express_multi_az",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
-                        .get_object()
-                        .await
-                        .bucket(bucket)
-                        .key(key)
-                        .send()
+                    client.get_object().await.bucket(bucket).key(key).send()
                 )
             }
         }
@@ -146,6 +175,7 @@ impl S3ExpressMultiAzStorage {
     // Helper method to perform delete operation with retry mode handling
     async fn delete_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
     ) -> Result<
@@ -154,7 +184,7 @@ impl S3ExpressMultiAzStorage {
     > {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .delete_object()
                     .await
                     .bucket(bucket)
@@ -168,12 +198,7 @@ impl S3ExpressMultiAzStorage {
                     "s3_express_multi_az",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
-                        .delete_object()
-                        .await
-                        .bucket(bucket)
-                        .key(key)
-                        .send()
+                    client.delete_object().await.bucket(bucket).key(key).send()
                 )
             }
         }
@@ -204,7 +229,12 @@ impl BlobStorage for S3ExpressMultiAzStorage {
         let local_future = async {
             let local_start = Instant::now();
             let result = self
-                .put_object_with_retry(&self.local_az_bucket, &s3_key, body.clone())
+                .put_object_with_retry(
+                    &self.local_client,
+                    &self.local_az_bucket,
+                    &s3_key,
+                    body.clone(),
+                )
                 .await;
             let duration = local_start.elapsed();
             (result, duration)
@@ -213,7 +243,12 @@ impl BlobStorage for S3ExpressMultiAzStorage {
         let remote_future = async {
             let remote_start = Instant::now();
             let result = self
-                .put_object_with_retry(&self.remote_az_bucket, &s3_key, body.clone())
+                .put_object_with_retry(
+                    &self.remote_client,
+                    &self.remote_az_bucket,
+                    &s3_key,
+                    body.clone(),
+                )
                 .await;
             let duration = remote_start.elapsed();
             (result, duration)
@@ -284,7 +319,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
 
         // Always read from local AZ bucket for better performance, with retry
         let response_result = self
-            .get_object_with_retry(&self.local_az_bucket, &s3_key)
+            .get_object_with_retry(&self.local_client, &self.local_az_bucket, &s3_key)
             .await;
 
         let response = match response_result {
@@ -300,7 +335,7 @@ impl BlobStorage for S3ExpressMultiAzStorage {
                     .increment(1);
 
                 let remote_result = self
-                    .get_object_with_retry(&self.remote_az_bucket, &s3_key)
+                    .get_object_with_retry(&self.remote_client, &self.remote_az_bucket, &s3_key)
                     .await;
 
                 match remote_result {
@@ -344,8 +379,8 @@ impl BlobStorage for S3ExpressMultiAzStorage {
 
         // Delete from both buckets concurrently
         let (local_result, remote_result) = tokio::join!(
-            self.delete_object_with_retry(&self.local_az_bucket, &s3_key),
-            self.delete_object_with_retry(&self.remote_az_bucket, &s3_key)
+            self.delete_object_with_retry(&self.local_client, &self.local_az_bucket, &s3_key),
+            self.delete_object_with_retry(&self.remote_client, &self.remote_az_bucket, &s3_key)
         );
 
         // Log errors but don't fail if one bucket operation fails

@@ -27,11 +27,9 @@ pub struct S3ExpressWithTrackingConfig {
     pub local_az: String,
     pub remote_az: String,
     pub local_az_host: String,
-    #[allow(dead_code)] // Will be used for separate remote AZ client
-    pub remote_az_host: Option<String>,
+    pub remote_az_host: String,
     pub local_az_port: u16,
-    #[allow(dead_code)] // Will be used for separate remote AZ client
-    pub remote_az_port: Option<u16>,
+    pub remote_az_port: u16,
     pub local_az_bucket: String,
     pub remote_az_bucket: String,
     pub rate_limit_config: S3RateLimitConfig,
@@ -39,7 +37,8 @@ pub struct S3ExpressWithTrackingConfig {
 }
 
 pub struct S3ExpressMultiAzWithTracking {
-    client_s3: S3ClientWrapper,
+    local_client: S3ClientWrapper,
+    remote_client: S3ClientWrapper,
     local_az_bucket: String,
     remote_az_bucket: String,
     data_blob_tracker: Arc<DataBlobTracker>,
@@ -70,7 +69,8 @@ impl S3ExpressMultiAzWithTracking {
             config.local_az_bucket, config.remote_az_bucket, config.local_az, config.rate_limit_config.enabled, config.retry_config.enabled
         );
 
-        let client_s3 = if config.local_az_host.ends_with("amazonaws.com") {
+        // Create local AZ S3 client
+        let local_client = if config.local_az_host.ends_with("amazonaws.com") {
             // For real AWS S3 Express with session auth
             create_s3_client_wrapper(
                 &config.local_az_host,
@@ -92,11 +92,39 @@ impl S3ExpressMultiAzWithTracking {
             .await
         };
 
-        let endpoint_url = format!("{}:{}", config.local_az_host, config.local_az_port);
-        info!("S3 client with tracking initialized with endpoint: {endpoint_url}");
+        // Create remote AZ S3 client
+        let remote_client = if config.remote_az_host.ends_with("amazonaws.com") {
+            // For real AWS S3 Express with session auth
+            create_s3_client_wrapper(
+                &config.remote_az_host,
+                config.remote_az_port,
+                &config.s3_region,
+                false,
+                &config.rate_limit_config,
+            )
+            .await
+        } else {
+            // For local minio testing - use common client creation with force_path_style=true
+            create_s3_client_wrapper(
+                &config.remote_az_host,
+                config.remote_az_port,
+                &config.s3_region,
+                true, // force_path_style for minio
+                &config.rate_limit_config,
+            )
+            .await
+        };
+
+        let local_endpoint = format!("{}:{}", config.local_az_host, config.local_az_port);
+        let remote_endpoint = format!("{}:{}", config.remote_az_host, config.remote_az_port);
+        info!(
+            "S3 clients with tracking initialized - local: {}, remote: {}",
+            local_endpoint, remote_endpoint
+        );
 
         Ok(Self {
-            client_s3,
+            local_client,
+            remote_client,
             local_az_bucket: config.local_az_bucket.clone(),
             remote_az_bucket: config.remote_az_bucket.clone(),
             data_blob_tracker,
@@ -113,6 +141,7 @@ impl S3ExpressMultiAzWithTracking {
     #[allow(dead_code)]
     async fn put_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
         body: Bytes,
@@ -122,7 +151,7 @@ impl S3ExpressMultiAzWithTracking {
     > {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .put_object()
                     .await
                     .bucket(bucket)
@@ -137,7 +166,7 @@ impl S3ExpressMultiAzWithTracking {
                     "s3_express_multi_az_with_tracking",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
+                    client
                         .put_object()
                         .await
                         .bucket(bucket)
@@ -153,12 +182,13 @@ impl S3ExpressMultiAzWithTracking {
     #[allow(dead_code)]
     async fn get_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
     ) -> Result<GetObjectOutput, SdkError<GetObjectError>> {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .get_object()
                     .await
                     .bucket(bucket)
@@ -172,12 +202,7 @@ impl S3ExpressMultiAzWithTracking {
                     "s3_express_multi_az_with_tracking",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
-                        .get_object()
-                        .await
-                        .bucket(bucket)
-                        .key(key)
-                        .send()
+                    client.get_object().await.bucket(bucket).key(key).send()
                 )
             }
         }
@@ -187,12 +212,13 @@ impl S3ExpressMultiAzWithTracking {
     #[allow(dead_code)]
     async fn delete_object_with_retry(
         &self,
+        client: &S3ClientWrapper,
         bucket: &str,
         key: &str,
     ) -> Result<DeleteObjectOutput, SdkError<DeleteObjectError>> {
         match self.retry_config.enabled {
             false => {
-                self.client_s3
+                client
                     .delete_object()
                     .await
                     .bucket(bucket)
@@ -206,12 +232,7 @@ impl S3ExpressMultiAzWithTracking {
                     "s3_express_multi_az_with_tracking",
                     bucket,
                     &self.retry_config,
-                    self.client_s3
-                        .delete_object()
-                        .await
-                        .bucket(bucket)
-                        .key(key)
-                        .send()
+                    client.delete_object().await.bucket(bucket).key(key).send()
                 )
             }
         }
@@ -329,8 +350,18 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             "Normal" => {
                 // Normal mode: write to both buckets concurrently
                 let (local_result, remote_result) = tokio::join!(
-                    self.put_object_with_retry(&self.local_az_bucket, &s3_key, body.clone()),
-                    self.put_object_with_retry(&self.remote_az_bucket, &s3_key, body.clone())
+                    self.put_object_with_retry(
+                        &self.local_client,
+                        &self.local_az_bucket,
+                        &s3_key,
+                        body.clone()
+                    ),
+                    self.put_object_with_retry(
+                        &self.remote_client,
+                        &self.remote_az_bucket,
+                        &s3_key,
+                        body.clone()
+                    )
                 );
 
                 // Check if local write failed (critical)
@@ -381,7 +412,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                     "s3_express_multi_az_tracking",
                     &self.local_az_bucket,
                     &self.retry_config,
-                    self.client_s3
+                    self.local_client
                         .put_object()
                         .await
                         .bucket(&self.local_az_bucket)
@@ -422,7 +453,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                     "s3_express_multi_az_tracking",
                     &self.local_az_bucket,
                     &self.retry_config,
-                    self.client_s3
+                    self.local_client
                         .put_object()
                         .await
                         .bucket(&self.local_az_bucket)
@@ -452,8 +483,18 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
                 );
                 // Default to Normal behavior
                 let (local_result, remote_result) = tokio::join!(
-                    self.put_object_with_retry(&self.local_az_bucket, &s3_key, body.clone()),
-                    self.put_object_with_retry(&self.remote_az_bucket, &s3_key, body.clone())
+                    self.put_object_with_retry(
+                        &self.local_client,
+                        &self.local_az_bucket,
+                        &s3_key,
+                        body.clone()
+                    ),
+                    self.put_object_with_retry(
+                        &self.remote_client,
+                        &self.remote_az_bucket,
+                        &s3_key,
+                        body.clone()
+                    )
                 );
 
                 if local_result.is_err() {
@@ -499,7 +540,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             "s3_express_multi_az_tracking",
             &self.local_az_bucket,
             &self.retry_config,
-            self.client_s3
+            self.local_client
                 .get_object()
                 .await
                 .bucket(&self.local_az_bucket)
@@ -576,7 +617,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             "s3_express_multi_az_tracking",
             &self.local_az_bucket,
             &self.retry_config,
-            self.client_s3
+            self.local_client
                 .delete_object()
                 .await
                 .bucket(&self.local_az_bucket)
@@ -589,7 +630,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
             "s3_express_multi_az_tracking",
             &self.remote_az_bucket,
             &self.retry_config,
-            self.client_s3
+            self.remote_client
                 .delete_object()
                 .await
                 .bucket(&self.remote_az_bucket)
