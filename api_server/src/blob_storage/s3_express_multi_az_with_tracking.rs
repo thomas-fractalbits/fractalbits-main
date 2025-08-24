@@ -136,7 +136,7 @@ impl S3ExpressMultiAzWithTracking {
             Ok(status_map) => {
                 let status = status_map
                     .az_status
-                    .get(&self.local_az)
+                    .get(az_id)
                     .unwrap_or(&"Normal".to_string())
                     .clone();
 
@@ -213,8 +213,8 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
 
         let start = Instant::now();
         let s3_key = blob_key(blob_id, block_number);
-        let tracking_root =
-            tracking_root_blob_name.expect("could not find tracking_root_blob_name");
+        let tracking_root = tracking_root_blob_name.expect("No tracking_root_blob_name provided");
+        assert!(!tracking_root.is_empty());
 
         // Use tracking logic when tracking_root_blob_name is provided
         let local_az_status = self.get_az_status(&self.local_az).await;
@@ -480,16 +480,16 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         block_number: u32,
     ) -> Result<(), BlobStorageError> {
         let s3_key = blob_key(blob_id, block_number);
-        let tracking_name = tracking_root_blob_name
-            .expect("tracking_root_blob_name is required for multi_az_with_tracking");
+        let tracking_root = tracking_root_blob_name.expect("No tracking_root_blob_name provided");
+        assert!(!tracking_root.is_empty());
 
         // Record deleted blob for tracking
-        self.record_deleted_blob(tracking_name, &s3_key).await?;
+        self.record_deleted_blob(tracking_root, &s3_key).await?;
 
         // Try to delete from single-copy tracking
         let _ = self
             .data_blob_tracker
-            .delete_single_copy_data_blob(tracking_name, &s3_key)
+            .delete_single_copy_data_blob(tracking_root, &s3_key)
             .await; // Ignore errors - blob may not be in single-copy tracking
 
         // Delete from both buckets concurrently (best effort)

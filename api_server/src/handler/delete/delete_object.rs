@@ -60,7 +60,12 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
     }
     match object.state {
         ObjectState::Normal(..) => {
-            delete_blob(&bucket.tracking_root_blob_name, &object, blob_deletion).await?;
+            delete_blob(
+                bucket.tracking_root_blob_name.clone(),
+                &object,
+                blob_deletion,
+            )
+            .await?;
         }
         ObjectState::Mpu(mpu_state) => match mpu_state {
             MpuState::Uploading => {
@@ -90,7 +95,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
                     )
                     .await?;
                     delete_blob(
-                        &bucket.tracking_root_blob_name,
+                        bucket.tracking_root_blob_name.clone(),
                         mpu_obj,
                         blob_deletion.clone(),
                     )
@@ -103,14 +108,14 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
 }
 
 async fn delete_blob(
-    tracking_root_blob_name: &str,
+    tracking_root_blob_name: Option<String>,
     object: &ObjectLayout,
-    blob_deletion: Sender<(String, BlobId, usize)>,
+    blob_deletion: Sender<(Option<String>, BlobId, usize)>,
 ) -> Result<(), S3Error> {
     let blob_id = object.blob_id()?;
     let num_blocks = object.num_blocks()?;
     if let Err(e) = blob_deletion
-        .send((tracking_root_blob_name.to_string(), blob_id, num_blocks))
+        .send((tracking_root_blob_name, blob_id, num_blocks))
         .await
     {
         tracing::warn!(

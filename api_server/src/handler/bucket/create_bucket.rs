@@ -93,7 +93,12 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
     .await?;
     let (root_blob_name, tracking_root_blob_name) = match resp.result.unwrap() {
         create_root_inode_response::Result::Ok(blobs) => {
-            (blobs.root_blob_name, blobs.tracking_root_blob_name)
+            let tracking_root = if blobs.tracking_root_blob_name.is_empty() {
+                None
+            } else {
+                Some(blobs.tracking_root_blob_name)
+            };
+            (blobs.root_blob_name, tracking_root)
         }
         create_root_inode_response::Result::Err(e) => {
             tracing::error!(e);

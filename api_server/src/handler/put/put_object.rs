@@ -31,6 +31,7 @@ use super::block_data_stream::BlockDataStream;
 
 pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S3Error> {
     let bucket = ctx.resolve_bucket().await?;
+    let tracking_root_blob_name = bucket.tracking_root_blob_name;
     let blob_deletion = ctx.app.get_blob_deletion();
     let start = Instant::now();
     let headers = extract_metadata_headers(ctx.request.headers())?;
@@ -54,12 +55,12 @@ pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
         .enumerate()
         .map(|(i, block_data)| {
             let blob_client = blob_client.clone();
-            let tracking_root_blob_name = bucket.tracking_root_blob_name.clone();
+            let tracking_root_blob_name = tracking_root_blob_name.clone();
             async move {
                 let data = block_data.map_err(|_e| S3Error::InternalError)?;
                 let len = data.len() as u64;
                 let put_result = blob_client
-                    .put_blob(Some(&tracking_root_blob_name), blob_id, i as u32, data)
+                    .put_blob(tracking_root_blob_name.as_deref(), blob_id, i as u32, data)
                     .await;
 
                 match put_result {
@@ -142,7 +143,7 @@ pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
         let blob_id = old_object.blob_id()?;
         let num_blocks = old_object.num_blocks()?;
         if let Err(e) = blob_deletion
-            .send((ctx.bucket_name.clone(), blob_id, num_blocks))
+            .send((tracking_root_blob_name, blob_id, num_blocks))
             .await
         {
             tracing::warn!(

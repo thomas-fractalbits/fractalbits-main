@@ -355,7 +355,7 @@ impl DataBlobTracker {
     /// Uses efficient RSS list operation that now returns bucket values directly
     pub async fn list_buckets_with_tracking(
         &self,
-    ) -> Result<Vec<(String, String)>, DataBlobTrackingError> {
+    ) -> Result<Vec<(String, Option<String>)>, DataBlobTrackingError> {
         let prefix = "/buckets/";
         let bucket_values = rss_rpc_retry!(self, list(prefix, None)).await?;
 

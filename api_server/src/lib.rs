@@ -41,7 +41,7 @@ pub struct AppState {
     rpc_clients_rss: ConnPool<Arc<RpcClientRss>, String>,
 
     blob_client: Arc<BlobClient>,
-    blob_deletion: Sender<(String, BlobId, usize)>,
+    blob_deletion: Sender<(Option<String>, BlobId, usize)>,
     pub data_blob_tracker: Arc<DataBlobTracker>,
 }
 
@@ -188,7 +188,7 @@ impl AppState {
         self.blob_client.clone()
     }
 
-    pub fn get_blob_deletion(&self) -> Sender<(String, BlobId, usize)> {
+    pub fn get_blob_deletion(&self) -> Sender<(Option<String>, BlobId, usize)> {
         self.blob_deletion.clone()
     }
 }
@@ -202,7 +202,7 @@ pub struct BlobClient {
 impl BlobClient {
     pub async fn new(
         blob_storage_config: &BlobStorageConfig,
-        rx: Receiver<(String, BlobId, usize)>,
+        rx: Receiver<(Option<String>, BlobId, usize)>,
         rpc_timeout: Duration,
         data_blob_tracker: Option<Arc<DataBlobTracker>>,
     ) -> Result<(Self, Option<Arc<Cache<String, String>>>), BlobStorageError> {
@@ -383,7 +383,7 @@ impl BlobClient {
 
     async fn blob_deletion_task(
         storage: Arc<BlobStorageImpl>,
-        mut input: Receiver<(String, BlobId, usize)>,
+        mut input: Receiver<(Option<String>, BlobId, usize)>,
     ) -> Result<(), BlobStorageError> {
         while let Some((tracking_root_blob_name, blob_id, block_numbers)) = input.recv().await {
             let deleted = stream::iter(0..block_numbers)
@@ -392,7 +392,7 @@ impl BlobClient {
                     let tracking_root = tracking_root_blob_name.clone();
                     async move {
                         let res = storage
-                            .delete_blob(Some(&tracking_root), blob_id, block_number as u32)
+                            .delete_blob(tracking_root.as_deref(), blob_id, block_number as u32)
                             .await;
                         match res {
                             Ok(()) => 1,
