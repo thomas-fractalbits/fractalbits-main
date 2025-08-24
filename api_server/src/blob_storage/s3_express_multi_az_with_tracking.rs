@@ -14,7 +14,6 @@ use bytes::Bytes;
 use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
 use metrics::{counter, histogram};
 use moka::future::Cache;
-use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcClientRss;
 use std::sync::Arc;
 use std::time::Instant;
@@ -43,7 +42,6 @@ pub struct S3ExpressMultiAzWithTracking {
     remote_az_bucket: String,
     data_blob_tracker: Arc<DataBlobTracker>,
     rss_client: Arc<RpcClientRss>,
-    nss_client: Arc<RpcClientNss>,
     local_az: String,
     remote_az: String,
     retry_config: S3RetryConfig,
@@ -61,7 +59,6 @@ impl S3ExpressMultiAzWithTracking {
         config: &S3ExpressWithTrackingConfig,
         data_blob_tracker: Arc<DataBlobTracker>,
         rss_client: Arc<RpcClientRss>,
-        nss_client: Arc<RpcClientNss>,
         az_status_cache: Arc<Cache<String, String>>,
     ) -> Result<Self, BlobStorageError> {
         info!(
@@ -129,7 +126,6 @@ impl S3ExpressMultiAzWithTracking {
             remote_az_bucket: config.remote_az_bucket.clone(),
             data_blob_tracker,
             rss_client,
-            nss_client,
             local_az: config.local_az.clone(),
             remote_az: config.remote_az.clone(),
             retry_config: config.retry_config.clone(),
@@ -297,12 +293,7 @@ impl S3ExpressMultiAzWithTracking {
         metadata: &[u8],
     ) -> Result<(), BlobStorageError> {
         self.data_blob_tracker
-            .put_single_copy_data_blob(
-                &self.nss_client,
-                bucket_name,
-                s3_key,
-                metadata,
-            )
+            .put_single_copy_data_blob(bucket_name, s3_key, metadata)
             .await?;
         Ok(())
     }
@@ -315,12 +306,7 @@ impl S3ExpressMultiAzWithTracking {
     ) -> Result<(), BlobStorageError> {
         let timestamp = DataBlobTracker::current_timestamp_bytes();
         self.data_blob_tracker
-            .put_deleted_data_blob(
-                &self.nss_client,
-                bucket_name,
-                s3_key,
-                &timestamp,
-            )
+            .put_deleted_data_blob(bucket_name, s3_key, &timestamp)
             .await?;
         Ok(())
     }
@@ -613,7 +599,7 @@ impl BlobStorage for S3ExpressMultiAzWithTracking {
         // Try to delete from single-copy tracking
         let _ = self
             .data_blob_tracker
-            .delete_single_copy_data_blob(&self.nss_client, bucket_name, &s3_key)
+            .delete_single_copy_data_blob(bucket_name, &s3_key)
             .await; // Ignore errors - blob may not be in single-copy tracking
 
         // Delete from both buckets concurrently (best effort)

@@ -73,13 +73,15 @@ impl AppState {
             Self::new_rpc_clients_pool_nss(&config.nss_addr, config.nss_conn_num).await;
 
         let (tx, rx) = mpsc::channel(1024 * 1024);
-        let data_blob_tracker = Arc::new(DataBlobTracker::with_pool(
+        let data_blob_tracker = Arc::new(DataBlobTracker::with_pools(
             config.rss_addr.clone(),
             rpc_clients_rss.clone(),
+            config.nss_addr.clone(),
+            rpc_clients_nss.clone(),
         ));
 
         // Get clients for tracking backend if needed
-        let (rss_client_for_blob, nss_client_for_blob) = if matches!(
+        let rss_client_for_blob = if matches!(
             config.blob_storage.backend,
             BlobStorageBackend::S3ExpressMultiAzWithTracking
         ) {
@@ -88,14 +90,9 @@ impl AppState {
                     .await
                     .expect("Failed to create RSS client for blob storage"),
             );
-            let nss_client = Arc::new(
-                <RpcClientNss as slotmap_conn_pool::Poolable>::new(config.nss_addr.clone())
-                    .await
-                    .expect("Failed to create NSS client for blob storage"),
-            );
-            (Some(rss_client), Some(nss_client))
+            Some(rss_client)
         } else {
-            (None, None)
+            None
         };
 
         let cache = Arc::new(
@@ -111,7 +108,6 @@ impl AppState {
             config.rpc_timeout(),
             Some(data_blob_tracker.clone()),
             rss_client_for_blob,
-            nss_client_for_blob,
             cache.clone(),
         )
         .await
@@ -227,7 +223,6 @@ impl BlobClient {
         rpc_timeout: Duration,
         data_blob_tracker: Option<Arc<DataBlobTracker>>,
         rss_client: Option<Arc<RpcClientRss>>,
-        nss_client: Option<Arc<RpcClientNss>>,
         _cache: Arc<Cache<String, Versioned<String>>>,
     ) -> Result<(Self, Option<Arc<Cache<String, String>>>), BlobStorageError> {
         let storage = match &blob_storage_config.backend {
@@ -311,11 +306,6 @@ impl BlobClient {
                         "RSS client required for S3ExpressWithTracking backend".into(),
                     )
                 })?;
-                let nss_client = nss_client.ok_or_else(|| {
-                    BlobStorageError::Config(
-                        "NSS client required for S3ExpressWithTracking backend".into(),
-                    )
-                })?;
                 let express_config = S3ExpressWithTrackingConfig {
                     local_az_host: s3_express_config.local_az_host.clone(),
                     local_az_port: s3_express_config.local_az_port,
@@ -345,7 +335,6 @@ impl BlobClient {
                         &express_config,
                         data_blob_tracker,
                         rss_client,
-                        nss_client,
                         az_status_cache.clone(),
                     )
                     .await?,

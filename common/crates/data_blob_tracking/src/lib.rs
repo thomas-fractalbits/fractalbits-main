@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use rpc_client_common::{rpc_retry, rss_rpc_retry};
+use rpc_client_common::{nss_rpc_retry, rpc_retry, rss_rpc_retry};
 use rpc_client_nss::{RpcClientNss, RpcErrorNss};
 use rpc_client_rss::{RpcClientRss, RpcErrorRss};
 use slotmap_conn_pool::ConnPool;
@@ -27,6 +27,10 @@ pub struct DataBlobTracker {
     rss_conn_pool: ConnPool<Arc<RpcClientRss>, String>,
     /// RSS endpoint address
     rss_endpoint: String,
+    /// NSS connection pool for reuse across operations
+    nss_conn_pool: ConnPool<Arc<RpcClientNss>, String>,
+    /// NSS endpoint address
+    nss_endpoint: String,
 }
 
 impl DataBlobTracker {
@@ -35,17 +39,23 @@ impl DataBlobTracker {
             root_blob_cache: tokio::sync::RwLock::new(HashMap::new()),
             rss_conn_pool: ConnPool::new(),
             rss_endpoint: "localhost:9000".to_string(),
+            nss_conn_pool: ConnPool::new(),
+            nss_endpoint: "localhost:8000".to_string(),
         }
     }
 
-    pub fn with_pool(
+    pub fn with_pools(
         rss_endpoint: String,
         rss_conn_pool: ConnPool<Arc<RpcClientRss>, String>,
+        nss_endpoint: String,
+        nss_conn_pool: ConnPool<Arc<RpcClientNss>, String>,
     ) -> Self {
         Self {
             root_blob_cache: tokio::sync::RwLock::new(HashMap::new()),
             rss_conn_pool,
             rss_endpoint,
+            nss_conn_pool,
+            nss_endpoint,
         }
     }
 
@@ -59,10 +69,19 @@ impl DataBlobTracker {
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
+    /// Checkout an NSS client from the connection pool for use with rpc_retry macro
+    async fn checkout_rpc_client_nss(
+        &self,
+    ) -> Result<Arc<RpcClientNss>, Box<dyn std::error::Error + Send + Sync>> {
+        self.nss_conn_pool
+            .checkout(self.nss_endpoint.clone())
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+    }
+
     /// Get or create root blob name for data blob tracking tree
     async fn get_or_create_data_blob_tree_root(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
     ) -> Result<String, DataBlobTrackingError> {
         let key = format!("data_blob_resync/{bucket_name}");
@@ -87,9 +106,11 @@ impl DataBlobTracker {
             }
             Err(RpcErrorRss::NotFound) => {
                 // Create new tree and store root blob name
-                let response = nss_client
-                    .create_root_inode(&format!("data_blob_resync_{bucket_name}"), None)
-                    .await?;
+                let response = nss_rpc_retry!(
+                    self,
+                    create_root_inode(&format!("data_blob_resync_{bucket_name}"), None)
+                )
+                .await?;
                 let root_blob_name = match response.result {
                     Some(resp_result) => match resp_result {
                         rpc_client_nss::rpc::create_root_inode_response::Result::Ok(name) => name,
@@ -120,38 +141,34 @@ impl DataBlobTracker {
     /// Record a blob that exists only in local AZ
     pub async fn put_single_copy_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
         metadata: &[u8],
     ) -> Result<(), DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("single/{blob_key}");
-        nss_client
-            .put_inode(
+        nss_rpc_retry!(
+            self,
+            put_inode(
                 &root_blob_name,
                 &key,
                 Bytes::copy_from_slice(metadata),
-                None,
+                None
             )
-            .await?;
+        )
+        .await?;
         Ok(())
     }
 
     /// Check if a blob is single-copy
     pub async fn get_single_copy_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("single/{blob_key}");
-        match nss_client.get_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, get_inode(&root_blob_name, &key, None)).await {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
@@ -173,15 +190,12 @@ impl DataBlobTracker {
     /// Remove blob from single-copy tracking
     pub async fn delete_single_copy_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<(), DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("single/{blob_key}");
-        match nss_client.delete_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, delete_inode(&root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
             Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
@@ -191,18 +205,15 @@ impl DataBlobTracker {
     /// Remove blob from single-copy tracking by blob key (with null terminator handling)
     pub async fn delete_single_copy_data_blob_by_key(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<(), DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
 
         // Use the blob key with single prefix, trimming null terminators
         let trimmed_key = blob_key.trim_end_matches('\0');
         let key = format!("single/{trimmed_key}");
-        match nss_client.delete_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, delete_inode(&root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
             Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
@@ -212,38 +223,34 @@ impl DataBlobTracker {
     /// Record a deleted blob to skip during resync
     pub async fn put_deleted_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
         timestamp: &[u8],
     ) -> Result<(), DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("deleted/{blob_key}");
-        nss_client
-            .put_inode(
+        nss_rpc_retry!(
+            self,
+            put_inode(
                 &root_blob_name,
                 &key,
                 Bytes::copy_from_slice(timestamp),
-                None,
+                None
             )
-            .await?;
+        )
+        .await?;
         Ok(())
     }
 
     /// Check if a blob is marked as deleted
     pub async fn get_deleted_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("deleted/{blob_key}");
-        match nss_client.get_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, get_inode(&root_blob_name, &key, None)).await {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
@@ -265,18 +272,15 @@ impl DataBlobTracker {
     /// Get deleted data blob tracking entry by blob key
     pub async fn get_deleted_data_blob_by_key(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<Option<Vec<u8>>, DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
 
         // Use the blob key with deleted prefix, trimming null terminators
         let trimmed_key = blob_key.trim_end_matches('\0');
         let key = format!("deleted/{trimmed_key}");
-        match nss_client.get_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, get_inode(&root_blob_name, &key, None)).await {
             Ok(response) => match response.result {
                 Some(rpc_client_nss::rpc::get_inode_response::Result::Ok(bytes)) => {
                     Ok(Some(bytes.to_vec()))
@@ -293,15 +297,12 @@ impl DataBlobTracker {
     /// Remove blob from deleted tracking (used during sanitize)
     pub async fn delete_deleted_data_blob(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         blob_key: &str,
     ) -> Result<(), DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
         let key = format!("deleted/{blob_key}");
-        match nss_client.delete_inode(&root_blob_name, &key, None).await {
+        match nss_rpc_retry!(self, delete_inode(&root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
             Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
@@ -311,15 +312,12 @@ impl DataBlobTracker {
     /// List single-copy data blobs for resync
     pub async fn list_single_copy_data_blobs(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         prefix: &str,
         start_after: &str,
         max_keys: u32,
     ) -> Result<Vec<(String, String)>, DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
 
         // Add single/ prefix to the search parameters
         let search_prefix = if prefix.is_empty() {
@@ -333,17 +331,19 @@ impl DataBlobTracker {
             format!("single/{start_after}")
         };
 
-        let response = nss_client
-            .list_inodes(
+        let response = nss_rpc_retry!(
+            self,
+            list_inodes(
                 &root_blob_name,
                 max_keys,
                 &search_prefix,
                 "",
                 &search_start_after,
                 false,
-                None,
+                None
             )
-            .await?;
+        )
+        .await?;
 
         // Extract the list from the response
         match response.result {
@@ -372,15 +372,12 @@ impl DataBlobTracker {
     /// List deleted data blobs for sanitize
     pub async fn list_deleted_data_blobs(
         &self,
-        nss_client: &RpcClientNss,
         bucket_name: &str,
         prefix: &str,
         start_after: &str,
         max_keys: u32,
     ) -> Result<Vec<(String, Vec<u8>)>, DataBlobTrackingError> {
-        let root_blob_name = self
-            .get_or_create_data_blob_tree_root(nss_client, bucket_name)
-            .await?;
+        let root_blob_name = self.get_or_create_data_blob_tree_root(bucket_name).await?;
 
         // Add deleted/ prefix to the search parameters
         let search_prefix = if prefix.is_empty() {
@@ -394,17 +391,19 @@ impl DataBlobTracker {
             format!("deleted/{start_after}")
         };
 
-        let response = nss_client
-            .list_inodes(
+        let response = nss_rpc_retry!(
+            self,
+            list_inodes(
                 &root_blob_name,
                 max_keys,
                 &search_prefix,
                 "",
                 &search_start_after,
                 false,
-                None,
+                None
             )
-            .await?;
+        )
+        .await?;
 
         // Extract the list from the response
         match response.result {
