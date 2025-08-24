@@ -79,13 +79,22 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
     }
 
     let rpc_timeout = ctx.app.config.rpc_timeout();
+
+    // Determine if we're in multi-AZ mode based on the blob storage backend
+    let is_multi_az = matches!(
+        ctx.app.config.blob_storage.backend,
+        crate::BlobStorageBackend::S3ExpressMultiAzWithTracking
+    );
+
     let resp = nss_rpc_retry!(
         ctx.app,
-        create_root_inode(&ctx.bucket_name, Some(rpc_timeout))
+        create_root_inode(&ctx.bucket_name, is_multi_az, Some(rpc_timeout))
     )
     .await?;
-    let root_blob_name = match resp.result.unwrap() {
-        create_root_inode_response::Result::Ok(res) => res,
+    let (root_blob_name, tracking_root_blob_name) = match resp.result.unwrap() {
+        create_root_inode_response::Result::Ok(blobs) => {
+            (blobs.root_blob_name, blobs.tracking_root_blob_name)
+        }
         create_root_inode_response::Result::Err(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
@@ -106,7 +115,11 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
 
         let mut bucket = Versioned::new(
             0,
-            Bucket::new(ctx.bucket_name.clone(), root_blob_name.clone()),
+            Bucket::new(
+                ctx.bucket_name.clone(),
+                root_blob_name.clone(),
+                tracking_root_blob_name.clone(),
+            ),
         );
         let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
         bucket

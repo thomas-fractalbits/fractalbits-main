@@ -385,14 +385,14 @@ impl BlobClient {
         storage: Arc<BlobStorageImpl>,
         mut input: Receiver<(String, BlobId, usize)>,
     ) -> Result<(), BlobStorageError> {
-        while let Some((bucket_name, blob_id, block_numbers)) = input.recv().await {
+        while let Some((tracking_root_blob_name, blob_id, block_numbers)) = input.recv().await {
             let deleted = stream::iter(0..block_numbers)
                 .map(|block_number| {
                     let storage = storage.clone();
-                    let bucket_name = bucket_name.clone();
+                    let tracking_root = tracking_root_blob_name.clone();
                     async move {
                         let res = storage
-                            .delete_blob(&bucket_name, blob_id, block_number as u32)
+                            .delete_blob(Some(&tracking_root), blob_id, block_number as u32)
                             .await;
                         match res {
                             Ok(()) => 1,
@@ -416,36 +416,33 @@ impl BlobClient {
 
     pub async fn put_blob(
         &self,
-        bucket_name: &str,
+        tracking_root_blob_name: Option<&str>,
         blob_id: Uuid,
         block_number: u32,
         body: Bytes,
     ) -> Result<(), BlobStorageError> {
         self.storage
-            .put_blob(bucket_name, blob_id, block_number, body)
+            .put_blob(tracking_root_blob_name, blob_id, block_number, body)
             .await
     }
 
     pub async fn get_blob(
         &self,
-        bucket_name: &str,
         blob_id: Uuid,
         block_number: u32,
         body: &mut Bytes,
     ) -> Result<(), BlobStorageError> {
-        self.storage
-            .get_blob(bucket_name, blob_id, block_number, body)
-            .await
+        self.storage.get_blob(blob_id, block_number, body).await
     }
 
     pub async fn delete_blob(
         &self,
-        bucket_name: &str,
+        tracking_root_blob_name: Option<&str>,
         blob_id: Uuid,
         block_number: u32,
     ) -> Result<(), BlobStorageError> {
         self.storage
-            .delete_blob(bucket_name, blob_id, block_number)
+            .delete_blob(tracking_root_blob_name, blob_id, block_number)
             .await
     }
 }

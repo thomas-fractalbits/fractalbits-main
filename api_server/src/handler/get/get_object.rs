@@ -97,15 +97,9 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
     match (query_opts.part_number, range) {
         (_, None) => {
-            let (body, body_size) = get_object_content(
-                ctx.app,
-                &bucket,
-                &ctx.bucket_name,
-                &object,
-                ctx.key,
-                query_opts.part_number,
-            )
-            .await?;
+            let (body, body_size) =
+                get_object_content(ctx.app, &bucket, &object, ctx.key, query_opts.part_number)
+                    .await?;
 
             let mut resp = Response::new(body);
             object_headers(&mut resp, &object, checksum_mode_enabled)?;
@@ -119,15 +113,7 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
         }
 
         (None, Some(range)) => {
-            let body = get_object_range_content(
-                ctx.app,
-                &bucket,
-                &ctx.bucket_name,
-                &object,
-                ctx.key,
-                &range,
-            )
-            .await?;
+            let body = get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range).await?;
 
             let mut resp = Response::new(body);
             resp.headers_mut().insert(
@@ -184,7 +170,6 @@ pub fn override_headers(resp: &mut Response, query_opts: &QueryOpts) -> Result<(
 pub async fn get_object_content(
     app: Arc<AppState>,
     bucket: &Bucket,
-    bucket_name: &str,
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
@@ -195,7 +180,7 @@ pub async fn get_object_content(
             let blob_id = object.blob_id()?;
             let num_blocks = object.num_blocks()?;
             let size = object.size()?;
-            let body = get_full_blob_stream(blob_client, bucket_name, blob_id, num_blocks).await?;
+            let body = get_full_blob_stream(blob_client, blob_id, num_blocks).await?;
             Ok((body, size))
         }
         ObjectState::Mpu(ref mpu_state) => match mpu_state {
@@ -228,15 +213,13 @@ pub async fn get_object_content(
                         (vec![mpu_obj].into_iter(), mpu_size)
                     }
                 };
-                let bucket_name_clone = bucket_name.to_string();
                 let body_stream = futures::stream::iter(mpus_iter)
                     .then(move |(_key, mpu_obj)| {
                         let blob_client = blob_client.clone();
-                        let bucket_name = bucket_name_clone.clone();
                         async move {
                             let blob_id = mpu_obj.blob_id().map_err(axum::Error::new)?;
                             let num_blocks = mpu_obj.num_blocks().map_err(axum::Error::new)?;
-                            get_full_blob_stream(blob_client, &bucket_name, blob_id, num_blocks)
+                            get_full_blob_stream(blob_client, blob_id, num_blocks)
                                 .await
                                 .map_err(axum::Error::new)
                         }
@@ -252,7 +235,6 @@ pub async fn get_object_content(
 async fn get_object_range_content(
     app: Arc<AppState>,
     bucket: &Bucket,
-    bucket_name: &str,
     object: &ObjectLayout,
     key: String,
     range: &std::ops::Range<usize>,
@@ -262,15 +244,9 @@ async fn get_object_range_content(
     match object.state {
         ObjectState::Normal(ref _obj_data) => {
             let blob_id = object.blob_id()?;
-            let body_stream = get_range_blob_stream(
-                blob_client,
-                bucket_name,
-                blob_id,
-                block_size,
-                range.start,
-                range.end,
-            )
-            .await;
+            let body_stream =
+                get_range_blob_stream(blob_client, blob_id, block_size, range.start, range.end)
+                    .await;
             Ok(Body::from_stream(body_stream))
         }
         ObjectState::Mpu(ref mpu_state) => match mpu_state {
@@ -315,15 +291,12 @@ async fn get_object_range_content(
                     obj_offset += mpu_size;
                 }
 
-                let bucket_name_clone = bucket_name.to_string();
                 let body_stream = futures::stream::iter(mpu_blobs.into_iter())
                     .then(move |(blob_id, blob_start, blob_end)| {
                         let blob_client = blob_client.clone();
-                        let bucket_name = bucket_name_clone.clone();
                         async move {
                             Ok(get_range_blob_stream(
                                 blob_client,
-                                &bucket_name,
                                 blob_id,
                                 block_size,
                                 blob_start,
@@ -341,7 +314,6 @@ async fn get_object_range_content(
 
 async fn get_full_blob_stream(
     blob_client: Arc<BlobClient>,
-    bucket_name: &str,
     blob_id: BlobId,
     num_blocks: usize,
 ) -> Result<Body, S3Error> {
@@ -352,7 +324,7 @@ async fn get_full_blob_stream(
     // Get the first block
     let mut first_block = Bytes::new();
     blob_client
-        .get_blob(bucket_name, blob_id, 0, &mut first_block)
+        .get_blob(blob_id, 0, &mut first_block)
         .await
         .map_err(|e| {
             tracing::error!(%blob_id, block_number=0, error=?e, "failed to get blob");
@@ -364,16 +336,11 @@ async fn get_full_blob_stream(
     }
 
     // Stream for remaining blocks
-    let bucket_name = bucket_name.to_string();
     let remaining_stream = stream::iter(1..num_blocks).then(move |i| {
         let blob_client = blob_client.clone();
-        let bucket_name = bucket_name.clone();
         async move {
             let mut block = Bytes::new();
-            match blob_client
-                .get_blob(&bucket_name, blob_id, i as u32, &mut block)
-                .await
-            {
+            match blob_client.get_blob(blob_id, i as u32, &mut block).await {
                 Err(e) => {
                     tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
                     Err(S3Error::from(e))
@@ -390,7 +357,6 @@ async fn get_full_blob_stream(
 
 async fn get_range_blob_stream(
     blob_client: Arc<BlobClient>,
-    bucket_name: &str,
     blob_id: BlobId,
     block_size: usize,
     start: usize,
@@ -398,17 +364,12 @@ async fn get_range_blob_stream(
 ) -> BodyDataStream {
     let start_block_i = start / block_size;
     let blob_offset: usize = block_size * start_block_i;
-    let bucket_name = bucket_name.to_string();
     let body_stream = futures::stream::iter(start_block_i..)
         .then(move |i| {
             let blob_client = blob_client.clone();
-            let bucket_name = bucket_name.clone();
             async move {
                 let mut block = Bytes::new();
-                match blob_client
-                    .get_blob(&bucket_name, blob_id, i as u32, &mut block)
-                    .await
-                {
+                match blob_client.get_blob(blob_id, i as u32, &mut block).await {
                     Err(e) => {
                         tracing::error!(%blob_id, block_number=i, error=?e, "failed to get blob");
                         Err(axum::Error::new(e))

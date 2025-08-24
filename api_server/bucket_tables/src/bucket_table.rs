@@ -11,10 +11,15 @@ pub struct Bucket {
     pub creation_date: u64,
     pub authorized_keys: HashMap<String /* ApiKey id */, BucketKeyPerm>,
     pub root_blob_name: String,
+    pub tracking_root_blob_name: String,
 }
 
 impl Bucket {
-    pub fn new(bucket_name: String, root_blob_name: String) -> Self {
+    pub fn new(
+        bucket_name: String,
+        root_blob_name: String,
+        tracking_root_blob_name: String,
+    ) -> Self {
         let creation_date = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -25,6 +30,7 @@ impl Bucket {
             creation_date,
             authorized_keys: HashMap::new(),
             root_blob_name,
+            tracking_root_blob_name,
         }
     }
 }

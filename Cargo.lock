@@ -1523,10 +1523,13 @@ dependencies = [
 name = "data_blob_tracking"
 version = "0.1.0"
 dependencies = [
+ "bucket_tables",
  "bytes",
  "rpc_client_common",
  "rpc_client_nss",
  "rpc_client_rss",
+ "serde",
+ "serde_json",
  "slotmap_conn_pool",
  "thiserror 1.0.69",
  "tokio",

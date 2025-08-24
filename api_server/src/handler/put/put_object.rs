@@ -50,17 +50,16 @@ pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
     let body_data_stream = Body::from_stream(body_stream).into_data_stream();
     let blob_id = Uuid::now_v7();
     let blob_client = ctx.app.get_blob_client();
-    let bucket_name = ctx.bucket_name.clone();
     let size = BlockDataStream::new(body_data_stream, ObjectLayout::DEFAULT_BLOCK_SIZE)
         .enumerate()
         .map(|(i, block_data)| {
             let blob_client = blob_client.clone();
-            let bucket_name = bucket_name.clone();
+            let tracking_root_blob_name = bucket.tracking_root_blob_name.clone();
             async move {
                 let data = block_data.map_err(|_e| S3Error::InternalError)?;
                 let len = data.len() as u64;
                 let put_result = blob_client
-                    .put_blob(&bucket_name, blob_id, i as u32, data)
+                    .put_blob(Some(&tracking_root_blob_name), blob_id, i as u32, data)
                     .await;
 
                 match put_result {

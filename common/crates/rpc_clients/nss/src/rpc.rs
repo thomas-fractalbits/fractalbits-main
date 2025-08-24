@@ -188,11 +188,13 @@ impl RpcClient {
     pub async fn create_root_inode(
         &self,
         bucket: &str,
+        az_mirroring: bool,
         timeout: Option<Duration>,
     ) -> Result<CreateRootInodeResponse, RpcError> {
         let _guard = InflightRpcGuard::new("nss", "create_root_inode");
         let body = CreateRootInodeRequest {
             bucket: bucket.to_string(),
+            az_mirroring,
         };
 
         let mut header = MessageHeader::default();
