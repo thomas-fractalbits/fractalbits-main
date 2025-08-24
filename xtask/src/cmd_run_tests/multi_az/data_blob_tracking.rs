@@ -37,7 +37,7 @@ fn dump_single_copy_blobs_list() -> Result<ResyncResult, std::io::Error> {
     // Handle empty output case
     let trimmed_output = output.trim();
     if trimmed_output.is_empty() {
-        eprintln!("Warning: Empty output from resync command, returning empty result");
+        warn!("Empty output from resync command, returning empty result");
         return Ok(ResyncResult {
             blobs: vec![],
             total_processed: 0,
