@@ -87,7 +87,10 @@ new FractalbitsMetaStack(app, "FractalbitsMetaStack-Bss", {
 
 // === VpcWithPrivateLinkStack ===
 new VpcWithPrivateLinkStack(app, "VpcWithPrivateLinkStack", {
-  env: env,
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: "us-east-2",
+  },
 });
 
 // === S3ExpressCrossAzTestStack ===

@@ -3,7 +3,11 @@ import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as elbv2_targets from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
-import { createVpcEndpoints, createEc2Role } from "./ec2-utils";
+import {
+  createVpcEndpoints,
+  createEc2Role,
+  getAzNameFromIdAtBuildTime,
+} from "./ec2-utils";
 import { Instance } from "aws-cdk-lib/aws-ec2";
 import { AccountRootPrincipal } from "aws-cdk-lib/aws-iam";
 
@@ -19,10 +23,14 @@ export class VpcWithPrivateLinkStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
+    // Resolve AZ IDs to actual AZ names for us-east-2
+    const az1Name = getAzNameFromIdAtBuildTime("use2-az1", "us-east-2");
+    const az2Name = getAzNameFromIdAtBuildTime("use2-az2", "us-east-2");
+
     this.vpc = new ec2.Vpc(this, "VpcWithPrivateLink", {
       vpcName: "vpc-with-private-link",
       ipAddresses: ec2.IpAddresses.cidr("10.0.0.0/16"),
-      maxAzs: 2,
+      availabilityZones: [az1Name, az2Name],
       natGateways: 0,
       subnetConfiguration: [
         {
@@ -56,10 +64,10 @@ export class VpcWithPrivateLinkStack extends cdk.Stack {
       cpuType: ec2.AmazonLinuxCpuType.ARM_64,
     });
 
-    const az1 = this.availabilityZones[0];
-    const az2 = this.availabilityZones[1];
+    const az1 = az1Name;
+    const az2 = az2Name;
 
-    const instanceType = new ec2.InstanceType("m7gd.4xlarge");
+    const instanceType = new ec2.InstanceType("m7g.4xlarge");
     const provider = new Instance(this, "Provider", {
       vpc: this.vpc,
       vpcSubnets: {
