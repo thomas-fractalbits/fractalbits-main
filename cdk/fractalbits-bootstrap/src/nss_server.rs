@@ -160,6 +160,7 @@ service_type = "unknown"
 mirrord_endpoint = "{mirrord_endpoint}"
 nss_port = 8088
 mirrord_port = 9999
+rpc_server_port = 8077
 "##
     );
 
