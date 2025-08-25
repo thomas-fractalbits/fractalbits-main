@@ -110,8 +110,8 @@ enum Cmd {
         #[clap(long)]
         bss_use_i3: bool,
 
-        #[clap(long, default_value = "all")]
-        mode: String,
+        #[clap(long, default_value = "all", value_enum)]
+        mode: DeployMode,
     },
 
     #[clap(about = "Grant S3 build bucket policy")]
@@ -175,6 +175,23 @@ pub enum DataBlobStorage {
 }
 
 impl std::fmt::Display for DataBlobStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_ref())
+    }
+}
+
+#[derive(AsRefStr, EnumString, Copy, Clone, Default, PartialEq, clap::ValueEnum)]
+#[strum(serialize_all = "snake_case")]
+pub enum DeployMode {
+    #[default]
+    All,
+    Zig,
+    Rust,
+    Bootstrap,
+    Ui,
+}
+
+impl std::fmt::Display for DeployMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_ref())
     }
@@ -302,7 +319,7 @@ async fn main() -> CmdResult {
             release,
             target_arm,
             bss_use_i3,
-            &mode,
+            mode,
         )?,
         Cmd::GrantBuildBucket => cmd_deploy::update_builds_bucket_access_policy()?,
         Cmd::RunTests(test_type) => cmd_run_tests::run_tests(test_type).await?,

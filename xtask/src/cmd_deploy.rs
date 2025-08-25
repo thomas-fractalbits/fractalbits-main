@@ -9,15 +9,8 @@ pub fn run_cmd_deploy(
     release_mode: bool,
     target_arm: bool,
     bss_use_i3: bool,
-    deploy_mode: &str,
+    deploy_mode: DeployMode,
 ) -> CmdResult {
-    // Validate deploy_mode parameter
-    match deploy_mode {
-        "all" | "zig" | "rust" | "bootstrap" | "ui" => {},
-        _ => {
-            cmd_die!("Invalid deploy_mode '$deploy_mode'. Must be one of: all, zig, rust, bootstrap, ui");
-        }
-    }
     let build_info = BUILD_INFO.get().unwrap();
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
@@ -44,7 +37,7 @@ pub fn run_cmd_deploy(
     };
     let arch = if target_arm { "aarch64" } else { "x86_64" };
 
-    if deploy_mode == "bootstrap" {
+    if deploy_mode == DeployMode::Bootstrap {
         // Build fractalbits-bootstrap binary only, in debug mode
         build_bootstrap_only(rust_build_target)?;
         run_cmd!(aws s3 cp target/$rust_build_target/debug/fractalbits-bootstrap $bucket/$arch/fractalbits-bootstrap)?;
@@ -52,7 +45,7 @@ pub fn run_cmd_deploy(
     }
 
     // Build and upload Rust projects if mode is rust or all
-    if deploy_mode == "rust" || deploy_mode == "all" {
+    if deploy_mode == DeployMode::Rust || deploy_mode == DeployMode::All {
         run_cmd! {
             info "Building Rust projects with zigbuild";
         }?;
@@ -131,7 +124,7 @@ pub fn run_cmd_deploy(
     }
 
     // Build and upload Zig projects if mode is zig or all
-    if deploy_mode == "zig" || deploy_mode == "all" {
+    if deploy_mode == DeployMode::Zig || deploy_mode == DeployMode::All {
         run_cmd! {
             info "Building Zig projects";
             zig build
@@ -176,12 +169,11 @@ pub fn run_cmd_deploy(
     }
 
     // Build and upload UI if mode is ui or all
-    if deploy_mode == "ui" || deploy_mode == "all" {
+    if deploy_mode == DeployMode::Ui || deploy_mode == DeployMode::All {
         let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
         cmd_build::build_ui(&region)?;
         run_cmd!(aws s3 cp ui/dist $bucket/ui --recursive)?;
     }
-
 
     Ok(())
 }
