@@ -1,19 +1,15 @@
-use rpc_client_common::{nss_rpc_retry, rpc_retry};
-use std::sync::Arc;
+use rpc_client_common::rpc_retry;
 
 use axum::{body::Body, response::Response};
-use bucket_tables::{api_key_table::ApiKeyTable, bucket_table::BucketTable, table::Table};
-use rpc_client_nss::rpc::delete_root_inode_response;
-use rpc_client_rss::RpcErrorRss;
 use tracing::info;
 
 use crate::handler::{common::s3_error::S3Error, BucketRequestContext};
-use crate::AppState;
 
 pub async fn delete_bucket_handler(ctx: BucketRequestContext) -> Result<Response, S3Error> {
     let bucket = ctx.resolve_bucket().await?;
     info!("handling delete_bucket request: {}", bucket.bucket_name);
     let rpc_timeout = ctx.app.config.rpc_timeout();
+
     let api_key_id = {
         if !ctx
             .api_key
@@ -26,52 +22,46 @@ pub async fn delete_bucket_handler(ctx: BucketRequestContext) -> Result<Response
         ctx.api_key.data.key_id.clone()
     };
 
-    let resp = nss_rpc_retry!(
-        ctx.app,
-        delete_root_inode(&bucket.root_blob_name, Some(rpc_timeout))
+    // Send delete bucket RPC to root server
+    let result = rpc_retry!(
+        ctx.app.rpc_clients_rss,
+        checkout(ctx.app.config.rss_addr.clone()),
+        delete_bucket(&bucket.bucket_name, &api_key_id, Some(rpc_timeout))
     )
-    .await?;
-    match resp.result.unwrap() {
-        delete_root_inode_response::Result::Ok(res) => res,
-        delete_root_inode_response::Result::ErrNotEmpty(_e) => {
-            return Err(S3Error::BucketNotEmpty);
-        }
-        delete_root_inode_response::Result::ErrOthers(e) => {
-            tracing::error!(e);
-            return Err(S3Error::InternalError);
-        }
-    };
+    .await;
 
-    let retry_times = 10;
-    for i in 0..retry_times {
-        let bucket_table: Table<Arc<AppState>, BucketTable> =
-            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
-        let api_key_table: Table<Arc<AppState>, ApiKeyTable> =
-            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
-        let mut api_key = api_key_table
-            .get(api_key_id.clone(), false, Some(rpc_timeout))
-            .await?;
-        api_key.data.authorized_buckets.remove(&bucket.bucket_name);
-        tracing::debug!(
-            "Deleting {} from api_key {} (retry={})",
-            bucket.bucket_name,
-            api_key_id.clone(),
-            i,
-        );
+    match result {
+        Ok(_) => {
+            info!("Successfully deleted bucket: {}", bucket.bucket_name);
 
-        match bucket_table
-            .delete_with_extra::<ApiKeyTable>(&bucket, &api_key, Some(rpc_timeout))
-            .await
-        {
-            Err(RpcErrorRss::Retry) => continue,
-            Err(e) => return Err(e.into()),
-            Ok(()) => return Ok(Response::new(Body::empty())),
+            // Invalidate both bucket and API key cache
+            ctx.app
+                .cache
+                .invalidate(&format!("/buckets/{}", bucket.bucket_name))
+                .await;
+            ctx.app
+                .cache
+                .invalidate(&format!("/api_keys/{}", api_key_id))
+                .await;
+
+            Ok(Response::new(Body::empty()))
+        }
+        Err(e) => {
+            tracing::error!("Failed to delete bucket {}: {}", bucket.bucket_name, e);
+            match e {
+                rpc_client_rss::RpcErrorRss::InternalResponseError(msg) => {
+                    if msg.contains("not empty") || msg.contains("not found") {
+                        if msg.contains("not empty") {
+                            Err(S3Error::BucketNotEmpty)
+                        } else {
+                            Err(S3Error::NoSuchBucket)
+                        }
+                    } else {
+                        Err(S3Error::InternalError)
+                    }
+                }
+                _ => Err(e.into()),
+            }
         }
     }
-
-    tracing::error!(
-        "Deleting {} from api_key {api_key_id} failed after retrying {retry_times} times",
-        bucket.bucket_name
-    );
-    Err(S3Error::InternalError)
 }

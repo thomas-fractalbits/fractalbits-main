@@ -1,24 +1,11 @@
-use std::sync::Arc;
-
 use axum::{body::Body, http::header, response::Response};
-use bucket_tables::{
-    api_key_table::ApiKeyTable,
-    bucket_table::{Bucket, BucketTable},
-    permission::BucketKeyPerm,
-    table::Table,
-    Versioned,
-};
 use bytes::Buf;
-use rpc_client_common::{nss_rpc_retry, rpc_retry};
-use rpc_client_nss::rpc::create_root_inode_response;
+use rpc_client_common::rpc_retry;
 use rpc_client_rss::RpcErrorRss;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::{
-    handler::{common::s3_error::S3Error, BucketRequestContext},
-    AppState,
-};
+use crate::handler::{common::s3_error::S3Error, BucketRequestContext};
 
 #[derive(Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
@@ -49,6 +36,8 @@ struct BucketConfig {
 
 pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response, S3Error> {
     info!("handling create_bucket request: {}", ctx.bucket_name);
+
+    // Validate permissions and bucket name
     let api_key_id = {
         if ctx
             .api_key
@@ -68,6 +57,7 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
         return Err(S3Error::InvalidBucketName);
     }
 
+    // Parse and validate the request body
     let body = ctx.request.into_body().collect().await?;
     if !body.is_empty() {
         let create_bucket_conf: CreateBucketConfiguration =
@@ -86,91 +76,46 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
         crate::BlobStorageBackend::S3ExpressMultiAzWithTracking
     );
 
-    let resp = nss_rpc_retry!(
-        ctx.app,
-        create_root_inode(&ctx.bucket_name, is_multi_az, Some(rpc_timeout))
+    // Call root_server to handle the full bucket creation process with retry logic
+    let result = rpc_retry!(
+        ctx.app.rpc_clients_rss,
+        checkout(ctx.app.config.rss_addr.clone()),
+        create_bucket(
+            &ctx.bucket_name,
+            &api_key_id,
+            is_multi_az,
+            Some(rpc_timeout)
+        )
     )
-    .await?;
-    let (root_blob_name, tracking_root_blob_name) = match resp.result.unwrap() {
-        create_root_inode_response::Result::Ok(blobs) => {
-            let tracking_root = if blobs.tracking_root_blob_name.is_empty() {
-                None
-            } else {
-                Some(blobs.tracking_root_blob_name)
-            };
-            (blobs.root_blob_name, tracking_root)
+    .await;
+
+    match result {
+        Ok(_) => {
+            info!("Successfully created bucket: {}", ctx.bucket_name);
+
+            // Invalidate API key cache since it now has new bucket permissions
+            ctx.app
+                .cache
+                .invalidate(&format!("/api_keys/{}", api_key_id))
+                .await;
+
+            Ok(Response::builder()
+                .header(header::LOCATION, format!("/{}", ctx.bucket_name))
+                .body(Body::empty())?)
         }
-        create_root_inode_response::Result::Err(e) => {
-            tracing::error!(e);
-            return Err(S3Error::InternalError);
-        }
-    };
-
-    let retry_times = 10;
-    for i in 0..retry_times {
-        let bucket_table: Table<Arc<AppState>, BucketTable> =
-            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
-        if bucket_table
-            .get(ctx.bucket_name.clone(), false, Some(rpc_timeout))
-            .await
-            .is_ok()
-        {
-            return Err(S3Error::BucketAlreadyExists);
-        }
-
-        let mut bucket = Versioned::new(
-            0,
-            Bucket::new(
-                ctx.bucket_name.clone(),
-                root_blob_name.clone(),
-                tracking_root_blob_name.clone(),
-            ),
-        );
-        let bucket_key_perm = BucketKeyPerm::ALL_PERMISSIONS;
-        bucket
-            .data
-            .authorized_keys
-            .insert(api_key_id.clone(), bucket_key_perm);
-
-        let api_key_table: Table<Arc<AppState>, ApiKeyTable> =
-            Table::new(ctx.app.clone(), Some(ctx.app.cache.clone()));
-        let mut api_key = api_key_table
-            .get(api_key_id.clone(), false, Some(rpc_timeout))
-            .await?;
-        api_key
-            .data
-            .authorized_buckets
-            .insert(ctx.bucket_name.clone(), bucket_key_perm);
-
-        tracing::debug!(
-            "Inserting {} into api_key {} (retry={})",
-            ctx.bucket_name.clone(),
-            api_key_id.clone(),
-            i,
-        );
-        match bucket_table
-            .put_with_extra::<ApiKeyTable>(&bucket, &api_key, Some(rpc_timeout))
-            .await
-        {
-            Err(e) => {
-                if matches!(e, RpcErrorRss::Retry) {
-                    continue;
+        Err(e) => {
+            tracing::error!("Failed to create bucket {}: {}", ctx.bucket_name, e);
+            match e {
+                RpcErrorRss::InternalResponseError(msg) if msg.contains("already exists") => {
+                    Err(S3Error::BucketAlreadyExists)
                 }
-                return Err(e.into());
-            }
-            Ok(()) => {
-                return Ok(Response::builder()
-                    .header(header::LOCATION, format!("/{}", ctx.bucket_name))
-                    .body(Body::empty())?);
+                RpcErrorRss::InternalResponseError(msg) if msg.contains("API key not found") => {
+                    Err(S3Error::AccessDenied)
+                }
+                _ => Err(S3Error::InternalError),
             }
         }
     }
-
-    tracing::error!(
-        "Inserting {} into api_key {api_key_id} failed after retrying {retry_times} times",
-        ctx.bucket_name
-    );
-    Err(S3Error::InternalError)
 }
 
 // Check if a bucket name is valid.

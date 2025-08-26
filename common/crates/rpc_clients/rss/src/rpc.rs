@@ -542,4 +542,111 @@ impl RpcClient {
             }
         }
     }
+
+    pub async fn create_bucket(
+        &self,
+        bucket_name: &str,
+        api_key_id: &str,
+        is_multi_az: bool,
+        timeout: Option<Duration>,
+    ) -> Result<(), RpcError> {
+        let _guard = InflightRpcGuard::new("rss", "create_bucket");
+        let start = Instant::now();
+        let body = CreateBucketRequest {
+            bucket_name: bucket_name.to_string(),
+            enable_versioning: false,
+            api_key_id: api_key_id.to_string(),
+            is_multi_az,
+        };
+
+        let mut header = MessageHeader::default();
+        let request_id = self.gen_request_id();
+        header.id = request_id;
+        header.command = Command::CreateBucket;
+        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+
+        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
+        header.encode(&mut request_bytes);
+        body.encode(&mut request_bytes)
+            .map_err(RpcError::EncodeError)?;
+
+        let resp_bytes = self
+            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+            .await
+            .map_err(|e| {
+                if !e.retryable() {
+                    error!(rpc=%"create_bucket", %request_id, %bucket_name, error=?e, "rss rpc failed");
+                }
+                e
+            })?
+            .body;
+        let resp: CreateBucketResponse =
+            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+        let duration = start.elapsed();
+        match resp.result.unwrap() {
+            create_bucket_response::Result::Ok(()) => {
+                histogram!("rss_rpc_nanos", "status" => "CreateBucket_Ok")
+                    .record(duration.as_nanos() as f64);
+                Ok(())
+            }
+            create_bucket_response::Result::Error(err) => {
+                histogram!("rss_rpc_nanos", "status" => "CreateBucket_Error")
+                    .record(duration.as_nanos() as f64);
+                error!(rpc=%"create_bucket", %bucket_name, "rss rpc failed: {err}");
+                Err(RpcError::InternalResponseError(err))
+            }
+        }
+    }
+
+    pub async fn delete_bucket(
+        &self,
+        bucket_name: &str,
+        api_key_id: &str,
+        timeout: Option<Duration>,
+    ) -> Result<(), RpcError> {
+        let _guard = InflightRpcGuard::new("rss", "delete_bucket");
+        let start = Instant::now();
+        let body = DeleteBucketRequest {
+            bucket_name: bucket_name.to_string(),
+            api_key_id: api_key_id.to_string(),
+        };
+
+        let mut header = MessageHeader::default();
+        let request_id = self.gen_request_id();
+        header.id = request_id;
+        header.command = Command::DeleteBucket;
+        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+
+        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
+        header.encode(&mut request_bytes);
+        body.encode(&mut request_bytes)
+            .map_err(RpcError::EncodeError)?;
+
+        let resp_bytes = self
+            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+            .await
+            .map_err(|e| {
+                if !e.retryable() {
+                    error!(rpc=%"delete_bucket", %request_id, %bucket_name, error=?e, "rss rpc failed");
+                }
+                e
+            })?
+            .body;
+        let resp: DeleteBucketResponse =
+            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+        let duration = start.elapsed();
+        match resp.result.unwrap() {
+            delete_bucket_response::Result::Ok(()) => {
+                histogram!("rss_rpc_nanos", "status" => "DeleteBucket_Ok")
+                    .record(duration.as_nanos() as f64);
+                Ok(())
+            }
+            delete_bucket_response::Result::Error(err) => {
+                histogram!("rss_rpc_nanos", "status" => "DeleteBucket_Error")
+                    .record(duration.as_nanos() as f64);
+                error!(rpc=%"delete_bucket", %bucket_name, "rss rpc failed: {err}");
+                Err(RpcError::InternalResponseError(err))
+            }
+        }
+    }
 }

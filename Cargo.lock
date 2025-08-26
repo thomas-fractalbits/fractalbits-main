@@ -3843,6 +3843,7 @@ version = "0.1.0"
 dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
+ "bucket_tables",
  "bytemuck",
  "bytes",
  "clap 4.5.43",
@@ -3856,6 +3857,7 @@ dependencies = [
  "prost-build",
  "rand 0.8.5",
  "reqwest",
+ "rpc_client_common",
  "rpc_client_nss",
  "serde",
  "serde_json",

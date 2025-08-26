@@ -29,6 +29,7 @@ enum Command {
 
   // Bucket management
   CreateBucket = 27;
+  DeleteBucket = 28;
 }
 
 // Put
@@ -224,13 +225,28 @@ message SetAzStatusResponse {
   }
 }
 
-// CreateBucket - Create a new bucket (stub for NSS integration)
+// CreateBucket - Create a new bucket with full NSS integration
 message CreateBucketRequest {
   string bucket_name = 1;
   bool enable_versioning = 2;
+  string api_key_id = 3;
+  bool is_multi_az = 4;
 }
 
 message CreateBucketResponse {
+  oneof result {
+    google.protobuf.Empty ok = 1;
+    string error = 2;
+  }
+}
+
+// DeleteBucket - Delete an existing bucket with NSS integration
+message DeleteBucketRequest {
+  string bucket_name = 1;
+  string api_key_id = 2;
+}
+
+message DeleteBucketResponse {
   oneof result {
     google.protobuf.Empty ok = 1;
     string error = 2;
