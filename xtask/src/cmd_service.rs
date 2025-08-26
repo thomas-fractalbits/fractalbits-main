@@ -141,10 +141,10 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
             }?,
             BuildMode::Release => run_cmd! {
                 info "formatting nss_server for benchmarking";
-                ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG
+                ${pwd}/zig-out/bin/nss_server format
                     |& ts -m $TS_FMT >$format_log;
                 ${pwd}/zig-out/bin/fbs --new_tree $TEST_BUCKET_ROOT_BLOB_NAME
-                    -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG |& ts -m $TS_FMT >$fbs_log;
+                    |& ts -m $TS_FMT >$fbs_log;
             }?,
         }
         Ok(())
@@ -166,7 +166,7 @@ pub fn init_service(service: ServiceName, build_mode: BuildMode) -> CmdResult {
             }?,
             BuildMode::Release => run_cmd! {
                 info "formatting mirrord for benchmarking";
-                WORKING_DIR="./data/nss-B" ${pwd}/zig-out/bin/nss_server format -c ${pwd}/etc/$NSS_SERVER_BENCH_CONFIG
+                WORKING_DIR="./data/nss-B" ${pwd}/zig-out/bin/nss_server format
                     |& ts -m $TS_FMT >$format_log;
             }?,
         }
@@ -379,10 +379,9 @@ pub fn start_nss_service(build_mode: BuildMode, data_on_local: bool) -> CmdResul
         }
     }
 
-    let pwd = run_fun!(pwd)?;
     let config_file = match build_mode {
         BuildMode::Debug => None,
-        BuildMode::Release => Some(format!("{pwd}/etc/{NSS_SERVER_BENCH_CONFIG}")),
+        BuildMode::Release => None,
     };
     create_systemd_unit_file(ServiceName::Nss, build_mode, config_file)?;
 
@@ -704,7 +703,7 @@ Environment="RUST_LOG=warn""##
         ServiceName::Nss => match build_mode {
             BuildMode::Debug => format!("{pwd}/zig-out/bin/nss_server serve"),
             BuildMode::Release => {
-                format!("{pwd}/zig-out/bin/nss_server serve -c {pwd}/etc/{NSS_SERVER_BENCH_CONFIG}")
+                format!("{pwd}/zig-out/bin/nss_server serve")
             }
         },
         ServiceName::Mirrord => format!("{pwd}/zig-out/bin/mirrord"),
