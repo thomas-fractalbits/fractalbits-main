@@ -327,7 +327,7 @@ pub async fn create_s3_client(
 #[derive(Debug, thiserror::Error)]
 pub enum BlobStorageError {
     #[error("BSS RPC error: {0}")]
-    BssRpc(#[from] rpc_client_bss::RpcErrorBss),
+    BssRpc(#[from] rpc_client_common::RpcError),
 
     #[error("S3 error: {0}")]
     S3(String),

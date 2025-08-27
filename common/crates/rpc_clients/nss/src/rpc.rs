@@ -1,15 +1,12 @@
 use std::time::Duration;
 
-use crate::{
-    message::MessageHeader,
-    rpc_client::{InflightRpcGuard, Message, RpcClient, RpcError},
-};
+use crate::client::RpcClient;
 use bytes::{Bytes, BytesMut};
+use nss_codec::*;
 use prost::Message as PbMessage;
-use rpc_client_common::ErrorRetryable;
+use rpc_client_common::{ErrorRetryable, InflightRpcGuard, RpcError};
+use rpc_codec_common::MessageFrame;
 use tracing::error;
-
-include!(concat!(env!("OUT_DIR"), "/nss_ops.rs"));
 
 impl RpcClient {
     pub async fn put_inode(
@@ -34,23 +31,22 @@ impl RpcClient {
         header.command = Command::PutInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"put_inode", %request_id, %root_blob_name, %key, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: PutInodeResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -74,23 +70,22 @@ impl RpcClient {
         header.command = Command::GetInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"get_inode", %request_id, %root_blob_name, %key, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: GetInodeResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -125,23 +120,22 @@ impl RpcClient {
         header.command = Command::ListInodes;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"list_inodes", %request_id, %root_blob_name, %prefix, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: ListInodesResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -165,23 +159,22 @@ impl RpcClient {
         header.command = Command::DeleteInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"delete_inode", %request_id, %root_blob_name, %key, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: DeleteInodeResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -203,23 +196,22 @@ impl RpcClient {
         header.command = Command::CreateRootInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"create_root_inode", %request_id, %bucket, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: CreateRootInodeResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -239,23 +231,22 @@ impl RpcClient {
         header.command = Command::DeleteRootInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"delete_root_inode", %request_id, %root_blob_name, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: DeleteRootInodeResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
     }
 
@@ -279,27 +270,29 @@ impl RpcClient {
         header.command = Command::Rename;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"rename_folder", %request_id, %root_blob_name, %src_path, %dst_path, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
-        let resp: RenameResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: RenameResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         match resp.result.unwrap() {
-            rename_response::Result::Ok(_) => Ok(()),
-            rename_response::Result::ErrSrcNonexisted(_) => Err(RpcError::NotFound),
-            rename_response::Result::ErrDstExisted(_) => Err(RpcError::AlreadyExists),
-            rename_response::Result::ErrOthers(e) => Err(RpcError::InternalResponseError(e)),
+            nss_codec::rename_response::Result::Ok(_) => Ok(()),
+            nss_codec::rename_response::Result::ErrSrcNonexisted(_) => Err(RpcError::NotFound),
+            nss_codec::rename_response::Result::ErrDstExisted(_) => Err(RpcError::AlreadyExists),
+            nss_codec::rename_response::Result::ErrOthers(e) => {
+                Err(RpcError::InternalResponseError(e))
+            }
         }
     }
 
@@ -328,27 +321,29 @@ impl RpcClient {
         header.command = Command::Rename;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"rename_object", %request_id, %root_blob_name, %src_path, %dst_path, error=?e, "nss rpc failed");
                 }
                 e
-            })?
-            .body;
-        let resp: RenameResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: RenameResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         match resp.result.unwrap() {
-            rename_response::Result::Ok(_) => Ok(()),
-            rename_response::Result::ErrSrcNonexisted(_) => Err(RpcError::NotFound),
-            rename_response::Result::ErrDstExisted(_) => Err(RpcError::AlreadyExists),
-            rename_response::Result::ErrOthers(e) => Err(RpcError::InternalResponseError(e)),
+            nss_codec::rename_response::Result::Ok(_) => Ok(()),
+            nss_codec::rename_response::Result::ErrSrcNonexisted(_) => Err(RpcError::NotFound),
+            nss_codec::rename_response::Result::ErrDstExisted(_) => Err(RpcError::AlreadyExists),
+            nss_codec::rename_response::Result::ErrOthers(e) => {
+                Err(RpcError::InternalResponseError(e))
+            }
         }
     }
 }

@@ -35,7 +35,7 @@ use get::GetEndpoint;
 use head::HeadEndpoint;
 use post::PostEndpoint;
 use put::PutEndpoint;
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 
 pub type Request<T = ReqBody> = http::Request<T>;
 
@@ -227,7 +227,7 @@ async fn any_handler_inner(
                 Err(signature::error::Error::SignatureError(e, request_wrapper)) => {
                     let request = request_wrapper.into_inner();
                     match *e {
-                        signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound) => {
+                        signature::error::Error::RpcError(RpcError::NotFound) => {
                             return Err(S3Error::InvalidAccessKeyId);
                         }
                         _ => {
@@ -262,7 +262,7 @@ async fn any_handler_inner(
         match verify_request(app.clone(), request, &auth).await {
             Ok(res) => res,
             Err(signature::error::Error::SignatureError(e, _)) => match *e {
-                signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound) => {
+                signature::error::Error::RpcError(RpcError::NotFound) => {
                     return Err(S3Error::InvalidAccessKeyId);
                 }
                 _ => {

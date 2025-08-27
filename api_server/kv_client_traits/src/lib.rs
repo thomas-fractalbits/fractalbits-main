@@ -1,7 +1,8 @@
 use std::{ops::Deref, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use rpc_client_rss::{RpcClientRss, RpcErrorRss};
+use rpc_client_common::RpcError;
+use rpc_client_rss::RpcClientRss;
 
 #[derive(Clone)]
 pub struct Versioned<T: Sized> {
@@ -122,7 +123,7 @@ impl<T: KvClient + Sync + Send> KvClient for Arc<T> {
 
 #[async_trait]
 impl KvClient for RpcClientRss {
-    type Error = RpcErrorRss;
+    type Error = RpcError;
     async fn put(
         &self,
         key: &str,

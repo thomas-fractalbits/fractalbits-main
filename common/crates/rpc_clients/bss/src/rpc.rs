@@ -1,12 +1,10 @@
 use std::time::Duration;
 
-use crate::{
-    codec::MessageFrame,
-    message::{Command, MessageHeader},
-    rpc_client::{InflightRpcGuard, Message, RpcClient, RpcError},
-};
+use crate::client::RpcClient;
+use bss_codec::{Command, MessageHeader};
 use bytes::Bytes;
-use rpc_client_common::ErrorRetryable;
+use rpc_client_common::{ErrorRetryable, InflightRpcGuard, RpcError};
+use rpc_codec_common::MessageFrame;
 use tracing::error;
 use uuid::Uuid;
 
@@ -29,7 +27,7 @@ impl RpcClient {
 
         let msg_frame = MessageFrame::new(header, body);
         self
-            .send_request(header.id, Message::Frame(msg_frame), timeout)
+            .send_request(request_id, msg_frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
@@ -57,8 +55,8 @@ impl RpcClient {
         header.size = MessageHeader::SIZE as u32;
 
         let msg_frame = MessageFrame::new(header, Bytes::new());
-        let resp = self
-            .send_request(header.id, Message::Frame(msg_frame), timeout)
+        let resp_frame = self
+            .send_request(header.id, msg_frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
@@ -66,7 +64,7 @@ impl RpcClient {
                 }
                 e
             })?;
-        *body = resp.body;
+        *body = resp_frame.body;
         Ok(())
     }
 
@@ -87,7 +85,7 @@ impl RpcClient {
 
         let msg_frame = MessageFrame::new(header, Bytes::new());
         self
-            .send_request(header.id, Message::Frame(msg_frame), timeout)
+            .send_request(header.id, msg_frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {

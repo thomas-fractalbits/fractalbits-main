@@ -15,7 +15,7 @@ use bucket_tables::{
     table::Table,
 };
 use metrics::histogram;
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use std::{sync::Arc, time::Instant};
 
 pub async fn resolve_bucket(app: Arc<AppState>, bucket_name: String) -> Result<Bucket, S3Error> {
@@ -29,7 +29,7 @@ pub async fn resolve_bucket(app: Arc<AppState>, bucket_name: String) -> Result<B
             histogram!("resolve_bucket_nanos", "status" => "Ok").record(duration.as_nanos() as f64);
             Ok(bucket.data)
         }
-        Err(RpcErrorRss::NotFound) => {
+        Err(RpcError::NotFound) => {
             histogram!("resolve_bucket_nanos", "status" => "Fail_NotFound")
                 .record(duration.as_nanos() as f64);
             Err(S3Error::NoSuchBucket)

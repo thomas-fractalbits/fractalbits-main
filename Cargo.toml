@@ -13,10 +13,14 @@ members = [
     "root_server/admin",
     # "root_server/ebs-failover",
     "common/crates/rpc_clients/bss",
-    "common/crates/rpc_clients/common",
+    "common/crates/rpc_clients/client_common",
     "common/crates/rpc_clients/nss",
     "common/crates/rpc_clients/rss",
     "common/crates/rpc_clients/slotmap_conn_pool",
+    "common/crates/rpc_codecs/codec_common",
+    "common/crates/rpc_codecs/bss_codec",
+    "common/crates/rpc_codecs/nss_codec",
+    "common/crates/rpc_codecs/rss_codec",
     "common/crates/test_common",
     "xtask",
     "xtask/tools",
@@ -27,11 +31,15 @@ resolver = "2"
 bucket_tables = { path = "api_server/bucket_tables" }
 kv_client_traits = { path = "api_server/kv_client_traits" }
 data_blob_tracking = { path = "common/crates/data_blob_tracking" }
-rpc_client_common = { path = "common/crates/rpc_clients/common" }
+rpc_client_common = { path = "common/crates/rpc_clients/client_common" }
 rpc_client_bss = { path = "common/crates/rpc_clients/bss" }
 rpc_client_nss = { path = "common/crates/rpc_clients/nss" }
 rpc_client_rss = { path = "common/crates/rpc_clients/rss" }
 slotmap_conn_pool = { path = "common/crates/rpc_clients/slotmap_conn_pool" }
+rpc_codec_common = { path = "common/crates/rpc_codecs/codec_common" }
+bss_codec = { path = "common/crates/rpc_codecs/bss_codec" }
+nss_codec = { path = "common/crates/rpc_codecs/nss_codec" }
+rss_codec = { path = "common/crates/rpc_codecs/rss_codec" }
 test_common = { path = "common/crates/test_common" }
 xtask_tools = { path = "xtask/tools" }
 

@@ -3,7 +3,7 @@ use axum::{
     extract::rejection::QueryRejection,
     http::{header::ToStrError, Request},
 };
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use sync_wrapper::SyncWrapper;
 use thiserror::Error;
 
@@ -30,7 +30,7 @@ pub enum Error {
     QueryRejection(#[from] QueryRejection),
 
     #[error(transparent)]
-    RpcErrorRss(#[from] RpcErrorRss),
+    RpcError(#[from] RpcError),
 
     #[error(transparent)]
     FromHexError(#[from] hex::FromHexError),

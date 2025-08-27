@@ -49,7 +49,7 @@ pub async fn delete_bucket_handler(ctx: BucketRequestContext) -> Result<Response
         Err(e) => {
             tracing::error!("Failed to delete bucket {}: {}", bucket.bucket_name, e);
             match e {
-                rpc_client_rss::RpcErrorRss::InternalResponseError(msg) => {
+                rpc_client_common::RpcError::InternalResponseError(msg) => {
                     if msg.contains("not empty") || msg.contains("not found") {
                         if msg.contains("not empty") {
                             Err(S3Error::BucketNotEmpty)

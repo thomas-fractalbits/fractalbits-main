@@ -14,7 +14,7 @@ use super::data::{sha256sum, Hash};
 use super::request::extract::Authentication;
 use axum::body::Body;
 use axum::http::{request::Request, HeaderName};
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use sync_wrapper::SyncWrapper;
 
 pub use error::*;
@@ -82,7 +82,7 @@ pub async fn verify_request(
 
     let api_key = checked_signature
         .key
-        .ok_or(Error::RpcErrorRss(RpcErrorRss::NotFound))?;
+        .ok_or(Error::RpcError(RpcError::NotFound))?;
 
     Ok(VerifiedRequest {
         request,

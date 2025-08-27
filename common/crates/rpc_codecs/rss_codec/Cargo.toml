@@ -1,0 +1,15 @@
+[package]
+name = "rss_codec"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rpc_codec_common.workspace = true
+rpc_client_common.workspace = true
+bytes.workspace = true
+bytemuck.workspace = true
+tokio-util.workspace = true
+prost.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true

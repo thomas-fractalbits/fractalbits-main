@@ -10,7 +10,6 @@ prost.workspace = true
 bytes.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-bytemuck.workspace = true
 tokio-util.workspace = true
 tokio-stream.workspace = true
 metrics.workspace = true
@@ -21,12 +20,5 @@ parking_lot.workspace = true
 strum.workspace = true
 rpc_client_common.workspace = true
 socket2.workspace = true
-
-[build-dependencies]
-prost-build.workspace = true
-
-[features]
-default = ["nss"]
-bss = []
-nss = []
-rss = []
+nss_codec.workspace = true
+rpc_codec_common.workspace = true

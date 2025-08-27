@@ -6,7 +6,7 @@ use axum::extract::rejection::QueryRejection;
 use chrono::{DateTime, Utc};
 use hex::FromHexError;
 use hmac::{Hmac, Mac};
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use sha2::Sha256;
 use thiserror::Error;
 
@@ -32,7 +32,7 @@ pub enum SignatureError {
     Invalid(String),
 
     #[error(transparent)]
-    RpcErrorRss(#[from] RpcErrorRss),
+    RpcError(#[from] RpcError),
 }
 
 pub fn signing_hmac(

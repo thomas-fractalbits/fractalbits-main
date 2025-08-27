@@ -12,9 +12,7 @@ use axum::{
 };
 use axum_extra::extract::rejection::HostRejection;
 use http_range::HttpRangeParseError;
-use rpc_client_bss::RpcErrorBss;
-use rpc_client_nss::RpcErrorNss;
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use strum::AsRefStr;
 use thiserror::Error;
 
@@ -788,23 +786,9 @@ impl From<SignatureError> for S3Error {
     }
 }
 
-impl From<RpcErrorNss> for S3Error {
-    fn from(value: RpcErrorNss) -> Self {
-        tracing::error!("RpcErrorNss: {value}");
-        Self::InternalError
-    }
-}
-
-impl From<RpcErrorBss> for S3Error {
-    fn from(value: RpcErrorBss) -> Self {
-        tracing::error!("RpcErrorBss: {value}");
-        Self::InternalError
-    }
-}
-
-impl From<RpcErrorRss> for S3Error {
-    fn from(value: RpcErrorRss) -> Self {
-        tracing::error!("RpcErrorRss: {value}");
+impl From<RpcError> for S3Error {
+    fn from(value: RpcError) -> Self {
+        tracing::error!("RpcError: {value}");
         Self::InternalError
     }
 }

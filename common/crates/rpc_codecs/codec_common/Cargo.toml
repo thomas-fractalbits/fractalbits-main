@@ -1,0 +1,8 @@
+[package]
+name = "rpc_codec_common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytes.workspace = true
+tokio-util.workspace = true

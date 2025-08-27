@@ -24,7 +24,6 @@ use axum::{
 };
 use futures::{StreamExt, TryStreamExt};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_nss::rpc::put_inode_response;
 use uuid::Uuid;
 
 use super::block_data_stream::BlockDataStream;
@@ -129,8 +128,8 @@ pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<Response, S
 
     // Delete old object if it is an overwrite request
     let old_object_bytes = match resp.result.unwrap() {
-        put_inode_response::Result::Ok(res) => res,
-        put_inode_response::Result::Err(e) => {
+        nss_codec::put_inode_response::Result::Ok(res) => res,
+        nss_codec::put_inode_response::Result::Err(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }

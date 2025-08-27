@@ -1,7 +1,9 @@
 use bytes::Bytes;
-use rpc_client_common::{nss_rpc_retry, rpc_retry, rss_rpc_retry};
-use rpc_client_nss::{RpcClientNss, RpcErrorNss};
-use rpc_client_rss::{RpcClientRss, RpcErrorRss};
+use nss_codec::{get_inode_response, list_inodes_response};
+use rpc_client_common::{nss_rpc_retry, rpc_retry, rss_rpc_retry, RpcError};
+use rpc_client_nss::RpcClientNss;
+use rpc_client_rss::RpcClientRss;
+use rss_codec::AzStatusMap;
 use slotmap_conn_pool::ConnPool;
 use std::sync::Arc;
 use std::time::Duration;
@@ -9,10 +11,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DataBlobTrackingError {
-    #[error("RSS error: {0}")]
-    Rss(#[from] RpcErrorRss),
-    #[error("NSS error: {0}")]
-    Nss(#[from] RpcErrorNss),
+    #[error("RPC error: {0}")]
+    Rpc(#[from] RpcError),
     #[error("Blob not found")]
     NotFound,
     #[error("Internal error: {0}")]
@@ -107,12 +107,8 @@ impl DataBlobTracker {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
-                    Some(rpc_client_nss::rpc::get_inode_response::Result::Ok(bytes)) => {
-                        Ok(Some(bytes.to_vec()))
-                    }
-                    Some(rpc_client_nss::rpc::get_inode_response::Result::ErrNotFound(_)) => {
-                        Ok(None)
-                    }
+                    Some(get_inode_response::Result::Ok(bytes)) => Ok(Some(bytes.to_vec())),
+                    Some(get_inode_response::Result::ErrNotFound(_)) => Ok(None),
                     _ => Err(DataBlobTrackingError::Internal(
                         "Unexpected NSS response".into(),
                     )),
@@ -131,7 +127,7 @@ impl DataBlobTracker {
         let key = format!("single/{blob_key}");
         match nss_rpc_retry!(self, delete_inode(tracking_root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
-            Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
+            Err(RpcError::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
         }
     }
@@ -147,7 +143,7 @@ impl DataBlobTracker {
         let key = format!("single/{trimmed_key}");
         match nss_rpc_retry!(self, delete_inode(tracking_root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
-            Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
+            Err(RpcError::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
         }
     }
@@ -184,12 +180,8 @@ impl DataBlobTracker {
             Ok(response) => {
                 // Extract bytes from response
                 match response.result {
-                    Some(rpc_client_nss::rpc::get_inode_response::Result::Ok(bytes)) => {
-                        Ok(Some(bytes.to_vec()))
-                    }
-                    Some(rpc_client_nss::rpc::get_inode_response::Result::ErrNotFound(_)) => {
-                        Ok(None)
-                    }
+                    Some(get_inode_response::Result::Ok(bytes)) => Ok(Some(bytes.to_vec())),
+                    Some(get_inode_response::Result::ErrNotFound(_)) => Ok(None),
                     _ => Err(DataBlobTrackingError::Internal(
                         "Unexpected NSS response".into(),
                     )),
@@ -210,10 +202,8 @@ impl DataBlobTracker {
         let key = format!("deleted/{trimmed_key}");
         match nss_rpc_retry!(self, get_inode(tracking_root_blob_name, &key, None)).await {
             Ok(response) => match response.result {
-                Some(rpc_client_nss::rpc::get_inode_response::Result::Ok(bytes)) => {
-                    Ok(Some(bytes.to_vec()))
-                }
-                Some(rpc_client_nss::rpc::get_inode_response::Result::ErrNotFound(_)) => Ok(None),
+                Some(get_inode_response::Result::Ok(bytes)) => Ok(Some(bytes.to_vec())),
+                Some(get_inode_response::Result::ErrNotFound(_)) => Ok(None),
                 _ => Err(DataBlobTrackingError::Internal(
                     "Unexpected NSS response".into(),
                 )),
@@ -231,7 +221,7 @@ impl DataBlobTracker {
         let key = format!("deleted/{blob_key}");
         match nss_rpc_retry!(self, delete_inode(tracking_root_blob_name, &key, None)).await {
             Ok(_) => Ok(()),
-            Err(RpcErrorNss::NotFound) => Ok(()), // Already deleted, that's fine
+            Err(RpcError::NotFound) => Ok(()), // Already deleted, that's fine
             Err(e) => Err(e.into()),
         }
     }
@@ -272,7 +262,7 @@ impl DataBlobTracker {
 
         // Extract the list from the response
         match response.result {
-            Some(rpc_client_nss::rpc::list_inodes_response::Result::Ok(inodes)) => {
+            Some(list_inodes_response::Result::Ok(inodes)) => {
                 let result = inodes
                     .inodes
                     .into_iter()
@@ -330,7 +320,7 @@ impl DataBlobTracker {
 
         // Extract the list from the response
         match response.result {
-            Some(rpc_client_nss::rpc::list_inodes_response::Result::Ok(inodes)) => {
+            Some(list_inodes_response::Result::Ok(inodes)) => {
                 let result = inodes
                     .inodes
                     .into_iter()
@@ -360,9 +350,9 @@ impl DataBlobTracker {
         let bucket_values = rss_rpc_retry!(self, list(prefix, None)).await?;
 
         let mut buckets_with_tracking = Vec::new();
-        for bucket_value in bucket_values {
+        for bucket_value in &bucket_values {
             // Parse the bucket JSON data directly from RSS list response
-            match serde_json::from_str::<bucket_tables::bucket_table::Bucket>(&bucket_value) {
+            match serde_json::from_str::<bucket_tables::bucket_table::Bucket>(bucket_value) {
                 Ok(bucket) => {
                     buckets_with_tracking
                         .push((bucket.bucket_name, bucket.tracking_root_blob_name));
@@ -394,7 +384,7 @@ impl DataBlobTracker {
     pub async fn get_az_status(
         &self,
         timeout: Option<Duration>,
-    ) -> Result<rpc_client_rss::rpc::AzStatusMap, DataBlobTrackingError> {
+    ) -> Result<AzStatusMap, DataBlobTrackingError> {
         rss_rpc_retry!(self, get_az_status(timeout))
             .await
             .map_err(|e| e.into())

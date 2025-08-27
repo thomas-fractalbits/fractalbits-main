@@ -15,7 +15,6 @@ use crate::{
 use axum::{extract::Query, response::Response, RequestPartsExt};
 use bucket_tables::bucket_table::Bucket;
 use rkyv::{self, rancor::Error};
-use rpc_client_nss::rpc::list_inodes_response;
 use serde::{Deserialize, Serialize};
 
 use crate::object_layout::ObjectLayout;
@@ -274,8 +273,8 @@ pub async fn list_objects(
 
     // Process results
     let inodes = match resp.result.unwrap() {
-        list_inodes_response::Result::Ok(res) => res.inodes,
-        list_inodes_response::Result::Err(e) => {
+        nss_codec::list_inodes_response::Result::Ok(res) => res.inodes,
+        nss_codec::list_inodes_response::Result::Err(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }

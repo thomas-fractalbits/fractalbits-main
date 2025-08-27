@@ -7,7 +7,6 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use rkyv::{self, rancor::Error};
-use rpc_client_nss::rpc::delete_inode_response;
 use tokio::sync::mpsc::Sender;
 
 use crate::{
@@ -31,7 +30,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
 
     let object_bytes = match resp.result.unwrap() {
         // S3 allow delete non-existing object
-        delete_inode_response::Result::ErrNotFound(()) => {
+        nss_codec::delete_inode_response::Result::ErrNotFound(()) => {
             tracing::debug!(
                 "delete non-existing object {}/{}",
                 bucket.bucket_name,
@@ -39,7 +38,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
             );
             return Ok(Response::new(Body::empty()));
         }
-        delete_inode_response::Result::ErrAlreadyDeleted(()) => {
+        nss_codec::delete_inode_response::Result::ErrAlreadyDeleted(()) => {
             tracing::warn!(
                 "object {}/{} is already deleted",
                 bucket.bucket_name,
@@ -47,8 +46,8 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<Response
             );
             return Ok(Response::new(Body::empty()));
         }
-        delete_inode_response::Result::Ok(res) => res,
-        delete_inode_response::Result::ErrOthers(e) => {
+        nss_codec::delete_inode_response::Result::Ok(res) => res,
+        nss_codec::delete_inode_response::Result::ErrOthers(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }

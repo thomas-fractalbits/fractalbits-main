@@ -163,6 +163,7 @@ dependencies = [
  "metrics-exporter-statsd",
  "moka",
  "nom",
+ "nss_codec",
  "openssl",
  "percent-encoding",
  "pin-project-lite",
@@ -971,6 +972,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bss_codec"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "bytes",
+ "rpc_client_common",
+ "rpc_codec_common",
+ "tokio-util",
+]
+
+[[package]]
 name = "bucket_tables"
 version = "0.1.0"
 dependencies = [
@@ -1525,9 +1537,11 @@ version = "0.1.0"
 dependencies = [
  "bucket_tables",
  "bytes",
+ "nss_codec",
  "rpc_client_common",
  "rpc_client_nss",
  "rpc_client_rss",
+ "rss_codec",
  "serde",
  "serde_json",
  "slotmap_conn_pool",
@@ -2651,6 +2665,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "rpc_client_common",
  "rpc_client_rss",
  "serde",
  "tokio",
@@ -2972,9 +2987,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "38bf9645c8b145698bb0b18a4637dcacbc421ea49bef2317e4fd8065a387cf21"
 
 [[package]]
+name = "nss_codec"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "bytes",
+ "prost",
+ "prost-build",
+ "rpc_client_common",
+ "rpc_codec_common",
+ "tokio-util",
+]
+
+[[package]]
 name = "nss_role_agent"
 version = "0.1.0"
 dependencies = [
+ "bss_codec",
  "bytes",
  "clap 4.5.43",
  "cmd_lib",
@@ -3852,6 +3881,7 @@ dependencies = [
  "hostname",
  "metrics",
  "metrics-exporter-prometheus",
+ "nss_codec",
  "openssl",
  "prost",
  "prost-build",
@@ -3878,14 +3908,14 @@ dependencies = [
 name = "rpc_client_bss"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
+ "bss_codec",
  "bytes",
  "fake 3.1.0",
  "metrics",
  "metrics-exporter-statsd",
  "parking_lot",
- "prost",
  "rpc_client_common",
+ "rpc_codec_common",
  "slotmap_conn_pool",
  "socket2 0.5.10",
  "strum",
@@ -3903,10 +3933,18 @@ dependencies = [
 name = "rpc_client_common"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "metrics",
+ "parking_lot",
+ "rpc_codec_common",
  "slotmap_conn_pool",
  "socket2 0.5.10",
+ "strum",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-retry",
+ "tokio-stream",
+ "tokio-util",
  "tracing",
 ]
 
@@ -3914,14 +3952,14 @@ dependencies = [
 name = "rpc_client_nss"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "bytes",
  "metrics",
  "metrics-exporter-statsd",
+ "nss_codec",
  "parking_lot",
  "prost",
- "prost-build",
  "rpc_client_common",
+ "rpc_codec_common",
  "serde",
  "slotmap_conn_pool",
  "socket2 0.5.10",
@@ -3938,14 +3976,14 @@ dependencies = [
 name = "rpc_client_rss"
 version = "0.1.0"
 dependencies = [
- "bytemuck",
  "bytes",
  "metrics",
  "metrics-exporter-statsd",
  "parking_lot",
  "prost",
- "prost-build",
  "rpc_client_common",
+ "rpc_codec_common",
+ "rss_codec",
  "serde",
  "slotmap_conn_pool",
  "socket2 0.5.10",
@@ -3957,6 +3995,14 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-test",
+]
+
+[[package]]
+name = "rpc_codec_common"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "tokio-util",
 ]
 
 [[package]]
@@ -3975,6 +4021,19 @@ dependencies = [
  "strum",
  "thiserror 1.0.69",
  "tokio",
+]
+
+[[package]]
+name = "rss_codec"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "bytes",
+ "prost",
+ "prost-build",
+ "rpc_client_common",
+ "rpc_codec_common",
+ "tokio-util",
 ]
 
 [[package]]

@@ -3,7 +3,6 @@ use rpc_client_common::{nss_rpc_retry, rpc_retry};
 
 use axum::{body::Body, response::Response};
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
-use rpc_client_nss::rpc::{get_inode_response, put_inode_response};
 
 use crate::{
     handler::{common::s3_error::S3Error, ObjectRequestContext},
@@ -23,11 +22,11 @@ pub async fn abort_multipart_upload_handler(
     .await?;
 
     let object_bytes = match resp.result.unwrap() {
-        get_inode_response::Result::Ok(res) => res,
-        get_inode_response::Result::ErrNotFound(()) => {
+        nss_codec::get_inode_response::Result::Ok(res) => res,
+        nss_codec::get_inode_response::Result::ErrNotFound(()) => {
             return Err(S3Error::NoSuchKey);
         }
-        get_inode_response::Result::ErrOthers(e) => {
+        nss_codec::get_inode_response::Result::ErrOthers(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }
@@ -49,8 +48,8 @@ pub async fn abort_multipart_upload_handler(
     )
     .await?;
     match resp.result.unwrap() {
-        put_inode_response::Result::Ok(_) => {}
-        put_inode_response::Result::Err(e) => {
+        nss_codec::put_inode_response::Result::Ok(_) => {}
+        nss_codec::put_inode_response::Result::Err(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }

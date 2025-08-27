@@ -1,16 +1,13 @@
 use std::time::{Duration, Instant};
 
-use crate::{
-    message::MessageHeader,
-    rpc_client::{InflightRpcGuard, Message, RpcClient, RpcError},
-};
-use bytes::BytesMut;
+use crate::client::RpcClient;
+use bytes::{Bytes, BytesMut};
 use metrics::histogram;
 use prost::Message as PbMessage;
-use rpc_client_common::ErrorRetryable;
+use rpc_client_common::{ErrorRetryable, InflightRpcGuard, RpcError};
+use rpc_codec_common::MessageFrame;
+use rss_codec::*;
 use tracing::{error, warn};
-
-include!(concat!(env!("OUT_DIR"), "/rss_ops.rs"));
 
 impl RpcClient {
     pub async fn put(
@@ -34,36 +31,36 @@ impl RpcClient {
         header.command = Command::Put;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"put", %request_id, %key, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
-        let resp: PutResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: PutResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            put_response::Result::Ok(()) => {
+            rss_codec::put_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "Put_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            put_response::Result::ErrOthers(resp) => {
+            rss_codec::put_response::Result::ErrOthers(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Put_ErrOthers")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"put", %key, "rss rpc failed: {resp}");
                 Err(RpcError::InternalResponseError(resp))
             }
-            put_response::Result::ErrRetry(()) => {
+            rss_codec::put_response::Result::ErrRetry(()) => {
                 histogram!("rss_rpc_nanos", "status" => "Put_ErrRetry")
                     .record(duration.as_nanos() as f64);
                 warn!(rpc=%"put", %key, "rss rpc failed, retry needed");
@@ -100,37 +97,36 @@ impl RpcClient {
         header.command = Command::PutWithExtra;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"put_with_extra", %request_id, %key, %extra_key, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: PutWithExtraResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            put_with_extra_response::Result::Ok(()) => {
+            rss_codec::put_with_extra_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "PutWithExtra_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            put_with_extra_response::Result::ErrOthers(resp) => {
+            rss_codec::put_with_extra_response::Result::ErrOthers(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "PutWithExtra_ErrOthers")
                     .record(duration.as_nanos() as f64);
                 error!("rpc put for key {key} and {extra_key} failed: {resp}");
                 Err(RpcError::InternalResponseError(resp))
             }
-            put_with_extra_response::Result::ErrRetry(()) => {
+            rss_codec::put_with_extra_response::Result::ErrRetry(()) => {
                 histogram!("rss_rpc_nanos", "status" => "PutWithExtra_ErrRetry")
                     .record(duration.as_nanos() as f64);
                 warn!(rpc=%"put_with_extra", %key, %extra_key, "rss rpc failed, retry needed");
@@ -156,36 +152,36 @@ impl RpcClient {
         header.command = Command::Get;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"get", %request_id, %key, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
-        let resp: GetResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: GetResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            get_response::Result::Ok(resp) => {
+            rss_codec::get_response::Result::Ok(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Get_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok((resp.version, resp.value))
             }
-            get_response::Result::ErrNotFound(_resp) => {
+            rss_codec::get_response::Result::ErrNotFound(_resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Get_ErrNotFound")
                     .record(duration.as_nanos() as f64);
                 warn!(rpc=%"get", %key, "could not find entry");
                 Err(RpcError::NotFound)
             }
-            get_response::Result::ErrOthers(resp) => {
+            rss_codec::get_response::Result::ErrOthers(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Get_ErrOthers")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"get", %key, "rss rpc failed: {resp}");
@@ -207,28 +203,28 @@ impl RpcClient {
         header.command = Command::Delete;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 error!(rpc=%"delete", %request_id, %key, error=?e, "rss rpc failed");
                 e
-            })?
-            .body;
-        let resp: DeleteResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: DeleteResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            delete_response::Result::Ok(()) => {
+            rss_codec::delete_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "Delete_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            delete_response::Result::Err(resp) => {
+            rss_codec::delete_response::Result::Err(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Delete_Err")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"delete", %key, "rss rpc failed: {resp}");
@@ -254,31 +250,30 @@ impl RpcClient {
         header.command = Command::GetNssRole;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"get_nss_role", %request_id, %instance_id, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: GetNssRoleResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            get_nss_role_response::Result::Role(role) => {
+            rss_codec::get_nss_role_response::Result::Role(role) => {
                 histogram!("rss_rpc_nanos", "status" => "GetNssRole_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(role)
             }
-            get_nss_role_response::Result::Error(err) => {
+            rss_codec::get_nss_role_response::Result::Error(err) => {
                 histogram!("rss_rpc_nanos", "status" => "GetNssRole_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"get_nss_role", %instance_id, "rss rpc failed: {err}");
@@ -310,37 +305,36 @@ impl RpcClient {
         header.command = Command::DeleteWithExtra;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"delete_with_extra", %request_id, %key, %extra_key, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: DeleteWithExtraResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            delete_with_extra_response::Result::Ok(()) => {
+            rss_codec::delete_with_extra_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "DeleteWithExtra_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            delete_with_extra_response::Result::ErrOthers(resp) => {
+            rss_codec::delete_with_extra_response::Result::ErrOthers(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "DeleteWithExtra_ErrOthers")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"delete_with_extra", %key, %extra_key, "rss rpc failed: {resp}");
                 Err(RpcError::InternalResponseError(resp))
             }
-            delete_with_extra_response::Result::ErrRetry(()) => {
+            rss_codec::delete_with_extra_response::Result::ErrRetry(()) => {
                 histogram!("rss_rpc_nanos", "status" => "DeleteWithExtra_ErrRetry")
                     .record(duration.as_nanos() as f64);
                 warn!(rpc=%"delete_with_extra", %key, %extra_key, "rss rpc failed, retry needed");
@@ -366,30 +360,30 @@ impl RpcClient {
         header.command = Command::List;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"list", %request_id, %prefix, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
-        let resp: ListResponse = PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            })?;
+        let resp: ListResponse =
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            list_response::Result::Ok(resp) => {
+            rss_codec::list_response::Result::Ok(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "List_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(resp.kvs)
             }
-            list_response::Result::Err(resp) => {
+            rss_codec::list_response::Result::Err(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "List_Err")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"list", %prefix, "rss rpc failed: {resp}");
@@ -417,31 +411,30 @@ impl RpcClient {
         header.command = Command::Heartbeat;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"list", %request_id, %instance_id, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: HeartbeatResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            heartbeat_response::Result::Ok(()) => {
+            rss_codec::heartbeat_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "Heartbeat_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            heartbeat_response::Result::Error(resp) => {
+            rss_codec::heartbeat_response::Result::Error(resp) => {
                 histogram!("rss_rpc_nanos", "status" => "Heartbeat_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"put", %instance_id, "rss rpc failed: {resp}");
@@ -460,29 +453,26 @@ impl RpcClient {
         header.command = Command::GetAzStatus;
         header.size = MessageHeader::SIZE as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, Bytes::new());
+        let resp_frame = self
+            .send_request(header.id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"get_az_status", %request_id, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: GetAzStatusResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            get_az_status_response::Result::StatusMap(status_map) => {
+            rss_codec::get_az_status_response::Result::StatusMap(status_map) => {
                 histogram!("rss_rpc_nanos", "status" => "GetAzStatus_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(status_map)
             }
-            get_az_status_response::Result::Error(err) => {
+            rss_codec::get_az_status_response::Result::Error(err) => {
                 histogram!("rss_rpc_nanos", "status" => "GetAzStatus_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"get_az_status", "rss rpc failed: {err}");
@@ -510,31 +500,30 @@ impl RpcClient {
         header.command = Command::SetAzStatus;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"set_az_status", %request_id, %az_id, %status, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: SetAzStatusResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            set_az_status_response::Result::Ok(()) => {
+            rss_codec::set_az_status_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "SetAzStatus_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            set_az_status_response::Result::Error(err) => {
+            rss_codec::set_az_status_response::Result::Error(err) => {
                 histogram!("rss_rpc_nanos", "status" => "SetAzStatus_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"set_az_status", "rss rpc failed: {err}");
@@ -565,31 +554,30 @@ impl RpcClient {
         header.command = Command::CreateBucket;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"create_bucket", %request_id, %bucket_name, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: CreateBucketResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            create_bucket_response::Result::Ok(()) => {
+            rss_codec::create_bucket_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "CreateBucket_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            create_bucket_response::Result::Error(err) => {
+            rss_codec::create_bucket_response::Result::Error(err) => {
                 histogram!("rss_rpc_nanos", "status" => "CreateBucket_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"create_bucket", %bucket_name, "rss rpc failed: {err}");
@@ -617,31 +605,30 @@ impl RpcClient {
         header.command = Command::DeleteBucket;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
 
-        let mut request_bytes = BytesMut::with_capacity(header.size as usize);
-        header.encode(&mut request_bytes);
-        body.encode(&mut request_bytes)
-            .map_err(RpcError::EncodeError)?;
+        let mut body_bytes = BytesMut::new();
+        body.encode(&mut body_bytes)
+            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
 
-        let resp_bytes = self
-            .send_request(header.id, Message::Bytes(request_bytes.freeze()), timeout)
+        let frame = MessageFrame::new(header, body_bytes.freeze());
+        let resp_frame = self
+            .send_request(request_id, frame, timeout)
             .await
             .map_err(|e| {
                 if !e.retryable() {
                     error!(rpc=%"delete_bucket", %request_id, %bucket_name, error=?e, "rss rpc failed");
                 }
                 e
-            })?
-            .body;
+            })?;
         let resp: DeleteBucketResponse =
-            PbMessage::decode(resp_bytes).map_err(RpcError::DecodeError)?;
+            PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         let duration = start.elapsed();
         match resp.result.unwrap() {
-            delete_bucket_response::Result::Ok(()) => {
+            rss_codec::delete_bucket_response::Result::Ok(()) => {
                 histogram!("rss_rpc_nanos", "status" => "DeleteBucket_Ok")
                     .record(duration.as_nanos() as f64);
                 Ok(())
             }
-            delete_bucket_response::Result::Error(err) => {
+            rss_codec::delete_bucket_response::Result::Error(err) => {
                 histogram!("rss_rpc_nanos", "status" => "DeleteBucket_Error")
                     .record(duration.as_nanos() as f64);
                 error!(rpc=%"delete_bucket", %bucket_name, "rss rpc failed: {err}");

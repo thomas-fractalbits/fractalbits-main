@@ -1,7 +1,7 @@
 use axum::{body::Body, http::header, response::Response};
 use bytes::Buf;
 use rpc_client_common::rpc_retry;
-use rpc_client_rss::RpcErrorRss;
+use rpc_client_common::RpcError;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -106,10 +106,10 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
         Err(e) => {
             tracing::error!("Failed to create bucket {}: {}", ctx.bucket_name, e);
             match e {
-                RpcErrorRss::InternalResponseError(msg) if msg.contains("already exists") => {
+                RpcError::InternalResponseError(msg) if msg.contains("already exists") => {
                     Err(S3Error::BucketAlreadyExists)
                 }
-                RpcErrorRss::InternalResponseError(msg) if msg.contains("API key not found") => {
+                RpcError::InternalResponseError(msg) if msg.contains("API key not found") => {
                     Err(S3Error::AccessDenied)
                 }
                 _ => Err(S3Error::InternalError),

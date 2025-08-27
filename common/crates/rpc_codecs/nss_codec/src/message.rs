@@ -1,6 +1,7 @@
-use crate::rpc::Command;
+use crate::Command;
 use bytemuck::{Pod, Zeroable};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use rpc_codec_common::MessageHeaderTrait;
 
 #[repr(C)]
 #[derive(Pod, Debug, Default, Clone, Copy, Zeroable)]
@@ -70,5 +71,36 @@ impl MessageHeader {
         let mut bytes = [0u8; 4];
         bytes.copy_from_slice(&src[offset..offset + 4]);
         u32::from_le_bytes(bytes) as usize
+    }
+}
+
+impl MessageHeaderTrait for MessageHeader {
+    const SIZE: usize = 16;
+
+    fn encode(&self, dst: &mut BytesMut) {
+        self.encode(dst)
+    }
+
+    fn decode(src: &Bytes) -> Self {
+        Self::decode(src)
+    }
+
+    fn get_size(src: &BytesMut) -> usize {
+        let offset = std::mem::offset_of!(MessageHeader, size);
+        let mut bytes = [0u8; 4];
+        bytes.copy_from_slice(&src[offset..offset + 4]);
+        u32::from_le_bytes(bytes) as usize
+    }
+
+    fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    fn set_id(&mut self, id: u32) {
+        self.id = id;
+    }
+
+    fn get_body_size(&self) -> usize {
+        (self.size as usize).saturating_sub(Self::SIZE)
     }
 }

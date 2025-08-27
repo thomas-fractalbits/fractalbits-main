@@ -15,8 +15,9 @@ pub use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
 use futures::stream::{self, StreamExt};
 use metrics::histogram;
 use moka::future::Cache;
+use rpc_client_common::RpcError;
 use rpc_client_nss::RpcClientNss;
-use rpc_client_rss::{RpcClientRss, RpcErrorRss};
+use rpc_client_rss::RpcClientRss;
 
 use slotmap_conn_pool::{ConnPool, Poolable};
 use std::{
@@ -46,7 +47,7 @@ pub struct AppState {
 }
 
 impl KvClientProvider for AppState {
-    type Error = RpcErrorRss;
+    type Error = RpcError;
 
     async fn checkout_rpc_client_rss(
         &self,

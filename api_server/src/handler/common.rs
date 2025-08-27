@@ -21,7 +21,6 @@ use axum::{
 };
 use rand::{rngs::OsRng, RngCore};
 use rkyv::{self, rancor::Error};
-use rpc_client_nss::{rpc::get_inode_response, rpc::list_inodes_response};
 use s3_error::S3Error;
 use signature::checksum::add_checksum_response_headers;
 
@@ -37,11 +36,11 @@ pub async fn get_raw_object(
     .await?;
 
     let object_bytes = match resp.result.unwrap() {
-        get_inode_response::Result::Ok(res) => res,
-        get_inode_response::Result::ErrNotFound(()) => {
+        nss_codec::get_inode_response::Result::Ok(res) => res,
+        nss_codec::get_inode_response::Result::ErrNotFound(()) => {
             return Err(S3Error::NoSuchKey);
         }
-        get_inode_response::Result::ErrOthers(e) => {
+        nss_codec::get_inode_response::Result::ErrOthers(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }
@@ -76,8 +75,8 @@ pub async fn list_raw_objects(
 
     // Process results
     let inodes = match resp.result.unwrap() {
-        list_inodes_response::Result::Ok(res) => res.inodes,
-        list_inodes_response::Result::Err(e) => {
+        nss_codec::list_inodes_response::Result::Ok(res) => res.inodes,
+        nss_codec::list_inodes_response::Result::Err(e) => {
             tracing::error!(e);
             return Err(S3Error::InternalError);
         }
