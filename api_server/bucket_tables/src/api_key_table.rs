@@ -75,7 +75,7 @@ impl Entry for ApiKey {
 pub struct ApiKeyTable;
 
 impl TableSchema for ApiKeyTable {
-    const TABLE_NAME: &'static str = "api_keys";
+    const TABLE_NAME: &'static str = "api_key";
 
     type E = ApiKey;
 }

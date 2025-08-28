@@ -44,7 +44,7 @@ impl Entry for Bucket {
 pub struct BucketTable;
 
 impl TableSchema for BucketTable {
-    const TABLE_NAME: &'static str = "buckets";
+    const TABLE_NAME: &'static str = "bucket";
 
     type E = Bucket;
 }

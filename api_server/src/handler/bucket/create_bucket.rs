@@ -96,7 +96,7 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<Response
             // Invalidate API key cache since it now has new bucket permissions
             ctx.app
                 .cache
-                .invalidate(&format!("/api_keys/{}", api_key_id))
+                .invalidate(&format!("api_key:{api_key_id}"))
                 .await;
 
             Ok(Response::builder()

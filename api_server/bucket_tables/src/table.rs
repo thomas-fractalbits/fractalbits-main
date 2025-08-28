@@ -212,11 +212,11 @@ impl<C: KvClientProvider, F: TableSchema> Table<C, F> {
 
     #[inline]
     fn get_full_key(table_name: &str, key: &str) -> String {
-        format!("/{table_name}/{key}")
+        format!("{table_name}:{key}")
     }
 
     #[inline]
     fn get_prefix(table_name: &str) -> String {
-        format!("/{table_name}/")
+        format!("{table_name}:")
     }
 }

@@ -80,7 +80,7 @@ pub async fn delete_api_key(
     State(app): State<Arc<AppState>>,
     Path(key_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
-    let key_id = key_id.trim_start_matches("/api_keys/").to_string();
+    let key_id = key_id.trim_start_matches("api_key:").to_string();
     info!("Deleting API key with key_id: {}", key_id);
     let table: Table<_, ApiKeyTable> = Table::new(app.clone(), None);
     let api_key = table

@@ -346,7 +346,7 @@ impl DataBlobTracker {
     pub async fn list_buckets_with_tracking(
         &self,
     ) -> Result<Vec<(String, Option<String>)>, DataBlobTrackingError> {
-        let prefix = "/buckets/";
+        let prefix = "bucket:";
         let bucket_values = rss_rpc_retry!(self, list(prefix, None)).await?;
 
         let mut buckets_with_tracking = Vec::new();

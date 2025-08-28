@@ -37,11 +37,11 @@ pub async fn delete_bucket_handler(ctx: BucketRequestContext) -> Result<Response
             // Invalidate both bucket and API key cache
             ctx.app
                 .cache
-                .invalidate(&format!("/buckets/{}", bucket.bucket_name))
+                .invalidate(&format!("bucket:{}", bucket.bucket_name))
                 .await;
             ctx.app
                 .cache
-                .invalidate(&format!("/api_keys/{}", api_key_id))
+                .invalidate(&format!("api_key:{api_key_id}"))
                 .await;
 
             Ok(Response::new(Body::empty()))
