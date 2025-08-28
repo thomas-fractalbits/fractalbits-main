@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use axum::{extract::Query, response::Response, RequestPartsExt};
-use bucket_tables::{
-    bucket_table::{self, BucketTable},
-    table::Table,
-};
+use data_types::{table::Table, BucketTable};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -66,7 +63,7 @@ struct Bucket {
 }
 
 impl Bucket {
-    fn from_table_with_region(bucket: &bucket_table::Bucket, region: &str) -> Self {
+    fn from_table_with_region(bucket: &data_types::Bucket, region: &str) -> Self {
         Self {
             bucket_region: region.into(),
             creation_date: format_timestamp(bucket.creation_date),

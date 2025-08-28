@@ -6,12 +6,11 @@ use axum::extract::Query;
 use axum::http::header::{HeaderMap, HeaderValue, AUTHORIZATION, HOST};
 use axum::http::{request::Request, Method};
 use axum::RequestExt;
-use bucket_tables::{
-    api_key_table::{ApiKey, ApiKeyTable},
-    table::Table,
-    Versioned,
-};
 use chrono::{DateTime, Utc};
+use data_types::{
+    table::Table,
+    Versioned, {ApiKey, ApiKeyTable},
+};
 use hmac::Mac;
 use itertools::Itertools;
 use rpc_client_common::RpcError;

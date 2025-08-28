@@ -21,5 +21,5 @@ slotmap_conn_pool = { workspace = true }
 rss_codec = { workspace = true }
 nss_codec = { workspace = true }
 
-# Bucket tables for accessing bucket data structures
-bucket_tables = { path = "../../../api_server/bucket_tables" }
+# Data types for accessing data structures
+data_types = { workspace = true }

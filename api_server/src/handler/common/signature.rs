@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use arrayvec::ArrayString;
 use body::ReqBody;
-use bucket_tables::{api_key_table::ApiKey, Versioned};
 use chrono::{DateTime, Utc};
+use data_types::{ApiKey, Versioned};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 

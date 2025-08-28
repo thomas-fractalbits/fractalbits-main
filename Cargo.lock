@@ -137,7 +137,6 @@ dependencies = [
  "axum-macros",
  "base64 0.22.1",
  "blake2",
- "bucket_tables",
  "bytes",
  "chrono",
  "clap 4.5.43",
@@ -147,6 +146,7 @@ dependencies = [
  "crc32c",
  "crc32fast",
  "data_blob_tracking",
+ "data_types",
  "futures",
  "governor",
  "hex",
@@ -982,23 +982,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bucket_tables"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "hex",
- "metrics",
- "moka",
- "rand 0.8.5",
- "rpc_client_common",
- "rpc_client_rss",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1534,8 +1517,8 @@ dependencies = [
 name = "data_blob_tracking"
 version = "0.1.0"
 dependencies = [
- "bucket_tables",
  "bytes",
+ "data_types",
  "nss_codec",
  "rpc_client_common",
  "rpc_client_nss",
@@ -1545,6 +1528,23 @@ dependencies = [
  "serde_json",
  "slotmap_conn_pool",
  "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "data_types"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "hex",
+ "metrics",
+ "moka",
+ "rand 0.8.5",
+ "rpc_client_common",
+ "rpc_client_rss",
+ "serde",
+ "serde_json",
  "tokio",
  "tracing",
 ]
@@ -3858,11 +3858,11 @@ version = "0.1.0"
 dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
- "bucket_tables",
  "bytemuck",
  "bytes",
  "clap 4.5.43",
  "cmd_lib",
+ "data_types",
  "futures",
  "hostname",
  "metrics",
@@ -3995,9 +3995,9 @@ dependencies = [
 name = "rss_admin"
 version = "0.1.0"
 dependencies = [
- "bucket_tables",
  "bytes",
  "clap 4.5.43",
+ "data_types",
  "rpc_client_rss",
  "serde",
  "serde_json",

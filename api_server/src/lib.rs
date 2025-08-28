@@ -8,10 +8,10 @@ use blob_storage::{
     S3ExpressMultiAzStorage, S3ExpressMultiAzWithTracking, S3ExpressSingleAzStorage,
     S3ExpressWithTrackingConfig,
 };
-use bucket_tables::{table::KvClientProvider, Versioned};
 use bytes::Bytes;
 pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridConfig};
 pub use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
+use data_types::{table::KvClientProvider, Versioned};
 use futures::stream::{self, StreamExt};
 use metrics::histogram;
 use moka::future::Cache;

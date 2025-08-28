@@ -3,7 +3,7 @@ members = [
     "api_server",
     "api_server/benches/rewrk",
     "api_server/benches/rewrk_rpc",
-    "api_server/bucket_tables",
+    "common/crates/data_types",
     "cdk/fractalbits-bootstrap",
     "common/crates/data_blob_tracking",
     "multi_az/data_blob_resync_server",
@@ -27,7 +27,7 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
-bucket_tables = { path = "api_server/bucket_tables" }
+data_types = { path = "common/crates/data_types" }
 data_blob_tracking = { path = "common/crates/data_blob_tracking" }
 rpc_client_common = { path = "common/crates/rpc_clients/client_common" }
 rpc_client_bss = { path = "common/crates/rpc_clients/bss" }

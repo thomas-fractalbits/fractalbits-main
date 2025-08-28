@@ -8,9 +8,8 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::AppState;
-use bucket_tables::api_key_table::{ApiKey, ApiKeyTable};
-use bucket_tables::table::Table;
-use bucket_tables::Versioned;
+use data_types::table::Table;
+use data_types::{ApiKey, ApiKeyTable, Versioned};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateApiKeyRequest {

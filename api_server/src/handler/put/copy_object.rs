@@ -24,7 +24,7 @@ use axum::{
     response::Response,
 };
 use base64::{prelude::BASE64_STANDARD, Engine};
-use bucket_tables::{api_key_table::ApiKey, Versioned};
+use data_types::{ApiKey, Versioned};
 use serde::Serialize;
 
 #[allow(dead_code)]

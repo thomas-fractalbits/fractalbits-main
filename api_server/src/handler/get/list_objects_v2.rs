@@ -13,7 +13,7 @@ use crate::{
     AppState,
 };
 use axum::{extract::Query, response::Response, RequestPartsExt};
-use bucket_tables::bucket_table::Bucket;
+use data_types::Bucket;
 use rkyv::{self, rancor::Error};
 use serde::{Deserialize, Serialize};
 

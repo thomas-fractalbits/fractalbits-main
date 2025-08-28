@@ -10,9 +10,9 @@ pub use list_buckets::list_buckets_handler;
 
 use super::common::{authorization::Authorization, s3_error::S3Error};
 use crate::AppState;
-use bucket_tables::{
-    bucket_table::{Bucket, BucketTable},
+use data_types::{
     table::Table,
+    {Bucket, BucketTable},
 };
 use metrics::histogram;
 use rpc_client_common::RpcError;

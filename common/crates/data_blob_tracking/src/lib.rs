@@ -352,7 +352,7 @@ impl DataBlobTracker {
         let mut buckets_with_tracking = Vec::new();
         for bucket_value in &bucket_values {
             // Parse the bucket JSON data directly from RSS list response
-            match serde_json::from_str::<bucket_tables::bucket_table::Bucket>(bucket_value) {
+            match serde_json::from_str::<data_types::Bucket>(bucket_value) {
                 Ok(bucket) => {
                     buckets_with_tracking
                         .push((bucket.bucket_name, bucket.tracking_root_blob_name));

@@ -20,15 +20,13 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use bucket::BucketEndpoint;
-use bucket_tables::api_key_table::ApiKey;
-use bucket_tables::bucket_table::Bucket;
-use bucket_tables::Versioned;
 use common::{
     authorization::Authorization,
     request::extract::*,
     s3_error::S3Error,
     signature::{self, body::ReqBody, verify_request, VerifiedRequest},
 };
+use data_types::{ApiKey, Bucket, Versioned};
 use delete::DeleteEndpoint;
 use endpoint::Endpoint;
 use get::GetEndpoint;

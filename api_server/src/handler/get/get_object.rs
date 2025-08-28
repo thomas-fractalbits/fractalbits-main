@@ -27,7 +27,7 @@ use crate::{
     BlobClient,
 };
 use crate::{AppState, BlobId};
-use bucket_tables::bucket_table::Bucket;
+use data_types::Bucket;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]

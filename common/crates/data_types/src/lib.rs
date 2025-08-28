@@ -1,7 +1,12 @@
-pub mod api_key_table;
-pub mod bucket_table;
-pub mod permission;
+mod api_key;
+mod bucket;
+mod permission;
 pub mod table;
+
+// Re-export the main types for convenience
+pub use api_key::{ApiKey, ApiKeyTable};
+pub use bucket::{Bucket, BucketTable};
+pub use permission::BucketKeyPerm;
 
 #[derive(Clone)]
 pub struct Versioned<T: Sized> {

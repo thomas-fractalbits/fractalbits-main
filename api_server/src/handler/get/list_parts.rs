@@ -13,7 +13,7 @@ use crate::object_layout::{MpuState, ObjectState};
 use crate::AppState;
 use axum::{extract::Query, response::Response, RequestPartsExt};
 use base64::prelude::*;
-use bucket_tables::bucket_table::Bucket;
+use data_types::Bucket;
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
