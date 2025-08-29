@@ -16,7 +16,7 @@ use bucket::BucketEndpoint;
 use common::{
     request::extract::*,
     s3_error::S3Error,
-    signature::{self, payload::*},
+    signature::{self, verify_request, VerifiedRequest},
 };
 use data_types::{ApiKey, Bucket, Versioned};
 use delete::DeleteEndpoint;
@@ -247,7 +247,7 @@ async fn any_handler_inner(
             // Signature verification doesn't use body (it's marked as _body in the function)
             match verify_request(app.clone(), request, &auth).await {
                 Ok(verified) => Ok(verified),
-                Err(signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound)) => {
+                Err(signature::SignatureError::RpcErrorRss(RpcErrorRss::NotFound)) => {
                     return Err(S3Error::InvalidAccessKeyId);
                 }
                 Err(e) => {
@@ -273,7 +273,7 @@ async fn any_handler_inner(
         let auth_unwrapped = auth.ok_or(S3Error::InvalidSignature)?;
         match verify_request(app.clone(), request, &auth_unwrapped).await {
             Ok(verified) => Ok(verified),
-            Err(signature::error::Error::RpcErrorRss(RpcErrorRss::NotFound)) => {
+            Err(signature::SignatureError::RpcErrorRss(RpcErrorRss::NotFound)) => {
                 return Err(S3Error::InvalidAccessKeyId);
             }
             Err(_) => {

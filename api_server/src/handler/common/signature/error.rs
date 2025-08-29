@@ -4,7 +4,7 @@ use thiserror::Error;
 
 /// Errors of this crate
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum SignatureError {
     // #[error(display = "{}", _0)]
     // /// Error from common error
     // Common(CommonError),
@@ -44,13 +44,13 @@ pub enum Error {
     Other(String),
 }
 
-impl From<Box<dyn std::error::Error + Send + Sync>> for Error {
+impl From<Box<dyn std::error::Error + Send + Sync>> for SignatureError {
     fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        Error::Other(err.to_string())
+        SignatureError::Other(err.to_string())
     }
 }
 
-impl From<std::convert::Infallible> for Error {
+impl From<std::convert::Infallible> for SignatureError {
     fn from(_: std::convert::Infallible) -> Self {
         // Infallible can never actually be constructed, so this is unreachable
         unreachable!("Infallible can never be constructed")

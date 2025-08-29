@@ -1,5 +1,6 @@
 use std::{convert::From, str::Utf8Error};
 
+use super::signature::SignatureError;
 use crate::blob_storage::BlobStorageError;
 use actix_web::{
     http::{
@@ -13,9 +14,6 @@ use http_range::HttpRangeParseError;
 use rpc_client_common::RpcError;
 use strum::AsRefStr;
 use thiserror::Error;
-
-use super::super::common::signature;
-use super::request::signature::SignatureError;
 
 // From https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html (2025/02/28)
 
@@ -758,13 +756,6 @@ impl From<InvalidUri> for S3Error {
     }
 }
 
-impl From<SignatureError> for S3Error {
-    fn from(value: SignatureError) -> Self {
-        tracing::error!("SignatureError: {value}");
-        Self::InvalidSignature
-    }
-}
-
 impl From<RpcError> for S3Error {
     fn from(value: RpcError) -> Self {
         tracing::error!("RpcError: {value}");
@@ -793,9 +784,9 @@ impl From<ToStrError> for S3Error {
     }
 }
 
-impl From<signature::error::Error> for S3Error {
-    fn from(value: signature::error::Error) -> Self {
-        tracing::error!("signature::error::Error: {value}");
+impl From<SignatureError> for S3Error {
+    fn from(value: SignatureError) -> Self {
+        tracing::error!("SignatureError: {value}");
         Self::InvalidSignature
     }
 }

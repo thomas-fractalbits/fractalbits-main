@@ -1,42 +1,32 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::sync::Arc;
 
 use actix_web::http::header::{HeaderMap, HeaderValue, AUTHORIZATION, HOST};
 use actix_web::HttpRequest;
+use arrayvec::ArrayString;
 use chrono::{DateTime, Utc};
 use data_types::{ApiKey, Versioned};
-use hmac::Mac;
+use hmac::{Hmac, Mac};
 use itertools::Itertools;
-use rpc_client_rss::RpcErrorRss;
 use sha2::{Digest, Sha256};
 
-use crate::handler::common::{request::extract::Authentication, xheader};
-use crate::AppState;
+use crate::{
+    handler::common::{
+        data::Hash,
+        encoding::uri_encode,
+        request::extract::Authentication,
+        signature::{ContentSha256Header, SignatureError},
+        time::SHORT_DATE,
+        xheader,
+    },
+    AppState,
+};
 
-use super::super::data::Hash;
-use super::super::encoding::uri_encode;
-use super::*;
-
-/// Ensures the host header is present in the headers map, which is required for SigV4 signature verification.
-/// For HTTP/2 requests, the :authority pseudo-header replaces the host header, but actix-web doesn't
-/// automatically add it to the headers map. This function creates a new headers map with the host header
-/// added from the request's connection info when it's missing.
-fn ensure_host_header_present(request: &HttpRequest) -> Result<HeaderMap, Error> {
-    let mut headers = request.headers().clone();
-
-    // Check if host header is missing (typical for HTTP/2)
-    if !headers.contains_key(HOST) {
-        // Get the host from connection info (:authority pseudo-header for HTTP/2)
-        let connection_info = request.connection_info();
-        let host_value = connection_info.host();
-        let header_value = HeaderValue::from_str(host_value)
-            .map_err(|_| Error::Other("Invalid host value from connection info".into()))?;
-        headers.insert(HOST, header_value);
-        tracing::debug!("Added missing host header for HTTP/2: {}", host_value);
-    }
-
-    Ok(headers)
-}
+type HmacSha256 = Hmac<Sha256>;
+// Possible values for x-amz-content-sha256, in addition to the actual sha256
+const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+const AWS4_HMAC_SHA256_PAYLOAD: &str = "AWS4-HMAC-SHA256-PAYLOAD";
 
 pub struct CheckedSignature {
     pub key: Option<Versioned<ApiKey>>,
@@ -44,33 +34,11 @@ pub struct CheckedSignature {
     pub signature_header: Option<String>,
 }
 
-pub struct VerifiedRequest {
-    pub api_key: Versioned<ApiKey>,
-    pub content_sha256_header: ContentSha256Header,
-}
-
-pub async fn verify_request(
-    app: Arc<AppState>,
-    request: &HttpRequest,
-    auth: &Authentication,
-) -> Result<VerifiedRequest, Error> {
-    let checked_signature = check_payload_signature(app.clone(), auth, request).await?;
-
-    let api_key = checked_signature
-        .key
-        .ok_or(Error::RpcErrorRss(RpcErrorRss::NotFound))?;
-
-    Ok(VerifiedRequest {
-        api_key,
-        content_sha256_header: checked_signature.content_sha256_header,
-    })
-}
-
 pub async fn check_payload_signature(
     app: Arc<AppState>,
     auth: &Authentication,
     request: &HttpRequest,
-) -> Result<CheckedSignature, Error> {
+) -> Result<CheckedSignature, SignatureError> {
     let query_string = request.query_string();
     let mut query: BTreeMap<String, String> =
         serde_urlencoded::from_str(query_string).unwrap_or_default();
@@ -88,7 +56,7 @@ pub async fn check_payload_signature(
             .get(xheader::X_AMZ_CONTENT_SHA256.as_str())
             .map(|x| x.to_str())
             .transpose()
-            .map_err(|e| Error::Other(format!("Invalid header: {e}")))?;
+            .map_err(|e| SignatureError::Other(format!("Invalid header: {e}")))?;
 
         Ok(CheckedSignature {
             key: None,
@@ -98,7 +66,7 @@ pub async fn check_payload_signature(
     }
 }
 
-fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Header, Error> {
+fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Header, SignatureError> {
     let header = match header {
         Some(x) => x,
         None => return Ok(ContentSha256Header::UnsignedPayload),
@@ -115,7 +83,7 @@ fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Heade
             AWS4_HMAC_SHA256_PAYLOAD => true,
             UNSIGNED_PAYLOAD => false,
             _ => {
-                return Err(Error::Other(
+                return Err(SignatureError::Other(
                     "invalid or unsupported x-amz-content-sha256".into(),
                 ))
             }
@@ -125,16 +93,16 @@ fn parse_x_amz_content_sha256(header: Option<&str>) -> Result<ContentSha256Heade
         let sha256 = hex::decode(header)
             .ok()
             .and_then(|bytes| Hash::try_from(&bytes))
-            .ok_or_else(|| Error::Other("Invalid content sha256 hash".into()))?;
+            .ok_or_else(|| SignatureError::Other("Invalid content sha256 hash".into()))?;
         Ok(ContentSha256Header::Sha256Checksum(sha256))
     }
 }
 
-pub async fn check_standard_signature(
+async fn check_standard_signature(
     app: Arc<AppState>,
     authentication: &Authentication,
     request: &HttpRequest,
-) -> Result<CheckedSignature, Error> {
+) -> Result<CheckedSignature, SignatureError> {
     let query_params: BTreeMap<String, String> =
         serde_urlencoded::from_str(request.query_string()).unwrap_or_default();
 
@@ -170,12 +138,33 @@ pub async fn check_standard_signature(
     })
 }
 
+/// Ensures the host header is present in the headers map, which is required for SigV4 signature verification.
+/// For HTTP/2 requests, the :authority pseudo-header replaces the host header, but actix-web doesn't
+/// automatically add it to the headers map. This function creates a new headers map with the host header
+/// added from the request's connection info when it's missing.
+fn ensure_host_header_present(request: &HttpRequest) -> Result<HeaderMap, SignatureError> {
+    let mut headers = request.headers().clone();
+
+    // Check if host header is missing (typical for HTTP/2)
+    if !headers.contains_key(HOST) {
+        // Get the host from connection info (:authority pseudo-header for HTTP/2)
+        let connection_info = request.connection_info();
+        let host_value = connection_info.host();
+        let header_value = HeaderValue::from_str(host_value)
+            .map_err(|_| SignatureError::Other("Invalid host value from connection info".into()))?;
+        headers.insert(HOST, header_value);
+        tracing::debug!("Added missing host header for HTTP/2: {}", host_value);
+    }
+
+    Ok(headers)
+}
+
 async fn check_presigned_signature(
     app: Arc<AppState>,
     authentication: &Authentication,
     request: &HttpRequest,
     query: &mut BTreeMap<String, String>,
-) -> Result<CheckedSignature, Error> {
+) -> Result<CheckedSignature, SignatureError> {
     let signed_headers = &authentication.signed_headers;
 
     // Create a headers map that includes the host header
@@ -217,19 +206,23 @@ async fn check_presigned_signature(
 fn verify_signed_headers(
     headers: &HeaderMap,
     signed_headers: &BTreeSet<String>,
-) -> Result<(), Error> {
+) -> Result<(), SignatureError> {
     if !signed_headers.contains(HOST.as_str()) {
-        return Err(Error::Other("Header `Host` should be signed".into()));
+        return Err(SignatureError::Other(
+            "Header `Host` should be signed".into(),
+        ));
     }
     for (name, _) in headers.iter() {
         if name.as_str().starts_with("x-amz-") && !signed_headers.contains(name.as_str()) {
-            return Err(Error::Other(format!("Header `{name}` should be signed")));
+            return Err(SignatureError::Other(format!(
+                "Header `{name}` should be signed"
+            )));
         }
     }
     Ok(())
 }
 
-pub fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_req: &str) -> String {
+fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_req: &str) -> String {
     let mut hasher = Sha256::default();
     hasher.update(canonical_req.as_bytes());
     [
@@ -241,14 +234,14 @@ pub fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_re
     .join("\n")
 }
 
-pub fn canonical_request(
+fn canonical_request(
     method: &actix_web::http::Method,
     canonical_uri: &str,
     query_params: &BTreeMap<String, String>,
     headers: &actix_web::http::header::HeaderMap,
     signed_headers: &BTreeSet<String>,
     content_sha256: &str,
-) -> Result<String, Error> {
+) -> Result<String, SignatureError> {
     // Canonical query string from passed query params
     let canonical_query_string = {
         let mut items = Vec::with_capacity(query_params.len());
@@ -263,9 +256,9 @@ pub fn canonical_request(
     let canonical_header_string = signed_headers
         .iter()
         .map(|name| {
-            let value = headers
-                .get(name)
-                .ok_or_else(|| Error::Other(format!("signed header `{name}` is not present")))?;
+            let value = headers.get(name).ok_or_else(|| {
+                SignatureError::Other(format!("signed header `{name}` is not present"))
+            })?;
             // Handle potentially non-ASCII header values (e.g., x-amz-meta-* headers with unicode)
             let value_str = if let Ok(s) = value.to_str() {
                 s.to_string()
@@ -275,7 +268,7 @@ pub fn canonical_request(
             };
             Ok(format!("{}:{}", name.as_str(), value_str.trim()))
         })
-        .collect::<Result<Vec<String>, Error>>()?
+        .collect::<Result<Vec<String>, SignatureError>>()?
         .join("\n");
     let signed_headers = signed_headers.iter().join(";");
 
@@ -292,20 +285,54 @@ pub fn canonical_request(
     Ok(list.join("\n"))
 }
 
-pub async fn verify_v4(
+async fn verify_v4(
     app: Arc<AppState>,
     auth: &Authentication,
     payload: &[u8],
-) -> Result<Option<Versioned<ApiKey>>, Error> {
+) -> Result<Option<Versioned<ApiKey>>, SignatureError> {
     let key = app.get_api_key(auth.key_id.clone()).await?;
 
     let mut hmac = signing_hmac(&auth.date, &key.data.secret_key, &app.config.region)
-        .map_err(|_| Error::Other("Unable to build signing HMAC".into()))?;
+        .map_err(|_| SignatureError::Other("Unable to build signing HMAC".into()))?;
     hmac.update(payload);
     let signature = hex::decode(&auth.signature)?;
     if hmac.verify_slice(&signature).is_err() {
-        return Err(Error::Other("signature mismatch".into()));
+        return Err(SignatureError::Other("signature mismatch".into()));
     }
 
     Ok(Some(key))
+}
+
+fn signing_hmac(
+    datetime: &DateTime<Utc>,
+    secret_key: &str,
+    region: &str,
+) -> Result<HmacSha256, hmac::digest::InvalidLength> {
+    let service = "s3";
+
+    let mut initial_key = Vec::with_capacity(4 + secret_key.len());
+    initial_key.extend_from_slice(b"AWS4");
+    initial_key.extend_from_slice(secret_key.as_bytes());
+
+    let mut date_str = ArrayString::<8>::new();
+    write!(&mut date_str, "{}", datetime.format(SHORT_DATE))
+        .expect("Formatting a date into an 8-byte ArrayString should not fail");
+
+    let mut mac = HmacSha256::new_from_slice(&initial_key)?;
+    mac.update(date_str.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(region.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(service.as_bytes());
+    let key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&key)?;
+    mac.update(b"aws4_request");
+    let signing_key = mac.finalize().into_bytes();
+
+    HmacSha256::new_from_slice(&signing_key)
 }
