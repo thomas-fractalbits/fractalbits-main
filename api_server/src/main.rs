@@ -29,11 +29,17 @@ struct Opt {
 
 #[tokio::main]
 async fn main() {
+    // AWS SDK suppression filter
+    let third_party_filter = "tower_http=warn,hyper_util=warn,aws_smithy=warn,aws_sdk=warn";
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{}=warn,tower_http=warn", env!("CARGO_CRATE_NAME")).into()
-            }),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .map(|filter| {
+                    format!("{filter},{third_party_filter}")
+                        .parse()
+                        .unwrap_or(filter)
+                })
+                .unwrap_or_else(|_| format!("info,{third_party_filter}").into()),
         )
         .with(
             tracing_subscriber::fmt::layer()
