@@ -1,13 +1,20 @@
 use crate::*;
 
-pub fn run_cmd_precheckin(s3_api_only: bool) -> CmdResult {
+pub fn run_cmd_precheckin(s3_api_only: bool, debug_api_server: bool) -> CmdResult {
     let working_dir = run_fun!(pwd)?;
-    cmd_service::stop_service(ServiceName::All)?;
-    cmd_build::build_rust_servers(BuildMode::Debug)?;
-    cmd_build::build_zig_servers(BuildMode::Debug)?;
+    if debug_api_server {
+        cmd_service::stop_service(ServiceName::ApiServer)?;
+        run_cmd! {
+            cargo build -p api_server;
+        }?;
+    } else {
+        cmd_service::stop_service(ServiceName::All)?;
+        cmd_build::build_rust_servers(BuildMode::Debug)?;
+        cmd_build::build_zig_servers(BuildMode::Debug)?;
+    }
 
     if s3_api_only {
-        return run_s3_api_tests();
+        return run_s3_api_tests(debug_api_server);
     }
 
     cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
@@ -21,7 +28,7 @@ pub fn run_cmd_precheckin(s3_api_only: bool) -> CmdResult {
         zig build test --summary all 2>&1;
     }?;
 
-    run_s3_api_tests()?;
+    run_s3_api_tests(false)?;
     run_art_tests()?;
 
     if let Ok(core_file) = run_fun!(ls data | grep ^core) {
@@ -78,9 +85,14 @@ fn run_art_tests() -> CmdResult {
     Ok(())
 }
 
-fn run_s3_api_tests() -> CmdResult {
-    cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
-    cmd_service::start_service(ServiceName::All)?;
+fn run_s3_api_tests(debug_api_server: bool) -> CmdResult {
+    if debug_api_server {
+        cmd_service::start_service(ServiceName::ApiServer)?;
+    } else {
+        cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
+        cmd_service::start_service(ServiceName::All)?;
+    }
+
     run_cmd! {
         info "Run cargo tests (s3 api tests)";
         cargo test --package api_server;
@@ -89,7 +101,10 @@ fn run_s3_api_tests() -> CmdResult {
         info "Run cargo tests (s3 https api tests)";
         USE_HTTPS_ENDPOINT=true cargo test --package api_server;
     }?;
-    let _ = cmd_service::stop_service(ServiceName::All);
+
+    if !debug_api_server {
+        let _ = cmd_service::stop_service(ServiceName::All);
+    }
 
     Ok(())
 }

@@ -51,6 +51,12 @@ enum Cmd {
     Precheckin {
         #[clap(long, long_help = "Run s3 api tests only")]
         s3_api_only: bool,
+
+        #[clap(
+            long,
+            long_help = "Debug by recompiling and restarting api_server only"
+        )]
+        debug_api_server: bool,
     },
 
     #[clap(about = "Build the whole project")]
@@ -298,7 +304,10 @@ async fn main() -> CmdResult {
             }
             cmd_build::build_ui(UI_DEFAULT_REGION)?;
         }
-        Cmd::Precheckin { s3_api_only } => cmd_precheckin::run_cmd_precheckin(s3_api_only)?,
+        Cmd::Precheckin {
+            s3_api_only,
+            debug_api_server,
+        } => cmd_precheckin::run_cmd_precheckin(s3_api_only, debug_api_server)?,
         Cmd::Nightly => cmd_nightly::run_cmd_nightly()?,
         Cmd::Bench {
             service,
