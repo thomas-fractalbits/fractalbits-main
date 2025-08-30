@@ -20,7 +20,7 @@ use crate::{
         encoding::uri_encode,
         request::extract::Authentication,
         signature::{ContentSha256Header, SignatureError},
-        time::SHORT_DATE,
+        time::{LONG_DATETIME, SHORT_DATE},
         xheader,
     },
     AppState,
@@ -29,6 +29,7 @@ use crate::{
 type HmacSha256 = Hmac<Sha256>;
 // Possible values for x-amz-content-sha256, in addition to the actual sha256
 const UNSIGNED_PAYLOAD: &str = "UNSIGNED-PAYLOAD";
+const AWS4_HMAC_SHA256: &str = "AWS4-HMAC-SHA256";
 const AWS4_HMAC_SHA256_PAYLOAD: &str = "AWS4-HMAC-SHA256-PAYLOAD";
 
 pub struct CheckedSignature {
@@ -230,10 +231,10 @@ fn string_to_sign(datetime: &DateTime<Utc>, scope_string: &str, canonical_req: &
     let mut hasher = Sha256::default();
     hasher.update(canonical_req.as_bytes());
     [
-        "AWS4-HMAC-SHA256",
-        &datetime.format("%Y%m%dT%H%M%SZ").to_string(),
+        AWS4_HMAC_SHA256,
+        &datetime.format(LONG_DATETIME).to_string(),
         scope_string,
-        &format!("{:x}", hasher.finalize()),
+        &hex::encode(hasher.finalize().as_slice()),
     ]
     .join("\n")
 }
