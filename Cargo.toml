@@ -116,7 +116,7 @@ futures-util = "0.3.31"
 
 # Dev dependencies
 aws-sdk-s3 = "1.65.0"
-cmd_lib = { git = "https://github.com/rust-shell-script/rust_cmd_lib", branch = "master" }
+cmd_lib = "2.0"
 tracing-test = {version = "0.2.5", features = ["no-env-filter"]}
 env_logger = "0.11.5"
 num_cpus = "1.16.0"
