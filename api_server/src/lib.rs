@@ -5,7 +5,7 @@ pub mod handler;
 mod object_layout;
 
 use blob_client::BlobClient;
-pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridConfig};
+pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridSingleAzConfig};
 pub use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
 use data_types::{ApiKey, Bucket, Versioned};
 use metrics::{counter, histogram};

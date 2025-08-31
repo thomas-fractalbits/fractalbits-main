@@ -18,7 +18,7 @@ pub fn run_cmd_precheckin(s3_api_only: bool, debug_api_server: bool) -> CmdResul
     }
 
     cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
-    cmd_service::start_minio_service()?;
+    cmd_service::start_service(ServiceName::Minio)?;
     run_cmd! {
         info "Formatting nss_server";
         $working_dir/zig-out/bin/nss_server format;
@@ -47,7 +47,7 @@ fn run_art_tests() -> CmdResult {
     let ts = ["ts", "-m", TS_FMT];
     let working_dir = run_fun!(pwd)?;
 
-    cmd_service::start_minio_service()?;
+    cmd_service::start_service(ServiceName::Minio)?;
     run_cmd! {
         mkdir -p data/logs;
         info "Running art tests (random) with log $rand_log";

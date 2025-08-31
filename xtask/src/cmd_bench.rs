@@ -55,7 +55,7 @@ pub fn run_cmd_bench(
             *service_name = ServiceName::Nss;
             build_rewrk_rpc()?;
             init_service(*service_name, build_mode, InitConfig::default())?;
-            start_nss_service()?;
+            start_service(ServiceName::Nss)?;
             uri = "127.0.0.1:8087";
             bench_exe = "./target/release/rewrk_rpc";
             bench_opts.extend_from_slice(&[
@@ -80,7 +80,7 @@ pub fn run_cmd_bench(
                     data_blob_storage: DataBlobStorage::S3HybridSingleAz,
                 },
             )?;
-            start_bss_service()?;
+            start_service(ServiceName::Bss)?;
             uri = "127.0.0.1:8088";
             bench_exe = "./target/release/rewrk_rpc";
             bench_opts.extend_from_slice(&[

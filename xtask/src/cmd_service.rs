@@ -23,7 +23,7 @@ pub fn init_service(
             rm -f data/rss/shared-local-instance.db;
             mkdir -p data/rss;
         }?;
-        start_ddb_local_service()?;
+        start_service(ServiceName::DdbLocal)?;
 
         // Create main keys-and-buckets table
         const DDB_TABLE_NAME: &str = "fractalbits-api-keys-and-buckets";
@@ -114,7 +114,7 @@ pub fn init_service(
         }
 
         // Start RSS service since admin now connects via RPC
-        start_rss_service()?;
+        start_service(ServiceName::Rss)?;
 
         // Initialize api key for testing using RSS RPC
         let build = build_mode.as_ref();
@@ -310,166 +310,40 @@ pub fn show_service_status(service: ServiceName) -> CmdResult {
 
 pub fn start_service(service: ServiceName) -> CmdResult {
     match service {
-        ServiceName::Bss => start_bss_service()?,
-        ServiceName::Nss => start_nss_service()?,
-        ServiceName::NssRoleAgentA => start_nss_role_agent_service(ServiceName::NssRoleAgentA)?,
-        ServiceName::NssRoleAgentB => start_nss_role_agent_service(ServiceName::NssRoleAgentB)?,
-        ServiceName::Rss => start_rss_service()?,
-        ServiceName::ApiServer => start_api_server()?,
-        ServiceName::GuiServer => start_api_server()?,
         ServiceName::All => start_all_services()?,
-        ServiceName::Minio => start_minio_service()?,
-        ServiceName::MinioAz1 => start_minio_az1_service()?,
-        ServiceName::MinioAz2 => start_minio_az2_service()?,
-        ServiceName::DdbLocal => start_ddb_local_service()?,
-        ServiceName::Mirrord => start_mirrord_service()?,
+        _ => {
+            // Start the systemd service
+            let service_name = service.as_ref();
+            run_cmd!(systemctl --user start $service_name.service)?;
+
+            // Wait for service to be ready
+            wait_for_service_ready(service, 30)?;
+
+            // Post-start actions
+            match service {
+                ServiceName::Minio => create_minio_bucket(9000, "fractalbits-bucket")?,
+                ServiceName::MinioAz1 => {
+                    create_minio_bucket(9001, "fractalbits-localdev-az1-data-bucket")?
+                }
+                ServiceName::MinioAz2 => {
+                    create_minio_bucket(9002, "fractalbits-localdev-az2-data-bucket")?
+                }
+                ServiceName::ApiServer | ServiceName::GuiServer => register_local_api_server()?,
+                _ => {}
+            }
+
+            info!("{service_name} service started successfully");
+        }
     }
     Ok(())
 }
 
-pub fn start_bss_service() -> CmdResult {
-    run_cmd!(systemctl --user start bss.service)?;
-    wait_for_service_ready(ServiceName::Bss, 15)?;
-
-    let bss_server_pid = run_fun!(pidof bss_server)?;
-    check_pids(ServiceName::Bss, &bss_server_pid)?;
-    info!("bss server (pid={bss_server_pid}) started");
-    Ok(())
-}
-
-pub fn start_nss_service() -> CmdResult {
-    // Start minio to simulate local s3 service if not running
-    if run_cmd!(systemctl --user is-active --quiet minio.service).is_err() {
-        start_minio_service()?;
-    }
-
-    run_cmd!(systemctl --user start nss.service)?;
-    wait_for_service_ready(ServiceName::Nss, 15)?;
-
-    let nss_server_pid = run_fun!(pidof nss_server)?;
-    check_pids(ServiceName::Nss, &nss_server_pid)?;
-    info!("nss server (pid={nss_server_pid}) started");
-    Ok(())
-}
-
-pub fn start_mirrord_service() -> CmdResult {
-    run_cmd!(systemctl --user start mirrord.service)?;
-    wait_for_service_ready(ServiceName::Mirrord, 15)?;
-
-    let mirrord_pid = run_fun!(pidof mirrord)?;
-    check_pids(ServiceName::Mirrord, &mirrord_pid)?;
-    info!("nss server (pid={mirrord_pid}) started");
-    Ok(())
-}
-
-pub fn start_nss_role_agent_service(service_name: ServiceName) -> CmdResult {
-    let service_file = match service_name {
-        ServiceName::NssRoleAgentA => "nss_role_agent_a.service",
-        ServiceName::NssRoleAgentB => "nss_role_agent_b.service",
-        _ => panic!("Invalid service for nss_role_agent"),
-    };
-
-    run_cmd!(systemctl --user start $service_file)?;
-    wait_for_service_ready(service_name, 30)?;
-
-    // For role agents, get the PID from systemd instead of pidof to avoid conflicts
-    let pid_output = run_fun!(systemctl --user show --property=MainPID --value $service_file)?;
-    let server_pid = pid_output.trim();
-    info!("{service_file} (pid={server_pid}) started");
-    Ok(())
-}
-
-pub fn start_rss_service() -> CmdResult {
-    // Start ddb_local service at first if needed, since root server stores information in ddb_local
-    if run_cmd!(systemctl --user is-active --quiet ddb_local.service).is_err() {
-        start_ddb_local_service()?;
-    }
-
-    run_cmd!(systemctl --user start rss.service)?;
-    wait_for_service_ready(ServiceName::Rss, 30)?;
-
-    let rss_server_pid = run_fun!(pidof root_server)?;
-    check_pids(ServiceName::Rss, &rss_server_pid)?;
-    info!("root server (pid={rss_server_pid}) started");
-    Ok(())
-}
-
-pub fn start_ddb_local_service() -> CmdResult {
-    let pwd = run_fun!(pwd)?;
-    let service_file = "etc/ddb_local.service";
-    let java = run_fun!(bash -c "command -v java")?;
-    let java_lib = format!("{pwd}/dynamodb_local/DynamoDBLocal_lib");
-    let working_dir = format!("{pwd}/data/rss");
-    let service_file_content = format!(
-        r##"[Unit]
-Description=dynamodb local service for root_server
-
-[Install]
-WantedBy=default.target
-
-[Service]
-Type=simple
-ExecStart={java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath {working_dir}
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-WorkingDirectory={working_dir}
-"##
-    );
-
-    run_cmd! {
-        mkdir -p $working_dir;
-        mkdir -p etc;
-        echo $service_file_content > $service_file;
-        info "Linking $service_file into ~/.config/systemd/user";
-        systemctl --user link $service_file --force --quiet;
-        systemctl --user start ddb_local.service;
-    }?;
-    wait_for_service_ready(ServiceName::DdbLocal, 10)?;
-
-    Ok(())
-}
-
-fn start_minio_service_common(
-    service_enum: ServiceName,
-    port: u16,
-    data_dir: &str,
-    bucket_name: &str,
-) -> CmdResult {
-    let pwd = run_fun!(pwd)?;
-    let service_name = service_enum.as_ref();
-
-    let service_file_content = format!(
-        r##"[Unit]
-Description={service_name}
-
-[Install]
-WantedBy=default.target
-
-[Service]
-Type=simple
-Environment="MINIO_REGION=localdev"
-ExecStart=/home/linuxbrew/.linuxbrew/opt/minio/bin/minio server --address :{port} {data_dir}/
-Restart=always
-WorkingDirectory={pwd}/data
-"##
-    );
+fn create_minio_bucket(port: u16, bucket_name: &str) -> CmdResult {
     let minio_url = format!("http://localhost:{port}");
-
-    let service_file = format!("{service_name}.service");
-    run_cmd! {
-        mkdir -p etc;
-        echo $service_file_content > etc/$service_file;
-        info "Linking etc/$service_file into ~/.config/systemd/user";
-        systemctl --user link etc/$service_file --force --quiet;
-        systemctl --user start $service_file;
-    }?;
-    wait_for_service_ready(service_enum, 10)?;
-
     let bucket = format!("s3://{bucket_name}");
+
     run_cmd! {
-        info "Creating s3 bucket (\"$bucket_name\") in $service_name ...";
+        info "Creating s3 bucket (\"$bucket_name\") ...";
         ignore AWS_DEFAULT_REGION=localdev AWS_ENDPOINT_URL_S3=$minio_url AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin
             aws s3 mb $bucket --region localdev &>/dev/null;
     }?;
@@ -497,75 +371,31 @@ WorkingDirectory={pwd}/data
     Ok(())
 }
 
-pub fn start_minio_service() -> CmdResult {
-    start_minio_service_common(ServiceName::Minio, 9000, "s3", "fractalbits-bucket")
-}
-
-pub fn start_minio_az1_service() -> CmdResult {
-    start_minio_service_common(
-        ServiceName::MinioAz1,
-        9001,
-        "s3-localdev-az1",
-        "fractalbits-localdev-az1-data-bucket",
-    )
-}
-
-pub fn start_minio_az2_service() -> CmdResult {
-    start_minio_service_common(
-        ServiceName::MinioAz2,
-        9002,
-        "s3-localdev-az2",
-        "fractalbits-localdev-az2-data-bucket",
-    )
-}
-
-pub fn start_api_server() -> CmdResult {
-    run_cmd!(systemctl --user start api_server.service)?;
-    wait_for_service_ready(ServiceName::ApiServer, 10)?;
-
-    let api_server_pid = run_fun!(pidof api_server)?;
-    check_pids(ServiceName::ApiServer, &api_server_pid)?;
-    info!("api server (pid={api_server_pid}) started");
-
-    // Register local api_server with service discovery
-    register_local_api_server()?;
-
-    Ok(())
-}
-
 fn start_all_services() -> CmdResult {
     info!("Starting all services with systemd dependency management");
 
     // Start supporting services first
     info!("Starting supporting services (ddb_local, minio instances)");
-    start_ddb_local_service()?;
-    start_minio_service()?; // Original minio for NSS metadata (port 9000)
+    start_service(ServiceName::DdbLocal)?;
+    start_service(ServiceName::Minio)?; // Original minio for NSS metadata (port 9000)
     if run_cmd!(grep -q multi_az etc/api_server.service).is_ok() {
-        start_minio_az1_service()?; // Local AZ data blobs (port 9001)
-        start_minio_az2_service()?; // Remote AZ data blobs (port 9002)
-        wait_for_service_ready(ServiceName::MinioAz1, 15)?;
-        wait_for_service_ready(ServiceName::MinioAz2, 15)?;
+        start_service(ServiceName::MinioAz1)?; // Local AZ data blobs (port 9001)
+        start_service(ServiceName::MinioAz2)?; // Remote AZ data blobs (port 9002)
     }
-    wait_for_service_ready(ServiceName::DdbLocal, 15)?;
-    wait_for_service_ready(ServiceName::Minio, 15)?;
 
     // Start all main services - systemd dependencies will handle ordering
     if run_cmd!(grep -q single_az etc/api_server.service).is_ok() {
-        info!("Starting single_az services (systemd will handle dependency ordering)");
-        run_cmd!(systemctl --user start rss.service bss.service nss_role_agent_a.service api_server.service)?;
-
-        // Wait for all services to be ready in dependency order
-        wait_for_service_ready(ServiceName::Rss, 30)?;
-        wait_for_service_ready(ServiceName::Bss, 15)?;
-        wait_for_service_ready(ServiceName::NssRoleAgentA, 30)?;
-        wait_for_service_ready(ServiceName::ApiServer, 15)?;
+        info!("Starting single_az services");
+        start_service(ServiceName::Rss)?;
+        start_service(ServiceName::Bss)?;
+        start_service(ServiceName::NssRoleAgentA)?;
+        start_service(ServiceName::ApiServer)?;
     } else {
         info!("Starting multi_az services (skipping BSS)");
-        start_nss_role_agent_service(ServiceName::NssRoleAgentB)?;
-        run_cmd!(systemctl --user start rss.service nss_role_agent_a.service api_server.service)?;
-        wait_for_service_ready(ServiceName::Rss, 30)?;
-        wait_for_service_ready(ServiceName::NssRoleAgentA, 30)?;
-        wait_for_service_ready(ServiceName::ApiServer, 15)?;
+        start_service(ServiceName::NssRoleAgentB)?;
+        start_service(ServiceName::Rss)?;
+        start_service(ServiceName::NssRoleAgentA)?;
+        start_service(ServiceName::ApiServer)?;
     }
 
     info!("All services started successfully!");
@@ -585,17 +415,23 @@ fn create_systemd_unit_file_with_backend(
 }
 
 fn create_systemd_unit_files_for_init(
-    mut service: ServiceName,
+    service: ServiceName,
     build_mode: BuildMode,
     for_gui: bool,
     data_blob_storage: DataBlobStorage,
 ) -> CmdResult {
-    if for_gui && service == ServiceName::ApiServer {
-        service = ServiceName::GuiServer;
-    }
+    let api_server_service = if for_gui {
+        ServiceName::GuiServer
+    } else {
+        ServiceName::ApiServer
+    };
     match service {
         ServiceName::ApiServer | ServiceName::GuiServer => {
-            create_systemd_unit_file_with_backend(service, build_mode, data_blob_storage)?;
+            create_systemd_unit_file_with_backend(
+                api_server_service,
+                build_mode,
+                data_blob_storage,
+            )?;
         }
         ServiceName::Bss
         | ServiceName::Nss
@@ -610,39 +446,21 @@ fn create_systemd_unit_files_for_init(
             create_systemd_unit_file(service, build_mode)?;
         }
         ServiceName::All => {
+            create_systemd_unit_file(ServiceName::DdbLocal, build_mode)?;
+            create_systemd_unit_file(ServiceName::Minio, build_mode)?;
+            create_systemd_unit_file(ServiceName::MinioAz1, build_mode)?;
+            create_systemd_unit_file(ServiceName::MinioAz2, build_mode)?;
             create_systemd_unit_file(ServiceName::Rss, build_mode)?;
-
-            // Only create BSS systemd unit file if we're in hybrid mode
-            match data_blob_storage {
-                DataBlobStorage::S3HybridSingleAz => {
-                    create_systemd_unit_file(ServiceName::Bss, build_mode)?;
-                }
-                _ => {
-                    info!(
-                        "Skipping BSS systemd unit file creation in {} mode",
-                        data_blob_storage
-                    );
-                }
-            }
-
+            create_systemd_unit_file(ServiceName::Bss, build_mode)?;
             create_systemd_unit_file(ServiceName::NssRoleAgentA, build_mode)?;
             create_systemd_unit_file(ServiceName::Nss, build_mode)?;
             create_systemd_unit_file(ServiceName::NssRoleAgentB, build_mode)?;
             create_systemd_unit_file(ServiceName::Mirrord, build_mode)?;
-
-            if for_gui {
-                create_systemd_unit_file_with_backend(
-                    ServiceName::GuiServer,
-                    build_mode,
-                    data_blob_storage,
-                )?;
-            } else {
-                create_systemd_unit_file_with_backend(
-                    ServiceName::ApiServer,
-                    build_mode,
-                    data_blob_storage,
-                )?;
-            }
+            create_systemd_unit_file_with_backend(
+                api_server_service,
+                build_mode,
+                data_blob_storage,
+            )?;
         }
     }
     Ok(())
@@ -725,6 +543,30 @@ Environment="AWS_ENDPOINT_URL_DYNAMODB=http://localhost:8000""##
 Environment="GUI_WEB_ROOT=ui/dist""##;
             format!("{pwd}/target/{build}/api_server")
         }
+        ServiceName::DdbLocal => {
+            let java = run_fun!(bash -c "command -v java")?;
+            let java_lib = format!("{pwd}/dynamodb_local/DynamoDBLocal_lib");
+            format!("{java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath {pwd}/data/rss")
+        }
+        ServiceName::Minio => {
+            env_settings = r##"
+Environment="MINIO_REGION=localdev""##
+                .to_string();
+            "/home/linuxbrew/.linuxbrew/opt/minio/bin/minio server --address :9000 data/s3/"
+                .to_string()
+        }
+        ServiceName::MinioAz1 => {
+            env_settings = r##"
+Environment="MINIO_REGION=localdev""##
+                .to_string();
+            "/home/linuxbrew/.linuxbrew/opt/minio/bin/minio server --address :9001 data/s3-localdev-az1/".to_string()
+        }
+        ServiceName::MinioAz2 => {
+            env_settings = r##"
+Environment="MINIO_REGION=localdev""##
+                .to_string();
+            "/home/linuxbrew/.linuxbrew/opt/minio/bin/minio server --address :9002 data/s3-localdev-az2/".to_string()
+        }
         _ => unreachable!(),
     };
     let working_dir = run_fun!(realpath $pwd)?;
@@ -739,6 +581,10 @@ Environment="GUI_WEB_ROOT=ui/dist""##;
         ServiceName::ApiServer | ServiceName::GuiServer => {
             "After=rss.service nss.service\nWants=rss.service nss.service\n"
         }
+        ServiceName::DdbLocal
+        | ServiceName::Minio
+        | ServiceName::MinioAz1
+        | ServiceName::MinioAz2 => "",
         _ => "",
     };
 
@@ -768,15 +614,6 @@ WantedBy=multi-user.target
         info "Linking ./etc/$service_file into ~/.config/systemd/user";
         systemctl --user link ./etc/$service_file --force --quiet;
     }?;
-    Ok(())
-}
-
-fn check_pids(service: ServiceName, pids: &str) -> CmdResult {
-    if pids.split_whitespace().count() > 1 {
-        error!("Multiple processes were found: {pids}, stopping services ...");
-        stop_service(service)?;
-        cmd_die!("Multiple processes were found: ${pids}");
-    }
     Ok(())
 }
 
@@ -813,42 +650,6 @@ fn create_dirs_for_bss_server() -> CmdResult {
         run_cmd!(mkdir -p data/bss/local/blobs/dir$i)?;
     }
 
-    Ok(())
-}
-
-// Test instance management for leader election tests
-pub fn start_test_root_server_instance(
-    instance_id: &str,
-    server_port: u16,
-    health_port: u16,
-    metrics_port: u16,
-    table_name: &str,
-    log_path: &str,
-) -> Result<cmd_lib::CmdChildren, std::io::Error> {
-    info!("Starting test root_server instance: {instance_id}");
-
-    let proc = spawn! {
-        RUST_LOG=info,root_server=debug
-        AWS_ACCESS_KEY_ID=fakeMyKeyId
-        AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
-        INSTANCE_ID=$instance_id
-        RSS_SERVER_PORT=$server_port
-        RSS_HEALTH_PORT=$health_port
-        RSS_METRICS_PORT=$metrics_port
-        LEADER_TABLE_NAME=$table_name
-        LEADER_KEY=test-leader
-        LEADER_LEASE_DURATION=20
-        ./target/debug/root_server |& ts -m "%b %d %H:%M:%.S" > $log_path
-    }?;
-
-    // Give the instance a moment to start
-    std::thread::sleep(std::time::Duration::from_secs(2));
-
-    Ok(proc)
-}
-
-pub fn cleanup_test_root_server_instances() -> CmdResult {
-    run_cmd!(ignore pkill root_server)?;
     Ok(())
 }
 

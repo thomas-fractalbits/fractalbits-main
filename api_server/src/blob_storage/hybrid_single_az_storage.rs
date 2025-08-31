@@ -1,5 +1,5 @@
 use super::{blob_key, create_s3_client, BlobStorage, BlobStorageError};
-use crate::{config::S3HybridConfig, object_layout::ObjectLayout};
+use crate::{config::S3HybridSingleAzConfig, object_layout::ObjectLayout};
 use aws_sdk_s3::Client as S3Client;
 use bytes::Bytes;
 use metrics::histogram;
@@ -25,7 +25,7 @@ impl HybridSingleAzStorage {
     pub async fn new(
         bss_addr: &str,
         bss_conn_num: u16,
-        s3_cache_config: &S3HybridConfig,
+        s3_cache_config: &S3HybridSingleAzConfig,
         rpc_timeout: Duration,
     ) -> Self {
         let clients_bss = ConnPool::new();

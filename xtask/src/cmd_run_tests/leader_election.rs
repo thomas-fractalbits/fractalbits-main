@@ -1,4 +1,3 @@
-use crate::cmd_service::{cleanup_test_root_server_instances, start_test_root_server_instance};
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::types::{
     AttributeDefinition, AttributeValue, KeySchemaElement, KeyType, ProvisionedThroughput,
@@ -494,3 +493,40 @@ async fn test_clock_skew_detection() -> CmdResult {
     println!("SUCCESS: Clock skew detection test completed!");
     Ok(())
 }
+
+// Test instance management for leader election tests
+fn start_test_root_server_instance(
+    instance_id: &str,
+    server_port: u16,
+    health_port: u16,
+    metrics_port: u16,
+    table_name: &str,
+    log_path: &str,
+) -> Result<cmd_lib::CmdChildren, std::io::Error> {
+    info!("Starting test root_server instance: {instance_id}");
+
+    let proc = spawn! {
+        RUST_LOG=info,root_server=debug
+        AWS_ACCESS_KEY_ID=fakeMyKeyId
+        AWS_SECRET_ACCESS_KEY=fakeSecretAccessKey
+        INSTANCE_ID=$instance_id
+        RSS_SERVER_PORT=$server_port
+        RSS_HEALTH_PORT=$health_port
+        RSS_METRICS_PORT=$metrics_port
+        LEADER_TABLE_NAME=$table_name
+        LEADER_KEY=test-leader
+        LEADER_LEASE_DURATION=20
+        ./target/debug/root_server |& ts -m "%b %d %H:%M:%.S" > $log_path
+    }?;
+
+    // Give the instance a moment to start
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    Ok(proc)
+}
+
+pub fn cleanup_test_root_server_instances() -> CmdResult {
+    run_cmd!(ignore pkill root_server)?;
+    Ok(())
+}
+

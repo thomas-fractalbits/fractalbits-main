@@ -12,9 +12,9 @@ pub async fn run_tests(test_type: TestType) -> CmdResult {
         multi_az::run_multi_az_tests(subcommand).await
     };
     let test_leader_election = || async {
-        cmd_service::start_ddb_local_service()?;
+        cmd_service::start_service(ServiceName::DdbLocal)?;
         leader_election::run_leader_election_tests().await?;
-        cmd_service::cleanup_test_root_server_instances()?;
+        leader_election::cleanup_test_root_server_instances()?;
         Ok(())
     };
 

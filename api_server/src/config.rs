@@ -7,7 +7,7 @@ use std::time::Duration;
 pub enum BlobStorageBackend {
     BssOnlySingleAz,
     #[default]
-    HybridSingleAz,
+    S3HybridSingleAz,
     S3ExpressSingleAz,
     S3ExpressMultiAz,
     S3ExpressMultiAzWithTracking,
@@ -18,7 +18,7 @@ pub struct BlobStorageConfig {
     pub backend: BlobStorageBackend,
 
     pub bss: Option<BssConfig>,
-    pub s3_hybrid_single_az: Option<S3HybridConfig>,
+    pub s3_hybrid_single_az: Option<S3HybridSingleAzConfig>,
     pub s3_express_multi_az: Option<S3ExpressMultiAzConfig>,
     pub s3_express_single_az: Option<S3ExpressSingleAzConfig>,
 }
@@ -169,7 +169,7 @@ impl Config {
 }
 
 #[derive(serde::Deserialize, Debug, Clone)]
-pub struct S3HybridConfig {
+pub struct S3HybridSingleAzConfig {
     pub s3_host: String,
     pub s3_port: u16,
     pub s3_region: String,
@@ -182,7 +182,7 @@ pub struct S3HybridConfig {
 
 impl Default for Config {
     fn default() -> Self {
-        Self::hybrid_single_az()
+        Self::s3_hybrid_single_az()
     }
 }
 
@@ -262,7 +262,7 @@ impl Config {
         }
     }
 
-    pub fn hybrid_single_az() -> Self {
+    pub fn s3_hybrid_single_az() -> Self {
         Self {
             nss_addr: "127.0.0.1:8087".to_string(),
             rss_addr: "127.0.0.1:8086".to_string(),
@@ -277,12 +277,12 @@ impl Config {
             http_request_timeout_seconds: 30,
             rpc_timeout_seconds: 10,
             blob_storage: BlobStorageConfig {
-                backend: BlobStorageBackend::HybridSingleAz,
+                backend: BlobStorageBackend::S3HybridSingleAz,
                 bss: Some(BssConfig {
                     addr: "127.0.0.1:8088".to_string(),
                     conn_num: 2,
                 }),
-                s3_hybrid_single_az: Some(S3HybridConfig {
+                s3_hybrid_single_az: Some(S3HybridSingleAzConfig {
                     s3_host: "http://127.0.0.1".into(),
                     s3_port: 9000,
                     s3_region: "localdev".into(),

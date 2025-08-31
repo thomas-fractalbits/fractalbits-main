@@ -48,7 +48,7 @@ impl BlobClient {
                         .await,
                 )
             }
-            BlobStorageBackend::HybridSingleAz => {
+            BlobStorageBackend::S3HybridSingleAz => {
                 let bss_config = Self::get_bss_config(blob_storage_config, "Hybrid")?;
                 let s3_cache_config = blob_storage_config
                     .s3_hybrid_single_az
