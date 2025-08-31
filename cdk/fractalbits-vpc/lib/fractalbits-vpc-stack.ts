@@ -25,7 +25,7 @@ export interface FractalbitsVpcStackProps extends cdk.StackProps {
   azPair: string;
   bssInstanceTypes: string;
   browserIp?: string;
-  dataBlobStorage: "hybridSingleAz" | "s3ExpressMultiAz";
+  dataBlobStorage: "s3HybridSingleAz" | "s3ExpressMultiAz";
 }
 
 export class FractalbitsVpcStack extends cdk.Stack {
@@ -202,7 +202,9 @@ export class FractalbitsVpcStack extends cdk.Stack {
       {
         id: "rss-B",
         instanceType: rssInstanceType,
-        specificSubnet: subnet2,
+        // For s3HybridSingleAz, place rss-B in same AZ as rss-A
+        specificSubnet:
+          dataBlobStorage === "s3HybridSingleAz" ? subnet1 : subnet2,
         sg: privateSg,
       },
       {
@@ -211,13 +213,17 @@ export class FractalbitsVpcStack extends cdk.Stack {
         specificSubnet: subnet1,
         sg: privateSg,
       },
-      {
+    ];
+
+    // Only create nss-B for s3ExpressMultiAz mode
+    if (dataBlobStorage === "s3ExpressMultiAz") {
+      instanceConfigs.push({
         id: "nss-B",
         instanceType: nssInstanceType,
         specificSubnet: subnet2,
         sg: privateSg,
-      },
-    ];
+      });
+    }
 
     if (props.browserIp) {
       const guiServerSg = new ec2.SecurityGroup(this, "GuiServerSG", {
@@ -286,7 +292,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // Create bss_server in a ASG group only for hybrid mode
     let bssAsg: autoscaling.AutoScalingGroup | undefined;
-    if (dataBlobStorage === "hybridSingleAz") {
+    if (dataBlobStorage === "s3HybridSingleAz") {
       const bssBootstrapOptions = `${forBenchFlag} bss_server`;
       bssAsg = createEc2Asg(
         this,
@@ -313,20 +319,32 @@ export class FractalbitsVpcStack extends cdk.Stack {
     // Create PrivateLink setup for NSS and RSS services
     const servicePort = 8088;
     const mirrordPort = 9999;
+
+    // NSS PrivateLink - include nss-B only for s3ExpressMultiAz
+    const nssTargets =
+      dataBlobStorage === "s3ExpressMultiAz"
+        ? [instances["nss-A"], instances["nss-B"]]
+        : [instances["nss-A"]];
     const nssPrivateLink = createPrivateLinkNlb(
       this,
       "Nss",
       this.vpc,
-      [instances["nss-A"], instances["nss-B"]],
+      nssTargets,
       servicePort,
     );
-    const mirrordPrivateLink = createPrivateLinkNlb(
-      this,
-      "Mirrord",
-      this.vpc,
-      [instances["nss-A"], instances["nss-B"]],
-      mirrordPort,
-    );
+
+    // Only create mirrord for s3ExpressMultiAz mode
+    let mirrordPrivateLink: any;
+    if (dataBlobStorage === "s3ExpressMultiAz") {
+      mirrordPrivateLink = createPrivateLinkNlb(
+        this,
+        "Mirrord",
+        this.vpc,
+        [instances["nss-A"], instances["nss-B"]],
+        mirrordPort,
+      );
+    }
+
     const rssPrivateLink = createPrivateLinkNlb(
       this,
       "Rss",
@@ -400,18 +418,24 @@ export class FractalbitsVpcStack extends cdk.Stack {
       subnet1.availabilityZone,
       instances["nss-A"].instanceId,
     );
-    const ebsVolumeB = createEbsVolume(
-      this,
-      "MultiAttachVolumeB",
-      subnet2.availabilityZone,
-      instances["nss-B"].instanceId,
-    );
+
+    // Only create volume B for s3ExpressMultiAz mode
+    let ebsVolumeB: any;
+    let ebsVolumeBId: string = "";
+    if (dataBlobStorage === "s3ExpressMultiAz") {
+      ebsVolumeB = createEbsVolume(
+        this,
+        "MultiAttachVolumeB",
+        subnet2.availabilityZone,
+        instances["nss-B"].instanceId,
+      );
+      ebsVolumeBId = ebsVolumeB.volumeId;
+    }
 
     // Create UserData: we need to make it a separate step since we want to get the instance/volume ids
     const nssA = instances["nss-A"].instanceId;
-    const nssB = instances["nss-B"].instanceId;
+    const nssB = instances["nss-B"]?.instanceId || "";
     const ebsVolumeAId = ebsVolumeA.volumeId;
-    const ebsVolumeBId = ebsVolumeB.volumeId;
 
     // Shared function to create NSS bootstrap options
     const createNssBootstrapOptions = (volumeId: string) => {
@@ -421,9 +445,12 @@ export class FractalbitsVpcStack extends cdk.Stack {
         `--bucket=${bucketName}`,
         `--volume_id=${volumeId}`,
         `--iam_role=${ec2Role.roleName}`,
-        `--mirrord_endpoint=${mirrordPrivateLink.endpointDns}`,
         `--rss_endpoint=${rssPrivateLink.endpointDns}`,
       ];
+      // Only add mirrord_endpoint for s3ExpressMultiAz mode
+      if (dataBlobStorage === "s3ExpressMultiAz" && mirrordPrivateLink) {
+        params.push(`--mirrord_endpoint=${mirrordPrivateLink.endpointDns}`);
+      }
       return params.filter((p) => p).join(" ");
     };
 
@@ -433,8 +460,10 @@ export class FractalbitsVpcStack extends cdk.Stack {
         bootstrapOptions:
           `${forBenchFlag} root_server ` +
           `--nss_endpoint=${nssPrivateLink.endpointDns} ` +
-          `--nss_a_id=${nssA} --nss_b_id=${nssB} ` +
-          `--volume_a_id=${ebsVolumeAId} --volume_b_id=${ebsVolumeBId} ` +
+          `--nss_a_id=${nssA} ` +
+          (nssB ? `--nss_b_id=${nssB} ` : "") +
+          `--volume_a_id=${ebsVolumeAId} ` +
+          (ebsVolumeBId ? `--volume_b_id=${ebsVolumeBId} ` : "") +
           `--follower_id=${instances["rss-B"].instanceId}` +
           (dataBlobStorage === "s3ExpressMultiAz"
             ? ` --remote_az=${azPair[1]}`
@@ -445,18 +474,22 @@ export class FractalbitsVpcStack extends cdk.Stack {
         bootstrapOptions:
           `${forBenchFlag} root_server ` +
           `--nss_endpoint=${nssPrivateLink.endpointDns} ` +
-          `--nss_a_id=${nssA} --nss_b_id=${nssB} ` +
-          `--volume_a_id=${ebsVolumeAId} --volume_b_id=${ebsVolumeBId}`,
+          `--nss_a_id=${nssA} ` +
+          `--volume_a_id=${ebsVolumeAId}`,
       },
       {
         id: "nss-A",
         bootstrapOptions: createNssBootstrapOptions(ebsVolumeAId),
       },
-      {
+    ];
+
+    // Only add nss-B bootstrap for s3ExpressMultiAz mode
+    if (dataBlobStorage === "s3ExpressMultiAz" && ebsVolumeBId) {
+      instanceBootstrapOptions.push({
         id: "nss-B",
         bootstrapOptions: createNssBootstrapOptions(ebsVolumeBId),
-      },
-    ];
+      });
+    }
     if (props.benchType === "external") {
       instanceBootstrapOptions.push({
         id: "bench_server",
@@ -497,10 +530,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: "VPC Endpoint DNS for RSS service",
     });
 
-    new cdk.CfnOutput(this, "MirrordEndpointDns", {
-      value: mirrordPrivateLink.endpointDns,
-      description: "VPC Endpoint DNS for Mirrord service",
-    });
+    // Only output mirrord endpoint for s3ExpressMultiAz mode
+    if (dataBlobStorage === "s3ExpressMultiAz" && mirrordPrivateLink) {
+      new cdk.CfnOutput(this, "MirrordEndpointDns", {
+        value: mirrordPrivateLink.endpointDns,
+        description: "VPC Endpoint DNS for Mirrord service",
+      });
+    }
 
     new cdk.CfnOutput(this, "NssEndpointDns", {
       value: nssPrivateLink.endpointDns,
@@ -514,10 +550,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: "EBS volume A ID",
     });
 
-    new cdk.CfnOutput(this, "VolumeBId", {
-      value: ebsVolumeBId,
-      description: "EBS volume B ID",
-    });
+    // Only output volume B for s3ExpressMultiAz mode
+    if (dataBlobStorage === "s3ExpressMultiAz" && ebsVolumeBId) {
+      new cdk.CfnOutput(this, "VolumeBId", {
+        value: ebsVolumeBId,
+        description: "EBS volume B ID",
+      });
+    }
 
     if (bssAsg) {
       new cdk.CfnOutput(this, "bssAsgName", {

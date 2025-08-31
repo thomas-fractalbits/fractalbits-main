@@ -10,18 +10,15 @@ const MAX_POLL_ATTEMPTS: u64 = 60;
 pub fn bootstrap(
     nss_endpoint: &str,
     nss_a_id: &str,
-    nss_b_id: &str,
+    nss_b_id: Option<&str>,
     volume_a_id: &str,
-    volume_b_id: &str,
+    volume_b_id: Option<&str>,
     follower_id: Option<&str>,
     remote_az: Option<&str>,
     _for_bench: bool,
 ) -> CmdResult {
     // download_binaries(&["rss_admin", "root_server", "ebs-failover"])?;
     download_binaries(&["rss_admin", "root_server"])?;
-
-    // Initialize NSS role states in DynamoDB
-    initialize_nss_roles_in_ddb(nss_a_id, nss_b_id)?;
 
     // Initialize AZ status if this is a multi-AZ deployment
     if let Some(remote_az) = remote_az {
@@ -44,47 +41,73 @@ pub fn bootstrap(
             create_s3_express_bucket(remote_az, S3EXPRESS_REMOTE_BUCKET_CONFIG)?;
         }
 
-        for (nss_id, volume_id, role) in [
-            (nss_b_id, volume_b_id, "standby"),
-            (nss_a_id, volume_a_id, "active"),
-        ] {
-            info!("Formatting NSS instance {nss_id} ({role}) with volume {volume_id}");
-            // Format EBS with SSM
-            let ebs_dev = get_volume_dev(volume_id);
-            wait_for_ssm_ready(nss_id);
+        // Initialize NSS role states in DynamoDB
+        initialize_nss_roles_in_ddb(nss_a_id, nss_b_id)?;
+
+        // Format nss-B first if it exists, then nss-A
+        if let (Some(nss_b_id), Some(volume_b_id)) = (nss_b_id, volume_b_id) {
+            info!("Formatting NSS instance {nss_b_id} (standby) with volume {volume_b_id}");
+            let ebs_dev = get_volume_dev(volume_b_id);
+            wait_for_ssm_ready(nss_b_id);
             let bootstrap_bin = "/opt/fractalbits/bin/fractalbits-bootstrap";
-            info!("Running format_nss on {nss_id} ({role}) with device {ebs_dev}");
+            info!("Running format_nss on {nss_b_id} (standby) with device {ebs_dev}");
             run_cmd_with_ssm(
-                nss_id,
+                nss_b_id,
                 &format!(
                     r##"sudo bash -c "{bootstrap_bin} format_nss --ebs_dev {ebs_dev} &>>{CLOUD_INIT_LOG}""##
                 ),
             )?;
-            info!("Successfully formatted {nss_id} ({role})");
+            info!("Successfully formatted {nss_b_id} (standby)");
         }
+
+        // Always format nss-A
+        let role = if nss_b_id.is_some() { "active" } else { "solo" };
+        info!("Formatting NSS instance {nss_a_id} ({role}) with volume {volume_a_id}");
+        let ebs_dev = get_volume_dev(volume_a_id);
+        wait_for_ssm_ready(nss_a_id);
+        let bootstrap_bin = "/opt/fractalbits/bin/fractalbits-bootstrap";
+        info!("Running format_nss on {nss_a_id} ({role}) with device {ebs_dev}");
+        run_cmd_with_ssm(
+            nss_a_id,
+            &format!(
+                r##"sudo bash -c "{bootstrap_bin} format_nss --ebs_dev {ebs_dev} &>>{CLOUD_INIT_LOG}""##
+            ),
+        )?;
+        info!("Successfully formatted {nss_a_id} ({role})");
 
         wait_for_leadership()?;
         run_cmd!($BIN_PATH/rss_admin --rss-addr=127.0.0.1:8088 api-key init-test)?;
 
         start_follower_root_server(follower_id)?;
 
-        // bootstrap_ebs_failover_service(nss_a_id, nss_b_id, volume_id)?;
+        // Only bootstrap ebs_failover service if nss_b_id exists
+        // if let Some(nss_b_id) = nss_b_id {
+        //     bootstrap_ebs_failover_service(nss_a_id, nss_b_id, volume_a_id)?;
+        // }
     }
     Ok(())
 }
 
-fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: &str) -> CmdResult {
+fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdResult {
     const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
     let region = get_current_aws_region()?;
 
     info!("Initializing NSS role states in service-discovery table");
-    info!("Setting {nss_a_id} as active");
-    info!("Setting {nss_b_id} as standby");
 
-    // Create nss_roles entry with both instance states
-    let nss_roles_item = format!(
-        r#"{{"service_id":{{"S":"nss_roles"}},"states":{{"M":{{"{nss_a_id}":{{"S":"active"}},"{nss_b_id}":{{"S":"standby"}}}}}}}}"#
-    );
+    let nss_roles_item = if let Some(nss_b_id) = nss_b_id {
+        // Multi-AZ mode: nss-A as active, nss-B as standby
+        info!("Setting {nss_a_id} as active");
+        info!("Setting {nss_b_id} as standby");
+        format!(
+            r#"{{"service_id":{{"S":"nss_roles"}},"states":{{"M":{{"{nss_a_id}":{{"S":"active"}},"{nss_b_id}":{{"S":"standby"}}}}}}}}"#
+        )
+    } else {
+        // Single-AZ mode: only nss-A as solo
+        info!("Setting {nss_a_id} as solo");
+        format!(
+            r#"{{"service_id":{{"S":"nss_roles"}},"states":{{"M":{{"{nss_a_id}":{{"S":"solo"}}}}}}}}"#
+        )
+    };
 
     // Put nss_roles entry with states map
     run_cmd! {

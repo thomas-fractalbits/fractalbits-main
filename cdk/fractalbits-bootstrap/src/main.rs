@@ -95,7 +95,7 @@ enum Command {
         meta_stack_testing: bool,
 
         #[clap(long, long_help = "Mirrord endpoint for NSS communication")]
-        mirrord_endpoint: String,
+        mirrord_endpoint: Option<String>,
 
         #[clap(long, long_help = "Root server (RSS) endpoint")]
         rss_endpoint: String,
@@ -110,13 +110,13 @@ enum Command {
         nss_a_id: String,
 
         #[clap(long, long_help = "Secondary nss_server ec2 instance ID")]
-        nss_b_id: String,
+        nss_b_id: Option<String>,
 
         #[clap(long, long_help = "EBS volume ID for nss-A")]
         volume_a_id: String,
 
         #[clap(long, long_help = "EBS volume ID for nss-B")]
-        volume_b_id: String,
+        volume_b_id: Option<String>,
 
         #[clap(long, long_help = "Follower instance ID for root server")]
         follower_id: Option<String>,
@@ -221,7 +221,7 @@ fn main() -> CmdResult {
             meta_stack_testing,
             for_bench,
             &iam_role,
-            &mirrord_endpoint,
+            mirrord_endpoint.as_deref(),
             &rss_endpoint,
         )?,
         Command::RootServer {
@@ -235,9 +235,9 @@ fn main() -> CmdResult {
         } => root_server::bootstrap(
             &nss_endpoint,
             &nss_a_id,
-            &nss_b_id,
+            nss_b_id.as_deref(),
             &volume_a_id,
-            &volume_b_id,
+            volume_b_id.as_deref(),
             follower_id.as_deref(),
             remote_az.as_deref(),
             for_bench,

@@ -72,7 +72,7 @@ pub fn init_service(
 
         // Initialize NSS role states in service-discovery table
         let nss_roles_item = match init_config.data_blob_storage {
-            DataBlobStorage::HybridSingleAz => {
+            DataBlobStorage::S3HybridSingleAz => {
                 r#"{"service_id":{"S":"nss_roles"},"states":{"M":{"nss-A":{"S":"solo"}}}}"#
             }
             DataBlobStorage::S3ExpressMultiAz => {
@@ -234,7 +234,7 @@ pub fn stop_service(service: ServiceName) -> CmdResult {
 
 fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
     match data_blob_storage {
-        DataBlobStorage::HybridSingleAz => vec![
+        DataBlobStorage::S3HybridSingleAz => vec![
             ServiceName::ApiServer,
             ServiceName::NssRoleAgentA,
             ServiceName::Nss,
@@ -263,7 +263,7 @@ fn get_data_blob_storage_setting() -> DataBlobStorage {
     if run_cmd!(grep -q multi_az etc/api_server.service).is_ok() {
         DataBlobStorage::S3ExpressMultiAz
     } else {
-        DataBlobStorage::HybridSingleAz
+        DataBlobStorage::S3HybridSingleAz
     }
 }
 
@@ -614,7 +614,7 @@ fn create_systemd_unit_files_for_init(
 
             // Only create BSS systemd unit file if we're in hybrid mode
             match data_blob_storage {
-                DataBlobStorage::HybridSingleAz => {
+                DataBlobStorage::S3HybridSingleAz => {
                     create_systemd_unit_file(ServiceName::Bss, build_mode)?;
                 }
                 _ => {

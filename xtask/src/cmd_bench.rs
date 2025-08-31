@@ -77,7 +77,7 @@ pub fn run_cmd_bench(
                 build_mode,
                 InitConfig {
                     for_gui: false,
-                    data_blob_storage: DataBlobStorage::HybridSingleAz,
+                    data_blob_storage: DataBlobStorage::S3HybridSingleAz,
                 },
             )?;
             start_bss_service()?;

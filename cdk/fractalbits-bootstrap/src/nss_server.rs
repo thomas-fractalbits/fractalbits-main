@@ -26,7 +26,7 @@ pub fn bootstrap(
     meta_stack_testing: bool,
     for_bench: bool,
     iam_role: &str,
-    mirrord_endpoint: &str,
+    mirrord_endpoint: Option<&str>,
     rss_endpoint: &str,
 ) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm"])?;
@@ -58,7 +58,7 @@ fn setup_configs(
     volume_id: &str,
     iam_role: &str,
     service_name: &str,
-    mirrord_endpoint: &str,
+    mirrord_endpoint: Option<&str>,
     rss_endpoint: &str,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
@@ -147,9 +147,19 @@ art_journal_segment_size = {art_journal_segment_size}
     Ok(())
 }
 
-fn create_nss_role_agent_config(mirrord_endpoint: &str, rss_endpoint: &str) -> CmdResult {
+fn create_nss_role_agent_config(mirrord_endpoint: Option<&str>, rss_endpoint: &str) -> CmdResult {
     let instance_id = get_instance_id()?;
 
+    let mirrord_configs = if let Some(mirrord_endpoint) = mirrord_endpoint {
+        format!(
+            r##"
+mirrord_endpoint = "{mirrord_endpoint}"
+mirrord_port = 9999
+"##
+        )
+    } else {
+        "".to_string()
+    };
     let config_content = format!(
         r##"rss_addr = "{rss_endpoint}:8088"
 rpc_timeout_seconds = 4
@@ -157,12 +167,11 @@ heartbeat_interval_seconds = 10
 state_check_interval_seconds = 1
 instance_id = "{instance_id}"
 service_type = "unknown"
-mirrord_endpoint = "{mirrord_endpoint}"
 nss_port = 8088
-mirrord_port = 9999
 rpc_server_port = 8077
 restart_limit_burst = 3
 restart_limit_interval_seconds = 600
+{mirrord_configs}
 "##
     );
 

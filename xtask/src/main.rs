@@ -151,7 +151,7 @@ pub enum ServiceName {
 #[strum(serialize_all = "snake_case")]
 pub enum DataBlobStorage {
     #[default]
-    HybridSingleAz,
+    S3HybridSingleAz,
     S3ExpressMultiAz,
 }
 

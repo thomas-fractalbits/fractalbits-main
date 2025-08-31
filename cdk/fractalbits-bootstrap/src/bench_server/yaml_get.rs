@@ -6,7 +6,7 @@ pub fn create_get_workload_config(
     region: &str,
     service_endpoint: &str,
     duration: &str,
-    rps_limit: usize,
+    rps_limit_str: &str,
 ) -> CmdResult {
     let config_content = format!(
         r##"warp:
@@ -194,7 +194,7 @@ pub fn create_get_workload_config(
     http2: false
 
     # Rate limit each instance to this number of requests per second
-    rps-limit: {rps_limit}
+    rps-limit: {rps_limit_str}
 
     # Host selection algorithm.
     # Can be 'weighed' or 'roundrobin'

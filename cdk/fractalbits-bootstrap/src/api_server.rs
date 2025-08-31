@@ -158,19 +158,19 @@ backend = "hybrid_single_az"
 addr = "{bss_ip}:8088"
 conn_num = {num_cores}
 
-[blob_storage.s3_hybrid]
+[blob_storage.s3_hybrid_single_az]
 s3_host = "http://s3.{aws_region}.amazonaws.com"
 s3_port = 80
 s3_region = "{aws_region}"
 s3_bucket = "{bucket_name}"
 
-[blob_storage.s3_hybrid.ratelimit]
+[blob_storage.s3_hybrid_single_az.ratelimit]
 enabled = false
 put_qps = 7000
 get_qps = 10000
 delete_qps = 5000
 
-[blob_storage.s3_hybrid.retry_config]
+[blob_storage.s3_hybrid_single_az.retry_config]
 enabled = true
 max_attempts = 8
 initial_backoff_us = 15000
