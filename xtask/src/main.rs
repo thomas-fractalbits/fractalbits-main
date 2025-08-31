@@ -21,13 +21,9 @@ pub const UI_DEFAULT_REGION: &str = "localdev";
 #[command(rename_all = "snake_case")]
 #[clap(name = "xtask", about = "Misc project related tasks")]
 enum Cmd {
-    #[clap(about = "Run benchmark for api_server/nss_rpc/bss_rpc")]
+    #[clap(about = "Run benchmark")]
     Bench {
-        #[clap(
-            long,
-            long_help = "Run with pre-defined workload (read/write)",
-            default_value = "write"
-        )]
+        #[clap(long, default_value = "write", value_enum)]
         workload: BenchWorkload,
 
         #[clap(long, long_help = "Run with perf tool and generate flamegraph")]
@@ -40,7 +36,7 @@ enum Cmd {
         )]
         keys_limit: usize,
 
-        #[clap(long_help = "api_server/nss_rpc/bss_rpc")]
+        #[clap(value_enum)]
         service: BenchService,
     },
 
@@ -104,15 +100,17 @@ enum Cmd {
     },
 }
 
-#[derive(Clone, AsRefStr, EnumString)]
+#[derive(Clone, AsRefStr, EnumString, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 enum BenchWorkload {
     Read,
     Write,
 }
 
-#[derive(Clone, EnumString)]
+#[derive(Clone, EnumString, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 enum BenchService {
     ApiServer,
     NssRpc,
@@ -129,8 +127,9 @@ pub enum ServiceAction {
     Status,
 }
 
-#[derive(AsRefStr, EnumString, Copy, Clone, PartialEq)]
+#[derive(AsRefStr, EnumString, Copy, Clone, PartialEq, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 pub enum ServiceName {
     GuiServer,
     ApiServer,
@@ -147,8 +146,9 @@ pub enum ServiceName {
     DdbLocal,
 }
 
-#[derive(AsRefStr, EnumString, Copy, Clone, Default)]
+#[derive(AsRefStr, EnumString, Copy, Clone, Default, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 pub enum DataBlobStorage {
     #[default]
     S3HybridSingleAz,
@@ -163,6 +163,7 @@ impl std::fmt::Display for DataBlobStorage {
 
 #[derive(AsRefStr, EnumString, Copy, Clone, Default, PartialEq, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
+#[clap(rename_all = "snake_case")]
 pub enum DeployMode {
     #[default]
     All,
@@ -202,10 +203,7 @@ pub struct InitConfig {
 #[clap(rename_all = "snake_case")]
 pub enum ServiceCommand {
     Init {
-        #[clap(
-            long_help = "all/api_server/bss/nss/nss_role_agent_a/nss_role_agent_b/minio/ddb_local",
-            default_value = "all"
-        )]
+        #[clap(default_value = "all", value_enum)]
         service: ServiceName,
 
         #[clap(long, long_help = "release build or not")]
@@ -214,39 +212,24 @@ pub enum ServiceCommand {
         #[clap(long, long_help = "start service for gui")]
         for_gui: bool,
 
-        #[clap(
-            long,
-            long_help = "Data blob storage mode: hybrid_single_az, s3_express_single_az or s3_express_multi_az"
-        )]
+        #[clap(long, value_enum)]
         #[arg(default_value_t)]
         data_blob_storage: DataBlobStorage,
     },
     Stop {
-        #[clap(
-            long_help = "all/api_server/bss/nss/nss_role_agent_a/nss_role_agent_b/minio/ddb_local",
-            default_value = "all"
-        )]
+        #[clap(default_value = "all", value_enum)]
         service: ServiceName,
     },
     Start {
-        #[clap(
-            long_help = "all/api_server/bss/nss/nss_role_agent_a/nss_role_agent_b/minio/ddb_local",
-            default_value = "all"
-        )]
+        #[clap(default_value = "all", value_enum)]
         service: ServiceName,
     },
     Restart {
-        #[clap(
-            long_help = "all/api_server/bss/nss/nss_role_agent_a/nss_role_agent_b/minio/ddb_local",
-            default_value = "all"
-        )]
+        #[clap(default_value = "all", value_enum)]
         service: ServiceName,
     },
     Status {
-        #[clap(
-            long_help = "all/api_server/bss/nss/nss_role_agent_a/nss_role_agent_b/minio/ddb_local",
-            default_value = "all"
-        )]
+        #[clap(default_value = "all", value_enum)]
         service: ServiceName,
     },
 }

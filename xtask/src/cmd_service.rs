@@ -249,7 +249,6 @@ fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
             ServiceName::Nss,
             ServiceName::NssRoleAgentB,
             ServiceName::Mirrord,
-            ServiceName::Bss,
             ServiceName::Rss,
             ServiceName::DdbLocal,
             ServiceName::Minio,

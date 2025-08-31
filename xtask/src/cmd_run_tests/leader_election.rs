@@ -529,4 +529,3 @@ pub fn cleanup_test_root_server_instances() -> CmdResult {
     run_cmd!(ignore pkill root_server)?;
     Ok(())
 }
-
