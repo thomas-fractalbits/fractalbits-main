@@ -202,6 +202,36 @@ async fn test_sha256_checksum(#[case] streaming: bool) {
     cleanup(&ctx, &bucket, &key).await;
 }
 
+#[rstest]
+#[case(false)]
+#[case(true)]
+#[tokio::test]
+async fn test_crc64nvme_checksum(#[case] streaming: bool) {
+    let (ctx, bucket, key) = setup(&format!("crc64nvme-checksum-on-streaming-{streaming}")).await;
+
+    let expected_encoded_content_length = if streaming {
+        b"B\r\nHello world\r\n0\r\nx-amz-checksum-crc64nvme:OOJZ0D8xKts=\r\n\r\n".len()
+    } else {
+        b"Hello world".len()
+    };
+    let res = test_checksum(
+        &ctx,
+        &bucket,
+        &key,
+        b"Hello world",
+        11,
+        expected_encoded_content_length,
+        ChecksumAlgorithm::Crc64Nvme,
+        streaming,
+    )
+    .await;
+    // Header checksums are base64 encoded
+    assert_eq!(res.checksum_crc64_nvme(), Some("OOJZ0D8xKts="));
+    assert_bytes_eq!(res.body, b"Hello world");
+
+    cleanup(&ctx, &bucket, &key).await;
+}
+
 async fn setup(bucket: &str) -> (Context, String, String) {
     let ctx = context();
     let bucket = ctx.create_bucket(bucket).await;
