@@ -155,12 +155,6 @@ pub enum DataBlobStorage {
     S3ExpressMultiAz,
 }
 
-impl std::fmt::Display for DataBlobStorage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_ref())
-    }
-}
-
 #[derive(AsRefStr, EnumString, Copy, Clone, Default, PartialEq, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
@@ -173,24 +167,12 @@ pub enum DeployMode {
     Ui,
 }
 
-impl std::fmt::Display for DeployMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_ref())
-    }
-}
-
 #[derive(AsRefStr, EnumString, Copy, Clone, Default)]
 #[strum(serialize_all = "snake_case")]
 pub enum NssRole {
     #[default]
     Active,
     Solo,
-}
-
-impl std::fmt::Display for NssRole {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_ref())
-    }
 }
 
 #[derive(Clone, Default)]
