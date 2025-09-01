@@ -17,7 +17,6 @@ use sha2::{Digest, Sha256};
 use crate::{
     handler::common::{
         data::Hash,
-        encoding::uri_encode,
         request::extract::Authentication,
         signature::{ContentSha256Header, SignatureError},
         time::{LONG_DATETIME, SHORT_DATE},
@@ -288,6 +287,28 @@ fn canonical_request(
     ];
 
     Ok(list.join("\n"))
+}
+
+/// Encode &str for use in a URI (AWS SigV4 specific encoding)
+fn uri_encode(string: &str, encode_slash: bool) -> String {
+    let mut result = String::with_capacity(string.len() * 2);
+    for c in string.chars() {
+        match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-' | '~' | '.' => result.push(c),
+            '/' if encode_slash => result.push_str("%2F"),
+            '/' if !encode_slash => result.push('/'),
+            _ => {
+                #[allow(clippy::format_collect)]
+                result.push_str(
+                    &format!("{c}")
+                        .bytes()
+                        .map(|b| format!("%{b:02X}"))
+                        .collect::<String>(),
+                );
+            }
+        }
+    }
+    result
 }
 
 async fn verify_v4(
