@@ -1,4 +1,4 @@
-use crate::handler::common::{s3_error::S3Error, signature::checksum::ChecksumValue};
+use crate::handler::common::{checksum::ChecksumValue, s3_error::S3Error};
 use crate::BlobId;
 use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;

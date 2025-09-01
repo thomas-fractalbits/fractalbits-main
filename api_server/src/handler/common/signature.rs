@@ -1,6 +1,5 @@
 mod error;
 pub use error::SignatureError;
-pub mod checksum;
 pub mod payload;
 
 use crate::{

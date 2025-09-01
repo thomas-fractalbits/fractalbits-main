@@ -1,14 +1,11 @@
 use crate::{
     handler::{
         common::{
-            buffer_payload, extract_metadata_headers, gen_etag, get_raw_object, list_raw_objects,
+            buffer_payload, checksum::{ChecksumAlgorithm, request_checksum_value, ChecksumValue},
+            extract_metadata_headers, gen_etag, get_raw_object, list_raw_objects,
             mpu_get_part_prefix, mpu_parse_part_number,
             response::xml::{Xml, XmlnsS3},
             s3_error::S3Error,
-            signature::{
-                checksum::ChecksumAlgorithm,
-                checksum::{request_checksum_value, ChecksumValue},
-            },
         },
         delete::delete_object_handler,
         ObjectRequestContext,
@@ -272,7 +269,7 @@ pub async fn complete_multipart_upload_handler(
 
     // Extract expected checksum from headers
     let expected_checksum =
-        crate::handler::common::signature::checksum::request_checksum_value(ctx.request.headers())?;
+        crate::handler::common::checksum::request_checksum_value(ctx.request.headers())?;
 
     // Use MpuChecksummer like the original implementation
     let mut total_size = 0;

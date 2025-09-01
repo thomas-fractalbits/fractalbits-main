@@ -1,4 +1,5 @@
 pub mod authorization;
+pub mod checksum;
 pub mod data;
 pub mod encoding;
 pub mod request;
@@ -210,7 +211,7 @@ pub fn object_headers(
     if checksum_mode_enabled {
         let checksum = object.checksum()?;
         tracing::debug!("checksum_mode enabled, adding checksum: {:?}", checksum);
-        signature::checksum::add_checksum_response_headers(&checksum, resp)?;
+        checksum::add_checksum_response_headers(&checksum, resp)?;
     }
 
     Ok(())

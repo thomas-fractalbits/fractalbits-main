@@ -8,7 +8,7 @@ pub use api_signature::{ApiSignature, ApiSignatureExtractor};
 pub use authorization::{AuthError, AuthFromHeaders, Authentication, Scope};
 pub use bucket_name_and_key::BucketAndKeyName;
 
-use crate::handler::common::signature::checksum::{ChecksumAlgorithm, ChecksumValue};
+use crate::handler::common::checksum::{ChecksumAlgorithm, ChecksumValue};
 use actix_web::{dev::Payload, web, FromRequest, HttpRequest};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use bytes::Bytes;

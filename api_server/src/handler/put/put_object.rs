@@ -18,9 +18,8 @@ use super::s3_streaming::S3StreamingPayload;
 use crate::{
     handler::{
         common::{
-            buffer_payload_with_capacity, extract_metadata_headers, gen_etag,
-            s3_error::S3Error,
-            signature::checksum::{self, ChecksumAlgorithm, ChecksumValue},
+            buffer_payload_with_capacity, checksum::{self, ChecksumAlgorithm, ChecksumValue},
+            extract_metadata_headers, gen_etag, s3_error::S3Error,
         },
         ObjectRequestContext,
     },
