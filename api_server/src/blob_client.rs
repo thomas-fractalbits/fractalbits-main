@@ -1,7 +1,7 @@
 use crate::{
     blob_storage::{
         BlobStorage, BlobStorageError, BlobStorageImpl, BssOnlySingleAzStorage,
-        S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig, S3HybridSingleAzStorage,
+        S3ExpressMultiAzStorage, S3HybridSingleAzStorage,
     },
     config::{BlobStorageBackend, BlobStorageConfig},
     BlobId,
@@ -74,9 +74,8 @@ impl BlobClient {
                     )
                 })?;
 
-                let s3_express_config =
-                    Self::get_s3_express_multi_az_config(blob_storage_config, "S3Express")?;
-                let express_config = Self::build_s3_express_with_tracking_config(s3_express_config);
+                let s3_express_multi_az_config =
+                    Self::get_s3_express_multi_az_config(blob_storage_config, "S3ExpressMultiAz")?;
 
                 let az_status_cache = Arc::new(
                     Cache::builder()
@@ -86,8 +85,8 @@ impl BlobClient {
                 );
 
                 let storage = BlobStorageImpl::S3ExpressMultiAz(
-                    S3ExpressMultiAzWithTracking::new(
-                        &express_config,
+                    S3ExpressMultiAzStorage::new(
+                        s3_express_multi_az_config,
                         data_blob_tracker,
                         az_status_cache.clone(),
                     )
@@ -143,26 +142,6 @@ impl BlobClient {
                     "S3 Express configuration required for {backend_name} backend"
                 ))
             })
-    }
-
-    fn build_s3_express_with_tracking_config(
-        s3_express_config: &crate::config::S3ExpressMultiAzConfig,
-    ) -> S3ExpressWithTrackingConfig {
-        S3ExpressWithTrackingConfig {
-            local_az_host: s3_express_config.local_az_host.clone(),
-            local_az_port: s3_express_config.local_az_port,
-            s3_region: s3_express_config.s3_region.clone(),
-            local_az_bucket: s3_express_config.local_az_bucket.clone(),
-            remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
-            remote_az_host: s3_express_config.remote_az_host.clone(),
-            remote_az_port: s3_express_config.remote_az_port,
-            local_az: s3_express_config.local_az.clone(),
-            remote_az: s3_express_config.remote_az.clone(),
-            rate_limit_config: crate::blob_storage::S3RateLimitConfig::from(
-                &s3_express_config.ratelimit,
-            ),
-            retry_config: s3_express_config.retry_config.clone(),
-        }
     }
 
     async fn blob_deletion_task(

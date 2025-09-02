@@ -1,21 +1,19 @@
 mod bss_only_single_az_storage;
 mod retry;
-mod s3_express_multi_az_with_tracking;
+mod s3_express_multi_az_storage;
 mod s3_hybrid_single_az_storage;
 
+pub use crate::config::RatelimitConfig;
 pub use bss_only_single_az_storage::BssOnlySingleAzStorage;
 pub use retry::S3RetryConfig;
-pub use s3_express_multi_az_with_tracking::{
-    S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig,
-};
+pub use s3_express_multi_az_storage::S3ExpressMultiAzStorage;
 pub use s3_hybrid_single_az_storage::S3HybridSingleAzStorage;
 
-// Rate limiting types are defined in this module
-
+#[allow(clippy::enum_variant_names)]
 pub enum BlobStorageImpl {
     BssOnlySingleAz(BssOnlySingleAzStorage),
     HybridSingleAz(S3HybridSingleAzStorage),
-    S3ExpressMultiAz(S3ExpressMultiAzWithTracking),
+    S3ExpressMultiAz(S3ExpressMultiAzStorage),
 }
 
 use aws_config::{retry::RetryConfig, BehaviorVersion};
@@ -54,37 +52,6 @@ macro_rules! s3_retry {
 /// Generate a consistent S3 key format for blob storage
 pub fn blob_key(blob_id: Uuid, block_number: u32) -> String {
     format!("{blob_id}-p{block_number}")
-}
-
-/// Rate limiting configuration for S3 operations
-#[derive(Clone, Debug)]
-pub struct S3RateLimitConfig {
-    pub enabled: bool,
-    pub put_qps: u32,
-    pub get_qps: u32,
-    pub delete_qps: u32,
-}
-
-impl Default for S3RateLimitConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,   // Default to disabled for local testing
-            put_qps: 7000,    // Based on initial testing results
-            get_qps: 10000,   // Higher for reads
-            delete_qps: 5000, // Lower for deletes
-        }
-    }
-}
-
-impl From<&crate::config::RatelimitConfig> for S3RateLimitConfig {
-    fn from(config: &crate::config::RatelimitConfig) -> Self {
-        Self {
-            enabled: config.enabled,
-            put_qps: config.put_qps,
-            get_qps: config.get_qps,
-            delete_qps: config.delete_qps,
-        }
-    }
 }
 
 /// S3 client wrapper that can be either rate-limited or direct
@@ -136,7 +103,7 @@ pub struct RateLimitedS3Client {
 }
 
 impl RateLimitedS3Client {
-    pub fn new(client: S3Client, config: &S3RateLimitConfig) -> Self {
+    pub fn new(client: S3Client, config: &RatelimitConfig) -> Self {
         let put_quota = Quota::per_second(
             NonZeroU32::new(config.put_qps).unwrap_or(NonZeroU32::new(1).unwrap()),
         );
@@ -186,7 +153,7 @@ pub async fn create_s3_client_wrapper(
     s3_port: u16,
     s3_region: &str,
     force_path_style: bool,
-    rate_limit_config: &S3RateLimitConfig,
+    rate_limit_config: &RatelimitConfig,
 ) -> S3ClientWrapper {
     // Use optimized client for AWS S3, standard client for minio
     let s3_client = if s3_host.ends_with("amazonaws.com") {

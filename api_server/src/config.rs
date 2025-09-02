@@ -56,9 +56,7 @@ pub struct S3ExpressMultiAzConfig {
     pub remote_az_port: u16,
     pub local_az: String,
     pub remote_az: String,
-    #[serde(default)]
     pub ratelimit: RatelimitConfig,
-    #[serde(default)]
     pub retry_config: S3RetryConfig,
 }
 
