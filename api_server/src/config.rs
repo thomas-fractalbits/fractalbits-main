@@ -8,9 +8,7 @@ pub enum BlobStorageBackend {
     BssOnlySingleAz,
     #[default]
     S3HybridSingleAz,
-    S3ExpressSingleAz,
     S3ExpressMultiAz,
-    S3ExpressMultiAzWithTracking,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -20,7 +18,6 @@ pub struct BlobStorageConfig {
     pub bss: Option<BssConfig>,
     pub s3_hybrid_single_az: Option<S3HybridSingleAzConfig>,
     pub s3_express_multi_az: Option<S3ExpressMultiAzConfig>,
-    pub s3_express_single_az: Option<S3ExpressSingleAzConfig>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -77,40 +74,6 @@ impl Default for S3ExpressMultiAzConfig {
             remote_az_port: 9002,
             local_az: "localdev-az1".into(),
             remote_az: "localdev-az2".into(),
-            ratelimit: RatelimitConfig::default(),
-            retry_config: S3RetryConfig::default(),
-        }
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct S3ExpressSingleAzConfig {
-    pub s3_host: String,
-    pub s3_port: u16,
-    pub s3_region: String,
-    pub s3_bucket: String,
-    pub az: String,
-    #[serde(default = "default_force_path_style")]
-    pub force_path_style: bool,
-    #[serde(default)]
-    pub ratelimit: RatelimitConfig,
-    #[serde(default)]
-    pub retry_config: S3RetryConfig,
-}
-
-fn default_force_path_style() -> bool {
-    true // Default to true for local testing with minio
-}
-
-impl Default for S3ExpressSingleAzConfig {
-    fn default() -> Self {
-        Self {
-            s3_host: "http://127.0.0.1".into(),
-            s3_port: 9000, // local minio port
-            s3_region: "localdev".into(),
-            s3_bucket: "fractalbits-bucket".into(),
-            az: "localdev-az1".into(),
-            force_path_style: true,
             ratelimit: RatelimitConfig::default(),
             retry_config: S3RetryConfig::default(),
         }
@@ -187,31 +150,6 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn s3_express_multi_az_with_tracking() -> Self {
-        Self {
-            nss_addr: "127.0.0.1:8087".to_string(),
-            rss_addr: "127.0.0.1:8086".to_string(),
-            nss_conn_num: 2,
-            rss_conn_num: 1,
-            port: 8080,
-            mgmt_port: 18080,
-            https: HttpsConfig::default(),
-            region: "localdev".into(),
-            root_domain: ".localhost".into(),
-            with_metrics: true,
-            http_request_timeout_seconds: 30,
-            rpc_timeout_seconds: 10,
-            blob_storage: BlobStorageConfig {
-                backend: BlobStorageBackend::S3ExpressMultiAzWithTracking,
-                bss: None,
-                s3_hybrid_single_az: None,
-                s3_express_multi_az: Some(S3ExpressMultiAzConfig::default()),
-                s3_express_single_az: None,
-            },
-            allow_missing_or_bad_signature: false,
-        }
-    }
-
     pub fn s3_express_multi_az() -> Self {
         Self {
             nss_addr: "127.0.0.1:8087".to_string(),
@@ -231,32 +169,6 @@ impl Config {
                 bss: None,
                 s3_hybrid_single_az: None,
                 s3_express_multi_az: Some(S3ExpressMultiAzConfig::default()),
-                s3_express_single_az: None,
-            },
-            allow_missing_or_bad_signature: false,
-        }
-    }
-
-    pub fn s3_express_single_az() -> Self {
-        Self {
-            nss_addr: "127.0.0.1:8087".to_string(),
-            rss_addr: "127.0.0.1:8086".to_string(),
-            nss_conn_num: 2,
-            rss_conn_num: 1,
-            port: 8080,
-            mgmt_port: 18080,
-            https: HttpsConfig::default(),
-            region: "localdev".into(),
-            root_domain: ".localhost".into(),
-            with_metrics: true,
-            http_request_timeout_seconds: 30,
-            rpc_timeout_seconds: 10,
-            blob_storage: BlobStorageConfig {
-                backend: BlobStorageBackend::S3ExpressSingleAz,
-                bss: None,
-                s3_hybrid_single_az: None,
-                s3_express_multi_az: None,
-                s3_express_single_az: Some(S3ExpressSingleAzConfig::default()),
             },
             allow_missing_or_bad_signature: false,
         }
@@ -291,7 +203,6 @@ impl Config {
                     retry_config: S3RetryConfig::default(),
                 }),
                 s3_express_multi_az: None,
-                s3_express_single_az: None,
             },
             allow_missing_or_bad_signature: false,
         }

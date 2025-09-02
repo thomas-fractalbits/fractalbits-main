@@ -1,8 +1,7 @@
 use crate::{
     blob_storage::{
         BlobStorage, BlobStorageError, BlobStorageImpl, BssOnlySingleAzStorage,
-        S3ExpressMultiAzStorage, S3ExpressMultiAzWithTracking, S3ExpressSingleAzStorage,
-        S3ExpressWithTrackingConfig, S3HybridSingleAzStorage,
+        S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig, S3HybridSingleAzStorage,
     },
     config::{BlobStorageBackend, BlobStorageConfig},
     BlobId,
@@ -69,24 +68,14 @@ impl BlobClient {
                 )
             }
             BlobStorageBackend::S3ExpressMultiAz => {
-                let s3_express_config =
-                    Self::get_s3_express_multi_az_config(blob_storage_config, "S3Express")?;
-                let express_config = Self::build_s3_express_multi_az_config(s3_express_config);
-                BlobStorageImpl::S3ExpressMultiAz(
-                    S3ExpressMultiAzStorage::new(&express_config).await?,
-                )
-            }
-            BlobStorageBackend::S3ExpressMultiAzWithTracking => {
                 let data_blob_tracker = data_blob_tracker.ok_or_else(|| {
                     BlobStorageError::Config(
                         "DataBlobTracker required for S3ExpressWithTracking backend".into(),
                     )
                 })?;
 
-                let s3_express_config = Self::get_s3_express_multi_az_config(
-                    blob_storage_config,
-                    "S3ExpressWithTracking",
-                )?;
+                let s3_express_config =
+                    Self::get_s3_express_multi_az_config(blob_storage_config, "S3Express")?;
                 let express_config = Self::build_s3_express_with_tracking_config(s3_express_config);
 
                 let az_status_cache = Arc::new(
@@ -96,7 +85,7 @@ impl BlobClient {
                         .build(),
                 );
 
-                let storage = BlobStorageImpl::S3ExpressMultiAzWithTracking(
+                let storage = BlobStorageImpl::S3ExpressMultiAz(
                     S3ExpressMultiAzWithTracking::new(
                         &express_config,
                         data_blob_tracker,
@@ -106,15 +95,6 @@ impl BlobClient {
                 );
 
                 return Ok((Arc::new(storage), Some(az_status_cache)));
-            }
-            BlobStorageBackend::S3ExpressSingleAz => {
-                let s3_express_single_az_config =
-                    Self::get_s3_express_single_az_config(blob_storage_config)?;
-                let single_az_config =
-                    Self::build_s3_express_single_az_config(s3_express_single_az_config);
-                BlobStorageImpl::S3ExpressSingleAz(
-                    S3ExpressSingleAzStorage::new(&single_az_config).await?,
-                )
             }
         };
 
@@ -165,39 +145,6 @@ impl BlobClient {
             })
     }
 
-    fn get_s3_express_single_az_config(
-        blob_storage_config: &BlobStorageConfig,
-    ) -> Result<&crate::config::S3ExpressSingleAzConfig, BlobStorageError> {
-        blob_storage_config
-            .s3_express_single_az
-            .as_ref()
-            .ok_or_else(|| {
-                BlobStorageError::Config(
-                    "S3 Express Single AZ configuration required for S3ExpressSingleAz backend"
-                        .into(),
-                )
-            })
-    }
-
-    fn build_s3_express_multi_az_config(
-        s3_express_config: &crate::config::S3ExpressMultiAzConfig,
-    ) -> crate::blob_storage::S3ExpressMultiAzConfig {
-        crate::blob_storage::S3ExpressMultiAzConfig {
-            local_az_host: s3_express_config.local_az_host.clone(),
-            local_az_port: s3_express_config.local_az_port,
-            remote_az_host: s3_express_config.remote_az_host.clone(),
-            remote_az_port: s3_express_config.remote_az_port,
-            s3_region: s3_express_config.s3_region.clone(),
-            local_az_bucket: s3_express_config.local_az_bucket.clone(),
-            remote_az_bucket: s3_express_config.remote_az_bucket.clone(),
-            az: s3_express_config.local_az.clone(),
-            rate_limit_config: crate::blob_storage::S3RateLimitConfig::from(
-                &s3_express_config.ratelimit,
-            ),
-            retry_config: s3_express_config.retry_config.clone(),
-        }
-    }
-
     fn build_s3_express_with_tracking_config(
         s3_express_config: &crate::config::S3ExpressMultiAzConfig,
     ) -> S3ExpressWithTrackingConfig {
@@ -215,23 +162,6 @@ impl BlobClient {
                 &s3_express_config.ratelimit,
             ),
             retry_config: s3_express_config.retry_config.clone(),
-        }
-    }
-
-    fn build_s3_express_single_az_config(
-        s3_express_single_az_config: &crate::config::S3ExpressSingleAzConfig,
-    ) -> crate::blob_storage::S3ExpressSingleAzConfig {
-        crate::blob_storage::S3ExpressSingleAzConfig {
-            s3_host: s3_express_single_az_config.s3_host.clone(),
-            s3_port: s3_express_single_az_config.s3_port,
-            s3_region: s3_express_single_az_config.s3_region.clone(),
-            s3_bucket: s3_express_single_az_config.s3_bucket.clone(),
-            az: s3_express_single_az_config.az.clone(),
-            force_path_style: s3_express_single_az_config.force_path_style,
-            rate_limit_config: crate::blob_storage::S3RateLimitConfig::from(
-                &s3_express_single_az_config.ratelimit,
-            ),
-            retry_config: s3_express_single_az_config.retry_config.clone(),
         }
     }
 

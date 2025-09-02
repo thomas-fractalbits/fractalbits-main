@@ -87,8 +87,7 @@ async fn main() {
             if let Ok(backend) = std::env::var("APP_BLOB_STORAGE_BACKEND") {
                 info!("APP_BLOB_STORAGE_BACKEND: {backend}");
                 match backend.as_str() {
-                    "s3_express_multi_az" => Config::s3_express_multi_az_with_tracking(),
-                    "s3_express_single_az" => Config::s3_express_single_az(),
+                    "s3_express_multi_az" => Config::s3_express_multi_az(),
                     "s3_hybrid_single_az" => Config::s3_hybrid_single_az(),
                     _ => {
                         error!("Invalid APP_BLOB_STORAGE_BACKEND value: {backend}");

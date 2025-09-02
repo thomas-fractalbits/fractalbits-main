@@ -73,7 +73,7 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<HttpResp
     // Determine if we're in multi-AZ mode based on the blob storage backend
     let is_multi_az = matches!(
         ctx.app.config.blob_storage.backend,
-        crate::BlobStorageBackend::S3ExpressMultiAzWithTracking
+        crate::BlobStorageBackend::S3ExpressMultiAz
     );
 
     let result = ctx

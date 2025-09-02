@@ -96,7 +96,7 @@ key_file = "/opt/fractalbits/etc/key.pem"
 force_http1_only = false
 
 [blob_storage]
-backend = "s3_express_multi_az_with_tracking"
+backend = "s3_express_multi_az"
 
 [blob_storage.s3_express_multi_az]
 local_az_host = "http://s3.{aws_region}.amazonaws.com"

@@ -1,17 +1,13 @@
 mod bss_only_single_az_storage;
 mod retry;
-mod s3_express_multi_az_storage;
 mod s3_express_multi_az_with_tracking;
-mod s3_express_single_az_storage;
 mod s3_hybrid_single_az_storage;
 
 pub use bss_only_single_az_storage::BssOnlySingleAzStorage;
 pub use retry::S3RetryConfig;
-pub use s3_express_multi_az_storage::{S3ExpressMultiAzConfig, S3ExpressMultiAzStorage};
 pub use s3_express_multi_az_with_tracking::{
     S3ExpressMultiAzWithTracking, S3ExpressWithTrackingConfig,
 };
-pub use s3_express_single_az_storage::{S3ExpressSingleAzConfig, S3ExpressSingleAzStorage};
 pub use s3_hybrid_single_az_storage::S3HybridSingleAzStorage;
 
 // Rate limiting types are defined in this module
@@ -19,9 +15,7 @@ pub use s3_hybrid_single_az_storage::S3HybridSingleAzStorage;
 pub enum BlobStorageImpl {
     BssOnlySingleAz(BssOnlySingleAzStorage),
     HybridSingleAz(S3HybridSingleAzStorage),
-    S3ExpressMultiAz(S3ExpressMultiAzStorage),
-    S3ExpressMultiAzWithTracking(S3ExpressMultiAzWithTracking),
-    S3ExpressSingleAz(S3ExpressSingleAzStorage),
+    S3ExpressMultiAz(S3ExpressMultiAzWithTracking),
 }
 
 use aws_config::{retry::RetryConfig, BehaviorVersion};
@@ -405,16 +399,6 @@ impl BlobStorage for BlobStorageImpl {
                     .put_blob(tracking_root_blob_name, blob_id, block_number, body)
                     .await
             }
-            BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
-                storage
-                    .put_blob(tracking_root_blob_name, blob_id, block_number, body)
-                    .await
-            }
-            BlobStorageImpl::S3ExpressSingleAz(storage) => {
-                storage
-                    .put_blob(tracking_root_blob_name, blob_id, block_number, body)
-                    .await
-            }
         }
     }
 
@@ -432,12 +416,6 @@ impl BlobStorage for BlobStorageImpl {
                 storage.get_blob(blob_id, block_number, body).await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
-                storage.get_blob(blob_id, block_number, body).await
-            }
-            BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
-                storage.get_blob(blob_id, block_number, body).await
-            }
-            BlobStorageImpl::S3ExpressSingleAz(storage) => {
                 storage.get_blob(blob_id, block_number, body).await
             }
         }
@@ -461,16 +439,6 @@ impl BlobStorage for BlobStorageImpl {
                     .await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
-                storage
-                    .delete_blob(tracking_root_blob_name, blob_id, block_number)
-                    .await
-            }
-            BlobStorageImpl::S3ExpressMultiAzWithTracking(storage) => {
-                storage
-                    .delete_blob(tracking_root_blob_name, blob_id, block_number)
-                    .await
-            }
-            BlobStorageImpl::S3ExpressSingleAz(storage) => {
                 storage
                     .delete_blob(tracking_root_blob_name, blob_id, block_number)
                     .await
