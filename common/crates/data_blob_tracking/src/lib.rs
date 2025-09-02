@@ -343,19 +343,18 @@ impl DataBlobTracker {
 
     /// List all buckets with their tracking root blob names
     /// Uses efficient RSS list operation that now returns bucket values directly
-    pub async fn list_buckets_with_tracking(
+    pub async fn list_buckets(
         &self,
     ) -> Result<Vec<(String, Option<String>)>, DataBlobTrackingError> {
         let prefix = "bucket:";
         let bucket_values = rss_rpc_retry!(self, list(prefix, None)).await?;
 
-        let mut buckets_with_tracking = Vec::new();
+        let mut buckets = Vec::new();
         for bucket_value in &bucket_values {
             // Parse the bucket JSON data directly from RSS list response
             match serde_json::from_str::<data_types::Bucket>(bucket_value) {
                 Ok(bucket) => {
-                    buckets_with_tracking
-                        .push((bucket.bucket_name, bucket.tracking_root_blob_name));
+                    buckets.push((bucket.bucket_name, bucket.tracking_root_blob_name));
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -367,7 +366,7 @@ impl DataBlobTracker {
             }
         }
 
-        Ok(buckets_with_tracking)
+        Ok(buckets)
     }
 
     /// Get current timestamp as bytes for deleted blob tracking
