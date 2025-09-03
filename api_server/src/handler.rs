@@ -66,6 +66,7 @@ pub struct ObjectRequestContext {
     pub app: Arc<AppState>,
     pub request: HttpRequest,
     pub api_key: Option<Versioned<ApiKey>>,
+    pub auth: Option<Authentication>,
     pub bucket_name: String,
     pub key: String,
     pub payload: actix_web::dev::Payload,
@@ -76,6 +77,7 @@ impl ObjectRequestContext {
         app: Arc<AppState>,
         request: HttpRequest,
         api_key: Option<Versioned<ApiKey>>,
+        auth: Option<Authentication>,
         bucket_name: String,
         key: String,
         payload: actix_web::dev::Payload,
@@ -84,6 +86,7 @@ impl ObjectRequestContext {
             app,
             request,
             api_key,
+            auth,
             bucket_name,
             key,
             payload,
@@ -217,8 +220,8 @@ async fn any_handler_inner(
                 api_key,
                 content_sha256_header: signature::ContentSha256Header::UnsignedPayload,
             }
-        } else if let Some(auth) = auth {
-            match verify_request(app.clone(), request, &auth).await {
+        } else if let Some(ref auth) = auth {
+            match verify_request(app.clone(), request, auth).await {
                 Ok(verified) => verified,
                 Err(signature::SignatureError::RpcErrorRss(RpcErrorRss::NotFound)) => {
                     return Err(S3Error::InvalidAccessKeyId);
@@ -239,8 +242,8 @@ async fn any_handler_inner(
             return Err(S3Error::InvalidSignature);
         }
     } else {
-        let auth_unwrapped = auth.ok_or(S3Error::InvalidSignature)?;
-        match verify_request(app.clone(), request, &auth_unwrapped).await {
+        let auth = auth.as_ref().ok_or(S3Error::InvalidSignature)?;
+        match verify_request(app.clone(), request, auth).await {
             Ok(verified) => verified,
             Err(signature::SignatureError::RpcErrorRss(RpcErrorRss::NotFound)) => {
                 return Err(S3Error::InvalidAccessKeyId);
@@ -290,6 +293,7 @@ async fn any_handler_inner(
                 app,
                 request.clone(),
                 Some(api_key),
+                auth,
                 bucket,
                 key,
                 payload,

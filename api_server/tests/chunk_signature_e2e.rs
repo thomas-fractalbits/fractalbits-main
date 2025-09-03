@@ -1,3 +1,4 @@
+use aws_sdk_s3::types::ChecksumMode;
 use aws_signature::{
     sigv4::{sign_request, SigningParams},
     streaming::{create_chunk_signature_context, create_streaming_body, SignatureError},
@@ -6,6 +7,7 @@ use aws_signature::{
 use chrono::Utc;
 use reqwest::{Client, Method};
 use std::collections::{BTreeMap, BTreeSet};
+use test_common::build_client;
 
 /// Simple S3 test client using reqwest and the aws_signature common crate
 pub struct S3TestClient {
@@ -79,7 +81,7 @@ impl S3TestClient {
 
         // Calculate seed signature (signature of the initial request)
         let signed_headers: BTreeSet<String> = request_headers.keys().cloned().collect();
-        let uri_path = format!("/{}", key);
+        let uri_path = format!("/{}/{}", bucket, key);
         let query_params = BTreeMap::new();
 
         // Build canonical headers from request headers
@@ -171,7 +173,7 @@ impl S3TestClient {
         );
 
         let signed_headers: BTreeSet<String> = request_headers.keys().cloned().collect();
-        let uri_path = format!("/{}", key);
+        let uri_path = format!("/{}/{}", bucket, key);
         let query_params = BTreeMap::new();
 
         // Build canonical headers from request headers
@@ -227,7 +229,12 @@ impl S3TestClient {
 
     fn extract_host(&self, url: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let parsed_url = url::Url::parse(url)?;
-        Ok(parsed_url.host_str().unwrap_or("localhost").to_string())
+        let host = parsed_url.host_str().unwrap_or("localhost");
+        if let Some(port) = parsed_url.port() {
+            Ok(format!("{}:{}", host, port))
+        } else {
+            Ok(host.to_string())
+        }
     }
 
     fn extract_seed_signature(
@@ -277,7 +284,7 @@ mod tests {
 
     const TEST_ACCESS_KEY: &str = "test_api_key";
     const TEST_SECRET_KEY: &str = "test_api_secret";
-    const TEST_REGION: &str = "us-east-1";
+    const TEST_REGION: &str = "localdev";
     const TEST_ENDPOINT: &str = "http://localhost:8080";
 
     fn create_test_client() -> S3TestClient {
@@ -304,7 +311,7 @@ mod tests {
         let host = client
             .extract_host("http://localhost:8080/bucket/key")
             .unwrap();
-        assert_eq!(host, "localhost");
+        assert_eq!(host, "localhost:8080");
     }
 
     #[tokio::test]
@@ -318,62 +325,130 @@ mod tests {
     // Integration test - runs with server
     #[tokio::test]
     async fn test_put_object_chunked_valid() {
-        let client = create_test_client();
-        let body = b"Hello, chunked world!".to_vec();
+        // Create bucket using standard test context first
+        let ctx = test_common::context();
+        let bucket_name = ctx.create_bucket("chunk-test-bucket").await;
 
+        let client = create_test_client();
+        let original_body = b"Hello, chunked world!".to_vec();
+        let key_name = "test-key";
+
+        // Upload using custom chunked client
         let response = client
-            .put_object_chunked("fractalbits-bucket", "test-key", body, 8, None)
+            .put_object_chunked(&bucket_name, key_name, original_body.clone(), 8, None)
             .await;
 
-        match response {
-            Ok(resp) => {
-                let status = resp.status();
-                let body_text = resp
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Could not read response body".to_string());
-                println!("Response status: {}", status);
-                println!("Response body: {}", body_text);
-                if status.is_success() {
-                    println!("Valid chunk signature test passed");
-                } else {
-                    println!("Valid chunk signature test failed: {}", status);
-                }
-            }
-            Err(e) => {
-                println!("Request failed: {}", e);
-            }
+        let response = response.expect("Chunked upload request should not fail");
+        let status = response.status();
+
+        if !status.is_success() {
+            let body_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Could not read response body".to_string());
+            panic!(
+                "Chunked upload should succeed with valid signatures, got status: {}, body: {}",
+                status, body_text
+            );
         }
+
+        // Verify upload by downloading with AWS SDK client
+        let aws_client = build_client();
+        let get_response = aws_client
+            .get_object()
+            .bucket(&bucket_name)
+            .key(key_name)
+            .checksum_mode(ChecksumMode::Enabled)
+            .send()
+            .await
+            .expect("Failed to download uploaded object for verification");
+
+        // Extract checksums before consuming the body
+        let sha256 = get_response.checksum_sha256().map(|s| s.to_string());
+        let sha1 = get_response.checksum_sha1().map(|s| s.to_string());
+
+        // Verify content matches
+        let downloaded_body = get_response
+            .body
+            .collect()
+            .await
+            .expect("Failed to collect downloaded body")
+            .into_bytes();
+
+        assert_eq!(
+            downloaded_body.as_ref(),
+            original_body.as_slice(),
+            "Downloaded content does not match uploaded content"
+        );
+
+        // Assert expected checksum values for "Hello, chunked world!" (21 bytes)
+        if let Some(sha256) = sha256 {
+            assert_eq!(
+                sha256, "hnTYyCIGBcfMtsp4C+9kYj0W9w+m+KfFzTieYy1ug4I=",
+                "SHA256 checksum mismatch"
+            );
+        }
+
+        if let Some(sha1) = sha1 {
+            assert_eq!(
+                sha1, "HxLv1JzcrwUtpKN3Kiegu4Ut7RU=",
+                "SHA1 checksum mismatch"
+            );
+        }
+
+        // Cleanup: delete the object first, then the bucket
+        aws_client
+            .delete_object()
+            .bucket(&bucket_name)
+            .key(key_name)
+            .send()
+            .await
+            .expect("Failed to delete test object");
+
+        ctx.delete_bucket(&bucket_name).await;
     }
 
     // Integration test - runs with server
     #[tokio::test]
     async fn test_put_object_chunked_invalid() {
+        // Create bucket using standard test context first
+        let ctx = test_common::context();
+        let bucket_name = ctx.create_bucket("chunk-test-bucket-invalid").await;
+
         let client = create_test_client();
         let body = b"Hello, chunked world!".to_vec();
+        let key_name = "test-key-invalid";
 
         let response = client
-            .put_object_chunked_invalid_signature("fractalbits-bucket", "test-key-invalid", body, 8)
+            .put_object_chunked_invalid_signature(&bucket_name, key_name, body, 8)
             .await;
 
-        match response {
-            Ok(resp) => {
-                let status = resp.status();
-                let body_text = resp
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Could not read response body".to_string());
-                println!("Response status: {}", status);
-                println!("Response body: {}", body_text);
-                if status.is_client_error() {
-                    println!("Invalid chunk signature test passed (correctly rejected)");
-                } else {
-                    println!("Invalid chunk signature test failed - should have been rejected but got: {}", status);
-                }
-            }
-            Err(e) => {
-                println!("Request failed: {}", e);
-            }
-        }
+        let response = response.expect("Invalid chunk signature request should not fail to send");
+        let status = response.status();
+        assert!(
+            status.is_server_error(),
+            "Invalid chunk signature upload should be rejected with server error, got status: {}",
+            status
+        );
+
+        // Verify that no object was created by attempting download
+        let aws_client = build_client();
+        aws_client
+            .get_object()
+            .bucket(&bucket_name)
+            .key(key_name)
+            .send()
+            .await
+            .expect_err("Object should not exist after invalid chunk signature upload");
+
+        // Cleanup: try to delete the object if it exists (it shouldn't, but just in case)
+        let _ = aws_client
+            .delete_object()
+            .bucket(&bucket_name)
+            .key(key_name)
+            .send()
+            .await; // Ignore error if object doesn't exist
+
+        ctx.delete_bucket(&bucket_name).await;
     }
 }

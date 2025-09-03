@@ -83,6 +83,14 @@ impl S3StreamingPayload {
         Self::with_checksums_full(payload, request, None)
     }
 
+    pub fn with_checksums_and_signature(
+        payload: actix_web::dev::Payload,
+        request: &HttpRequest,
+        signature_info: Option<(ChunkSignatureContext, Option<String>)>,
+    ) -> Result<(Self, StreamingChecksumReceiver), S3Error> {
+        Self::with_checksums_full(payload, request, signature_info)
+    }
+
     /// Full path: complete functionality with task spawning for complex cases
     fn with_checksums_full(
         payload: actix_web::dev::Payload,

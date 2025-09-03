@@ -323,6 +323,7 @@ pub async fn complete_multipart_upload_handler(
             ctx.app.clone(),
             ctx.request.clone(),
             None,
+            None,
             ctx.bucket_name.clone(),
             invalid_key,
             actix_web::dev::Payload::None,

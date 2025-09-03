@@ -114,7 +114,7 @@ async fn check_standard_signature(
 
     let string_to_sign = string_to_sign(
         &authentication.date,
-        &authentication.scope.to_sign_string(),
+        &authentication.scope_string(),
         &canonical_request,
     );
 
@@ -181,7 +181,7 @@ async fn check_presigned_signature(
 
     let string_to_sign = string_to_sign(
         &authentication.date,
-        &authentication.scope.to_sign_string(),
+        &authentication.scope_string(),
         &canonical_request,
     );
 
@@ -242,17 +242,7 @@ fn canonical_request(
     signed_headers: &BTreeSet<String>,
     payload_hash: &str,
 ) -> Result<String, SignatureError> {
-    // Check that all signed headers are present
-    for header_name in signed_headers {
-        if !headers.contains_key(header_name) {
-            return Err(SignatureError::Other(format!(
-                "signed header `{}` is not present",
-                header_name
-            )));
-        }
-    }
-
-    // Build canonical headers directly from HeaderMap
+    // Build canonical headers from HeaderMap
     let mut canonical_headers = Vec::new();
     for header_name in signed_headers {
         if let Some(header_value) = headers.get(header_name) {
@@ -263,6 +253,11 @@ fn canonical_request(
                 String::from_utf8_lossy(header_value.as_bytes()).to_string()
             };
             canonical_headers.push(format!("{}:{}", header_name, value_str.trim()));
+        } else {
+            return Err(SignatureError::Other(format!(
+                "signed header `{}` is not present",
+                header_name
+            )));
         }
     }
     Ok(create_canonical_request(

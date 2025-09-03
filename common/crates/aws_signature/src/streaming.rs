@@ -1,4 +1,7 @@
-use crate::{sigv4::get_signing_key, HmacSha256, AWS4_HMAC_SHA256_PAYLOAD};
+use crate::{
+    sigv4::{format_scope_string, get_signing_key},
+    HmacSha256, AWS4_HMAC_SHA256_PAYLOAD,
+};
 use chrono::{DateTime, Utc};
 use hmac::Mac;
 use sha2::{Digest, Sha256};
@@ -56,7 +59,7 @@ pub fn create_chunk_signature_context(
     region: &str,
 ) -> Result<ChunkSignatureContext, SignatureError> {
     let signing_key = get_signing_key(datetime, secret_key, region)?;
-    let scope_string = format!("{}/{}/s3/aws4_request", datetime.format("%Y%m%d"), region);
+    let scope_string = format_scope_string(&datetime, region, "s3");
 
     Ok(ChunkSignatureContext {
         signing_key,

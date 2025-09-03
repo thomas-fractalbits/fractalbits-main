@@ -40,6 +40,18 @@ pub struct Authentication {
     pub content_sha256: String,
     pub date: DateTime<Utc>,
 }
+
+impl Authentication {
+    /// Get the scope string for signature validation
+    pub fn scope_string(&self) -> String {
+        aws_signature::sigv4::format_scope_string(
+            &self.date,
+            &self.scope.region,
+            &self.scope.service,
+        )
+    }
+}
+
 pub struct AuthFromHeaders(pub Option<Authentication>);
 
 #[derive(Debug)]
@@ -47,15 +59,6 @@ pub struct Scope {
     pub date: String,
     pub region: String,
     pub service: String,
-}
-
-impl Scope {
-    pub fn to_sign_string(&self) -> String {
-        format!(
-            "{}/{}/{}/{}",
-            self.date, self.region, self.service, SCOPE_ENDING
-        )
-    }
 }
 
 impl FromRequest for AuthFromHeaders {
@@ -211,7 +214,12 @@ mod tests {
         assert_eq!(scope.date, "20230101");
         assert_eq!(scope.region, "us-east-1");
         assert_eq!(scope.service, "s3");
-        assert_eq!(scope.to_sign_string(), "20230101/us-east-1/s3/aws4_request");
+        // Verify the scope can be formatted correctly
+        let expected_scope = format!(
+            "{}/{}/{}/{}",
+            scope.date, scope.region, scope.service, SCOPE_ENDING
+        );
+        assert_eq!(expected_scope, "20230101/us-east-1/s3/aws4_request");
     }
 
     #[test]

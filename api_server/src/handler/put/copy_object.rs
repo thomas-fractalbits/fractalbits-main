@@ -236,6 +236,7 @@ pub async fn copy_object_handler(
         ctx.app,
         ctx.request,
         Some(api_key),
+        ctx.auth,
         ctx.bucket_name,
         ctx.key,
         actix_web::dev::Payload::from(actix_body_bytes),

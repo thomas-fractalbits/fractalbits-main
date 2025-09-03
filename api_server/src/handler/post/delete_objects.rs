@@ -83,6 +83,7 @@ pub async fn delete_objects_handler(
             ctx.app.clone(),
             ctx.request.clone(),
             None,
+            None,
             ctx.bucket_name.clone(),
             key,
             actix_web::dev::Payload::None,

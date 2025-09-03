@@ -22,11 +22,13 @@ use crate::{
             checksum::{self, ChecksumAlgorithm, ChecksumValue},
             extract_metadata_headers, gen_etag,
             s3_error::S3Error,
+            signature::ChunkSignatureContext,
         },
         ObjectRequestContext,
     },
     object_layout::*,
 };
+use aws_signature::sigv4::get_signing_key;
 
 pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<HttpResponse, S3Error> {
     // Debug: log all request headers to understand what's being sent
@@ -194,6 +196,16 @@ fn should_use_streaming(request: &actix_web::HttpRequest) -> bool {
         }
     }
 
+    // Always stream for AWS chunk-signed requests
+    if let Some(content_encoding) = request.headers().get("content-encoding") {
+        if let Ok(encoding) = content_encoding.to_str() {
+            if encoding.to_lowercase() == "aws-chunked" {
+                tracing::debug!("Streaming due to aws-chunked content-encoding");
+                return true;
+            }
+        }
+    }
+
     // Get content length for size-based decisions
     let size = if let Some(cl) = request.headers().get("content-length") {
         cl.to_str()
@@ -238,9 +250,17 @@ async fn put_object_streaming_internal(ctx: ObjectRequestContext) -> Result<Http
     // Extract metadata headers
     let headers = extract_metadata_headers(ctx.request.headers())?;
 
-    // Create S3 streaming payload with checksum calculation
+    // Extract chunk signature context before consuming payload
+    let signature_context = extract_chunk_signature_context(&ctx)?;
+
+    // Create S3 streaming payload with checksum calculation and chunk signature validation
     let payload = ctx.payload;
-    let (s3_payload, checksum_future) = S3StreamingPayload::with_checksums(payload, &ctx.request)?;
+    let (s3_payload, checksum_future) = if signature_context.is_some() {
+        tracing::debug!("Using chunk signature validation for streaming upload");
+        S3StreamingPayload::with_checksums_and_signature(payload, &ctx.request, signature_context)?
+    } else {
+        S3StreamingPayload::with_checksums(payload, &ctx.request)?
+    };
 
     // Create blob ID for this upload
     let blob_id = Uuid::now_v7();
@@ -600,4 +620,37 @@ async fn put_object_with_no_trailer(ctx: ObjectRequestContext) -> Result<HttpRes
         .insert_header((header::ETAG, etag))
         .insert_header(("X-Amz-Object-Size", size.to_string()))
         .finish())
+}
+
+/// Extract chunk signature context from request if it's a chunk-signed request
+fn extract_chunk_signature_context(
+    ctx: &ObjectRequestContext,
+) -> Result<Option<(ChunkSignatureContext, Option<String>)>, S3Error> {
+    // Check if this is a streaming chunked request and we have auth info
+    if let (Some(content_sha256), Some(auth)) =
+        (ctx.request.headers().get("x-amz-content-sha256"), &ctx.auth)
+    {
+        if let Ok(content_sha256_str) = content_sha256.to_str() {
+            if content_sha256_str == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
+                let api_key = ctx.api_key.as_ref().ok_or(S3Error::InvalidAccessKeyId)?;
+
+                // Create signing key
+                let signing_key =
+                    get_signing_key(auth.date, &api_key.data.secret_key, &ctx.app.config.region)
+                        .map_err(|_| S3Error::InternalError)?;
+
+                let chunk_context = ChunkSignatureContext {
+                    signing_key,
+                    datetime: auth.date,
+                    scope_string: auth.scope_string(),
+                };
+
+                // Take ownership of the signature string by cloning just the string, not the entire Auth
+                let seed_signature = auth.signature.clone();
+                return Ok(Some((chunk_context, Some(seed_signature))));
+            }
+        }
+    }
+
+    Ok(None)
 }

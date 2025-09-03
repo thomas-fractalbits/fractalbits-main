@@ -4,6 +4,16 @@ use hmac::Mac;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Format a scope string for AWS SigV4
+pub fn format_scope_string(date: &DateTime<Utc>, region: &str, service: &str) -> String {
+    format!(
+        "{}/{}/{}/aws4_request",
+        date.format("%Y%m%d"),
+        region,
+        service
+    )
+}
+
 /// AWS SigV4 signing parameters
 #[derive(Debug, Clone)]
 pub struct SigningParams {
@@ -87,7 +97,11 @@ pub fn create_canonical_request(
         items.join("&")
     };
 
-    let canonical_headers_str = canonical_headers.join("\n");
+    let canonical_headers_str = if canonical_headers.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", canonical_headers.join("\n"))
+    };
     let signed_headers_str = signed_headers
         .iter()
         .cloned()
@@ -95,7 +109,7 @@ pub fn create_canonical_request(
         .join(";");
 
     format!(
-        "{}\n{}\n{}\n{}\n\n{}\n{}",
+        "{}\n{}\n{}\n{}\n{}\n{}",
         method,
         canonical_uri,
         canonical_query_string,
@@ -163,12 +177,7 @@ pub fn sign_request(
     signed_headers: &BTreeSet<String>,
     payload_hash: &str,
 ) -> Result<String, SignatureError> {
-    let credential_scope = format!(
-        "{}/{}/{}/aws4_request",
-        params.datetime.format("%Y%m%d"),
-        params.region,
-        params.service
-    );
+    let credential_scope = format_scope_string(&params.datetime, &params.region, &params.service);
 
     let canonical_request = create_canonical_request(
         method,
@@ -180,7 +189,6 @@ pub fn sign_request(
     );
 
     let string_to_sign = string_to_sign(&params.datetime, &credential_scope, &canonical_request);
-
     let signing_key = get_signing_key(params.datetime, &params.secret_access_key, &params.region)?;
     let signature = calculate_signature(&signing_key, &string_to_sign)?;
 
