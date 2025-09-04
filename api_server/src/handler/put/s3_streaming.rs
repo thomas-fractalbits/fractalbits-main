@@ -10,6 +10,7 @@ use crate::handler::common::{
 };
 use actix_web::error::PayloadError;
 use actix_web::HttpRequest;
+use aws_signature::{STREAMING_PAYLOAD, UNSIGNED_PAYLOAD};
 use base64::prelude::*;
 use bytes::{Buf, Bytes, BytesMut};
 use data_types::hash::Hash;
@@ -327,7 +328,7 @@ impl S3StreamingPayload {
             .headers()
             .get("x-amz-content-sha256")
             .and_then(|v| v.to_str().ok())
-            .filter(|s| *s != "UNSIGNED-PAYLOAD" && *s != "STREAMING-AWS4-HMAC-SHA256-PAYLOAD")
+            .filter(|s| *s != UNSIGNED_PAYLOAD && *s != STREAMING_PAYLOAD)
             .and_then(|s| {
                 hex::decode(s).ok().and_then(|bytes| {
                     let array: Result<[u8; 32], _> = bytes.try_into();

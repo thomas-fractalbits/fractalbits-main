@@ -4,6 +4,7 @@ use std::hash::Hasher;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use actix_web::{http::header, HttpResponse};
+use aws_signature::{sigv4::get_signing_key, STREAMING_PAYLOAD};
 use crc32c::Crc32cHasher as Crc32c;
 use crc32fast::Hasher as Crc32;
 use futures::{StreamExt, TryStreamExt};
@@ -28,7 +29,6 @@ use crate::{
     },
     object_layout::*,
 };
-use aws_signature::sigv4::get_signing_key;
 
 pub async fn put_object_handler(ctx: ObjectRequestContext) -> Result<HttpResponse, S3Error> {
     // Debug: log all request headers to understand what's being sent
@@ -627,28 +627,24 @@ fn extract_chunk_signature_context(
     ctx: &ObjectRequestContext,
 ) -> Result<Option<(ChunkSignatureContext, Option<String>)>, S3Error> {
     // Check if this is a streaming chunked request and we have auth info
-    if let (Some(content_sha256), Some(auth)) =
-        (ctx.request.headers().get("x-amz-content-sha256"), &ctx.auth)
-    {
-        if let Ok(content_sha256_str) = content_sha256.to_str() {
-            if content_sha256_str == "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" {
-                let api_key = ctx.api_key.as_ref().ok_or(S3Error::InvalidAccessKeyId)?;
+    if let Some(auth) = &ctx.auth {
+        if auth.content_sha256 == STREAMING_PAYLOAD {
+            let api_key = ctx.api_key.as_ref().ok_or(S3Error::InvalidAccessKeyId)?;
 
-                // Create signing key
-                let signing_key =
-                    get_signing_key(auth.date, &api_key.data.secret_key, &ctx.app.config.region)
-                        .map_err(|_| S3Error::InternalError)?;
+            // Create signing key
+            let signing_key =
+                get_signing_key(auth.date, &api_key.data.secret_key, &ctx.app.config.region)
+                    .map_err(|_| S3Error::InternalError)?;
 
-                let chunk_context = ChunkSignatureContext {
-                    signing_key,
-                    datetime: auth.date,
-                    scope_string: auth.scope_string(),
-                };
+            let chunk_context = ChunkSignatureContext {
+                signing_key,
+                datetime: auth.date,
+                scope_string: auth.scope_string(),
+            };
 
-                // Take ownership of the signature string by cloning just the string, not the entire Auth
-                let seed_signature = auth.signature.clone();
-                return Ok(Some((chunk_context, Some(seed_signature))));
-            }
+            // Take ownership of the signature string by cloning just the string, not the entire Auth
+            let seed_signature = auth.signature.clone();
+            return Ok(Some((chunk_context, Some(seed_signature))));
         }
     }
 
