@@ -1,5 +1,5 @@
 use crate::cmd_service::{start_service, stop_service, wait_for_service_ready};
-use crate::{BuildMode, CmdResult, ServiceName};
+use crate::{CmdResult, ServiceName};
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::{Client as S3Client, Config as S3Config};
@@ -12,20 +12,8 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 pub async fn run_data_blob_resyncing_tests() -> CmdResult {
+    info!("Assuming services are already configured correctly for multi-AZ");
     info!("Running data blob resyncing tests...");
-
-    // Initialize and start all required services
-    info!("Initializing and starting services for resyncing tests...");
-    crate::cmd_service::stop_service(ServiceName::All)?;
-    crate::cmd_build::build_rust_servers(BuildMode::Debug)?;
-    crate::cmd_service::init_service(
-        ServiceName::All,
-        BuildMode::Debug,
-        crate::InitConfig::default(),
-    )?;
-    crate::cmd_service::start_service(ServiceName::All)?;
-
-    info!("All services started successfully");
 
     // Run all test scenarios
     println!("\n{}", "=== Test 1: Basic Resync Functionality ===".bold());

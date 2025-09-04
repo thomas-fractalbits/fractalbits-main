@@ -21,7 +21,7 @@ use crate::{
         common::{
             buffer_payload_with_capacity,
             checksum::{self, ChecksumAlgorithm, ChecksumValue},
-            extract_metadata_headers, gen_etag,
+            extract_metadata_headers,
             s3_error::S3Error,
             signature::ChunkSignatureContext,
         },
@@ -339,7 +339,7 @@ async fn put_object_streaming_internal(ctx: ObjectRequestContext) -> Result<Http
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let etag = gen_etag();
+    let etag = blob_id.simple().to_string();
     let version_id = gen_version_id();
 
     // Create object layout
@@ -528,7 +528,7 @@ async fn put_object_with_no_trailer(ctx: ObjectRequestContext) -> Result<HttpRes
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis() as u64;
-    let etag = gen_etag();
+    let etag = blob_id.simple().to_string();
     let version_id = gen_version_id();
 
     // Create object layout with calculated checksum
