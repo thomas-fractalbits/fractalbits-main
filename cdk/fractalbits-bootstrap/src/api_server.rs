@@ -152,7 +152,7 @@ key_file = "/opt/fractalbits/etc/key.pem"
 force_http1_only = false
 
 [blob_storage]
-backend = "hybrid_single_az"
+backend = "s3_hybrid_single_az"
 
 [blob_storage.bss]
 addr = "{bss_ip}:8088"

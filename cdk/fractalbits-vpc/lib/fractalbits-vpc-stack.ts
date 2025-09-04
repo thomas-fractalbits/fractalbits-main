@@ -67,13 +67,23 @@ export class FractalbitsVpcStack extends cdk.Stack {
 
     // Resolve AZ IDs to actual AZ names
     const az1 = getAzNameFromIdAtBuildTime(azPair[0]);
-    const az2 = getAzNameFromIdAtBuildTime(azPair[1]);
+    // Only resolve second AZ for multi-AZ mode
+    const az2 =
+      dataBlobStorage === "s3ExpressMultiAz"
+        ? getAzNameFromIdAtBuildTime(azPair[1])
+        : "";
+
+    // Determine availability zones based on storage mode
+    const availabilityZones =
+      dataBlobStorage === "s3HybridSingleAz"
+        ? [az1] // Single AZ for hybrid mode
+        : [az1, az2]; // Multi-AZ for express mode
 
     // Create VPC with specific availability zones using resolved zone names
     this.vpc = new ec2.Vpc(this, "FractalbitsVpc", {
       vpcName: "fractalbits-vpc",
       ipAddresses: ec2.IpAddresses.cidr("10.0.0.0/16"),
-      availabilityZones: [az1, az2],
+      availabilityZones,
       natGateways: 0,
       enableDnsHostnames: true,
       enableDnsSupport: true,
@@ -189,7 +199,11 @@ export class FractalbitsVpcStack extends cdk.Stack {
     const privateSubnets = this.vpc.isolatedSubnets;
     const publicSubnets = this.vpc.publicSubnets;
     const subnet1 = privateSubnets[0]; // First AZ (private)
-    const subnet2 = privateSubnets[1]; // Second AZ (private)
+    // Only get second subnet for multi-AZ mode
+    const subnet2 =
+      dataBlobStorage === "s3ExpressMultiAz" && privateSubnets.length > 1
+        ? privateSubnets[1] // Second AZ (private)
+        : subnet1; // Use first subnet for single-AZ mode
     const publicSubnet1 = publicSubnets[0]; // First AZ (public)
 
     const instanceConfigs = [
@@ -402,6 +416,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       vpc: this.vpc,
       internetFacing: false,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      crossZoneEnabled: dataBlobStorage === "s3ExpressMultiAz", // Only enable cross-zone for multi-AZ
     });
 
     const listener = nlb.addListener("ApiListener", { port: 80 });
