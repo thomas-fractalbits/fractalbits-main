@@ -20,21 +20,14 @@ pub fn run_cmd_precheckin(
     }
 
     if s3_api_only {
-        return run_s3_api_tests(debug_api_server);
+        return run_s3_api_tests(debug_api_server, data_blob_storage);
     }
 
     if zig_unit_tests_only {
-        return run_zig_unit_tests();
+        return run_zig_unit_tests(data_blob_storage);
     }
 
-    cmd_service::init_service(
-        ServiceName::All,
-        BuildMode::Debug,
-        InitConfig {
-            for_gui: false,
-            data_blob_storage,
-        },
-    )?;
+    init_service_with_data_blob_storage(data_blob_storage)?;
     cmd_service::start_service(ServiceName::Minio)?;
     run_cmd! {
         info "Formatting nss_server";
@@ -45,7 +38,7 @@ pub fn run_cmd_precheckin(
         zig build test --summary all 2>&1;
     }?;
 
-    run_s3_api_tests(false)?;
+    run_s3_api_tests(false, data_blob_storage)?;
 
     if with_art_tests {
         run_art_tests()?;
@@ -57,6 +50,18 @@ pub fn run_cmd_precheckin(
     }
 
     info!("Precheckin is OK");
+    Ok(())
+}
+
+fn init_service_with_data_blob_storage(data_blob_storage: DataBlobStorage) -> CmdResult {
+    cmd_service::init_service(
+        ServiceName::All,
+        BuildMode::Debug,
+        InitConfig {
+            for_gui: false,
+            data_blob_storage,
+        },
+    )?;
     Ok(())
 }
 
@@ -105,10 +110,9 @@ fn run_art_tests() -> CmdResult {
     Ok(())
 }
 
-fn run_zig_unit_tests() -> CmdResult {
+fn run_zig_unit_tests(data_blob_storage: DataBlobStorage) -> CmdResult {
     let working_dir = run_fun!(pwd)?;
-
-    cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
+    init_service_with_data_blob_storage(data_blob_storage)?;
     cmd_service::start_service(ServiceName::Minio)?;
 
     run_cmd! {
@@ -125,11 +129,18 @@ fn run_zig_unit_tests() -> CmdResult {
     Ok(())
 }
 
-fn run_s3_api_tests(debug_api_server: bool) -> CmdResult {
+fn run_s3_api_tests(debug_api_server: bool, data_blob_storage: DataBlobStorage) -> CmdResult {
     if debug_api_server {
         cmd_service::start_service(ServiceName::ApiServer)?;
     } else {
-        cmd_service::init_service(ServiceName::All, BuildMode::Debug, InitConfig::default())?;
+        cmd_service::init_service(
+            ServiceName::All,
+            BuildMode::Debug,
+            InitConfig {
+                for_gui: false,
+                data_blob_storage,
+            },
+        )?;
         cmd_service::start_service(ServiceName::All)?;
     }
 

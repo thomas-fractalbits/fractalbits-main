@@ -1,5 +1,12 @@
+#[cfg(not(test))]
+use crate::AppState;
 use actix_web::{FromRequest, HttpRequest, dev::Payload};
 use futures::future::{Ready, ready};
+#[cfg(test)]
+// Minimal fake AppState for testing that only contains what we need
+struct AppState {
+    pub config: std::sync::Arc<crate::Config>,
+}
 
 use crate::handler::common::s3_error::S3Error;
 
@@ -15,7 +22,7 @@ impl BucketAndKeyName {
         let host_str = host_header.to_str().ok()?;
 
         // Get the app state to access config
-        let app_state = req.app_data::<std::sync::Arc<crate::AppState>>()?;
+        let app_state = req.app_data::<std::sync::Arc<AppState>>()?;
         let root_domain = &app_state.config.root_domain;
 
         // Check if this is a virtual-hosted-style request
@@ -103,12 +110,19 @@ fn check_key_name(n: &str) -> Result<(), S3Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AppState, Config};
     use actix_web::{App, HttpResponse, test, web};
     use std::sync::Arc;
 
     async fn handler(bucket_key: BucketAndKeyName) -> HttpResponse {
         HttpResponse::Ok().body(bucket_key.bucket)
+    }
+
+    fn create_fake_app_state(root_domain: &str) -> Arc<AppState> {
+        let mut config = crate::Config::default();
+        config.root_domain = root_domain.to_string();
+        Arc::new(AppState {
+            config: Arc::new(config),
+        })
     }
 
     #[actix_web::test]
@@ -118,12 +132,11 @@ mod tests {
     }
 
     async fn send_request_get_body(bucket_name: &str) -> String {
-        let config = Arc::new(Config::default());
-        let app_state = Arc::new(AppState::new(config).await);
+        let fake_app_state = create_fake_app_state("localhost");
 
         let app = test::init_service(
             App::new()
-                .app_data(app_state)
+                .app_data(fake_app_state)
                 .route("/{key:.*}", web::get().to(handler)),
         )
         .await;
@@ -140,12 +153,11 @@ mod tests {
     #[actix_web::test]
     async fn test_extract_bucket_name_virtual_hosted() {
         let bucket_name = "my-bucket";
-        let config = Arc::new(Config::default());
-        let app_state = Arc::new(AppState::new(config).await);
+        let fake_app_state = create_fake_app_state("localhost");
 
         let app = test::init_service(
             App::new()
-                .app_data(app_state)
+                .app_data(fake_app_state)
                 .route("/{key:.*}", web::get().to(handler)),
         )
         .await;
