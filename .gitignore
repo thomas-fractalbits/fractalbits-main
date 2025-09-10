@@ -6,3 +6,20 @@
 .DS_Store
 .idea/
 *.iml
+
+# Build artifacts and cache directories
+.zig-cache/
+zig-out/
+target/
+
+# Runtime data directory
+data/
+
+# Claude Code configuration
+.claude/
+
+# CDK generated JavaScript files (keep TypeScript sources and Lambda JS)
+cdk/fractalbits-vpc/bin/*.js
+cdk/fractalbits-vpc/lib/*.js
+!cdk/fractalbits-vpc/lib/lambda/**/*.js
+cdk/fractalbits-vpc/test/*.js
