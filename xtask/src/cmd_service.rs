@@ -699,7 +699,7 @@ Environment="GUI_WEB_ROOT=ui/dist""##;
             let java = run_fun!(bash -c "command -v java")?;
             let java_lib = format!("{pwd}/third_party/dynamodb_local/DynamoDBLocal_lib");
             format!(
-                "{java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath {pwd}/data/rss"
+                "{java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath ./rss"
             )
         }
         ServiceName::Minio => {
@@ -723,7 +723,10 @@ Environment="MINIO_REGION=localdev""##
         }
         _ => unreachable!(),
     };
-    let working_dir = run_fun!(realpath $pwd)?;
+    let working_dir = match service {
+        ServiceName::DdbLocal => format!("{}/data", run_fun!(realpath $pwd)?),
+        _ => run_fun!(realpath $pwd)?,
+    };
 
     // Add systemd dependencies based on service type
     let dependencies = match service {
