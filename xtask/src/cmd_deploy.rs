@@ -1,4 +1,5 @@
 use crate::*;
+use std::path::Path;
 
 const TARGET_ACCOUNT_ID: &str = "ACCOUNT_ID_TARGET"; // TARGET_EMAIL@example.com
 const BUCKET_OWNER_ACCOUNT_ID: &str = "ACCOUNT_ID_OWNER";
@@ -14,6 +15,15 @@ pub fn run_cmd_deploy(
     let build_info = BUILD_INFO.get().unwrap();
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
+
+    // Check if the bucket exists; create if it doesn't
+    let bucket_exists = run_cmd!(aws s3api head-bucket --bucket $bucket_name &>/dev/null).is_ok();
+    if !bucket_exists {
+        run_cmd! {
+            info "Creating bucket $bucket";
+            aws s3 mb $bucket
+        }?;
+    }
 
     let (zig_build_opt, rust_build_opt) = if release_mode {
         ("--release=safe", "--release")
@@ -176,6 +186,47 @@ pub fn run_cmd_deploy(
         run_cmd!(aws s3 cp ui/dist $bucket/ui --recursive)?;
     }
 
+    // Deploy warp binary
+    if deploy_mode == DeployMode::All {
+        deploy_warp_binary(target_arm)?;
+    }
+
+    Ok(())
+}
+
+fn deploy_warp_binary(target_arm: bool) -> CmdResult {
+    let arch = if target_arm { "aarch64" } else { "x86_64" };
+    let linux_arch = if target_arm { "arm64" } else { "x86_64" };
+    let bucket_name = get_build_bucket_name()?;
+    let bucket = format!("s3://{bucket_name}");
+
+    let warp_version = "v1.3.0";
+    let warp_file = format!("warp_Linux_{linux_arch}.tar.gz");
+    let warp_path = format!("third_party/{warp_file}");
+
+    let base_url = "https://github.com/minio/warp/releases/download";
+    let download_url = format!("{base_url}/{warp_version}/{warp_file}");
+    let checksums_url = format!("{base_url}/{warp_version}/checksums.txt");
+    // Check if already downloaded
+    if !Path::new(&warp_path).exists() {
+        run_cmd! {
+            info "Downloading warp binary for {linux_arch}";
+            curl -sL -o $warp_path $download_url;
+        }?;
+    }
+    run_cmd! {
+        info "Verifying warp binary checksum";
+        curl -sL -o third_party/warp_checksums.txt $checksums_url;
+        cd third_party;
+        grep $warp_file warp_checksums.txt | sha256sum -c;
+
+        info "Extracting and uploading warp binary";
+        tar -xzf $warp_path -C third_party/ warp;
+        aws s3 cp third_party/warp $bucket/$arch/warp;
+        rm third_party/warp_checksums.txt;
+        rm third_party/warp;
+    }?;
+
     Ok(())
 }
 
@@ -191,7 +242,8 @@ fn build_bootstrap_only(rust_build_target: &str) -> CmdResult {
 
 fn get_build_bucket_name() -> FunResult {
     let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
-    Ok(format!("fractalbits-builds-{region}"))
+    let account_id = run_fun!(aws sts get-caller-identity --query Account --output text)?;
+    Ok(format!("fractalbits-builds-{region}-{account_id}"))
 }
 
 pub fn update_builds_bucket_access_policy() -> CmdResult {

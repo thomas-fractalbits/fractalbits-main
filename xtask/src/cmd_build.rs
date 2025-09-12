@@ -92,6 +92,17 @@ pub fn build_ui(region: &str) -> CmdResult {
     }
 }
 
+pub fn build_all(release: bool) -> CmdResult {
+    let build_mode = build_mode(release);
+    build_rust_servers(build_mode)?;
+    build_zig_servers(build_mode)?;
+    if release {
+        build_rewrk_rpc()?;
+    }
+    build_ui(crate::UI_DEFAULT_REGION)?;
+    Ok(())
+}
+
 pub fn run_zig_unit_tests() -> CmdResult {
     let working_dir = run_fun!(pwd)?;
     crate::cmd_service::start_service(crate::ServiceName::Minio)?;

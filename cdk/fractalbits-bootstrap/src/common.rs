@@ -41,7 +41,7 @@ fn download_binary(file_name: &str) -> CmdResult {
         return Ok(());
     }
 
-    let builds_bucket = format!("s3://fractalbits-builds-{}", get_current_aws_region()?);
+    let builds_bucket = get_builds_bucket()?;
     let cpu_arch = run_fun!(arch)?;
     run_cmd! {
         info "Downloading $file_name from $builds_bucket to $BIN_PATH";
@@ -49,6 +49,15 @@ fn download_binary(file_name: &str) -> CmdResult {
         chmod +x $BIN_PATH/$file_name
     }?;
     Ok(())
+}
+
+pub fn get_builds_bucket() -> FunResult {
+    let builds_bucket = format!(
+        "s3://fractalbits-builds-{}-{}",
+        get_current_aws_region()?,
+        get_account_id()?
+    );
+    Ok(builds_bucket)
 }
 
 pub fn create_systemd_unit_file(service_name: &str, enable_now: bool) -> CmdResult {
@@ -199,7 +208,7 @@ pub fn get_current_aws_az_id() -> FunResult {
 }
 
 // Get AWS account ID using IMDS (Instance Metadata Service)
-fn get_account_id() -> FunResult {
+pub fn get_account_id() -> FunResult {
     let token = run_fun! {
         curl -X PUT "http://169.254.169.254/latest/api/token"
             -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s

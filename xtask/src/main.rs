@@ -65,8 +65,13 @@ enum Cmd {
     },
 
     #[clap(about = "Build the whole project")]
-    #[command(subcommand)]
-    Build(BuildCommand),
+    Build {
+        #[clap(subcommand)]
+        command: Option<BuildCommand>,
+
+        #[clap(long, long_help = "release build or not")]
+        release: bool,
+    },
 
     #[clap(about = "Service stop/init/start/restart")]
     #[command(subcommand)]
@@ -300,28 +305,26 @@ async fn main() -> CmdResult {
     BUILD_INFO.get_or_init(cmd_build::build_info);
 
     match Cmd::parse() {
-        Cmd::Build(build_cmd) => match build_cmd {
-            BuildCommand::All { release } => {
-                let build_mode = cmd_build::build_mode(release);
-                cmd_build::build_rust_servers(build_mode)?;
-                cmd_build::build_zig_servers(build_mode)?;
-                if release {
-                    cmd_build::build_rewrk_rpc()?;
-                }
-                cmd_build::build_ui(UI_DEFAULT_REGION)?;
-            }
-            BuildCommand::Zig(zig_cmd) => match zig_cmd {
-                ZigBuildCommand::Build { release } => {
+        Cmd::Build { command, release } => match command {
+            Some(build_cmd) => match build_cmd {
+                BuildCommand::All { release } => cmd_build::build_all(release)?,
+                BuildCommand::Zig(zig_cmd) => match zig_cmd {
+                    ZigBuildCommand::Build { release } => {
+                        let build_mode = cmd_build::build_mode(release);
+                        cmd_build::build_zig_servers(build_mode)?;
+                    }
+                    ZigBuildCommand::Test => {
+                        cmd_build::run_zig_unit_tests()?;
+                    }
+                },
+                BuildCommand::Rust { release } => {
                     let build_mode = cmd_build::build_mode(release);
-                    cmd_build::build_zig_servers(build_mode)?;
-                }
-                ZigBuildCommand::Test => {
-                    cmd_build::run_zig_unit_tests()?;
+                    cmd_build::build_rust_servers(build_mode)?;
                 }
             },
-            BuildCommand::Rust { release } => {
-                let build_mode = cmd_build::build_mode(release);
-                cmd_build::build_rust_servers(build_mode)?;
+            None => {
+                // Default to building all components
+                cmd_build::build_all(release)?;
             }
         },
         Cmd::Precheckin {

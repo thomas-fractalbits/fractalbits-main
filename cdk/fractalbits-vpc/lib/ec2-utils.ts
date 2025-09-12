@@ -151,10 +151,11 @@ export const createUserData = (
   bootstrapOptions: string,
 ): ec2.UserData => {
   const region = cdk.Stack.of(scope).region;
+  const account = cdk.Stack.of(scope).account;
   const userData = ec2.UserData.forLinux();
   userData.addCommands(
     "set -ex",
-    `aws s3 cp --no-progress s3://fractalbits-builds-${region}/$(arch)/fractalbits-bootstrap /opt/fractalbits/bin/`,
+    `aws s3 cp --no-progress s3://fractalbits-builds-${region}-${account}/$(arch)/fractalbits-bootstrap /opt/fractalbits/bin/`,
     "chmod +x /opt/fractalbits/bin/fractalbits-bootstrap",
     `/opt/fractalbits/bin/fractalbits-bootstrap ${bootstrapOptions}`,
   );

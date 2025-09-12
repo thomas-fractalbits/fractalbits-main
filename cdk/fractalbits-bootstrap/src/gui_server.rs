@@ -7,8 +7,7 @@ pub fn bootstrap(
     remote_az: Option<&str>,
 ) -> CmdResult {
     download_binaries(&["api_server"])?;
-
-    let builds_bucket = format!("s3://fractalbits-builds-{}", get_current_aws_region()?);
+    let builds_bucket = get_builds_bucket()?;
     run_cmd!(aws s3 cp --no-progress $builds_bucket/ui $GUI_WEB_ROOT --recursive)?;
 
     // Check if we're using S3 Express by checking if remote_az is provided
