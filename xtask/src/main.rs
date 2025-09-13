@@ -83,6 +83,9 @@ enum Cmd {
 
     #[clap(about = "Deploy binaries to s3 builds bucket")]
     Deploy {
+        #[clap(subcommand)]
+        command: Option<DeployCommand>,
+
         #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
         release: bool,
 
@@ -101,9 +104,6 @@ enum Cmd {
         #[clap(long, default_value = "all", value_enum)]
         mode: DeployMode,
     },
-
-    #[clap(about = "Cleanup builds bucket (empty and delete)")]
-    DeployCleanup,
 
     #[clap(about = "Run various test suites")]
     RunTests {
@@ -131,6 +131,13 @@ pub enum BuildCommand {
 pub enum ZigCommand {
     #[clap(about = "Run zig unit tests")]
     Test,
+}
+
+#[derive(Parser, Clone)]
+#[clap(rename_all = "snake_case")]
+pub enum DeployCommand {
+    #[clap(about = "Cleanup builds bucket (empty and delete)")]
+    Cleanup,
 }
 
 #[derive(Clone, AsRefStr, EnumString, clap::ValueEnum)]
@@ -378,21 +385,24 @@ async fn main() -> CmdResult {
         },
         Cmd::Tool(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
         Cmd::Deploy {
+            command,
             use_s3_backend,
             enable_dev_mode,
             release,
             target_arm,
             bss_use_i3,
             mode,
-        } => cmd_deploy::run_cmd_deploy(
-            use_s3_backend,
-            enable_dev_mode,
-            release,
-            target_arm,
-            bss_use_i3,
-            mode,
-        )?,
-        Cmd::DeployCleanup => cmd_deploy::cleanup_builds_bucket()?,
+        } => match command {
+            Some(DeployCommand::Cleanup) => cmd_deploy::cleanup_builds_bucket()?,
+            None => cmd_deploy::run_cmd_deploy(
+                use_s3_backend,
+                enable_dev_mode,
+                release,
+                target_arm,
+                bss_use_i3,
+                mode,
+            )?,
+        },
         Cmd::RunTests { test_type } => {
             let test_type = test_type.unwrap_or(TestType::All);
             cmd_run_tests::run_tests(test_type).await?
