@@ -881,10 +881,7 @@ pub fn wait_for_service_ready(service: ServiceName, timeout_secs: u32) -> CmdRes
                 ServiceName::Bss5 => check_port_ready(8093),
                 ServiceName::Nss => check_port_ready(8087),
                 ServiceName::Mirrord => check_port_ready(9999),
-                ServiceName::ApiServer | ServiceName::GuiServer => {
-                    // Check both HTTP and HTTPS ports for API server
-                    check_port_ready(8080) && check_port_ready(8443)
-                }
+                ServiceName::ApiServer | ServiceName::GuiServer => check_port_ready(8080),
                 ServiceName::NssRoleAgentA => check_port_ready(8087), // Check managed nss_server
                 ServiceName::NssRoleAgentB => check_port_ready(9999), // check managed mirrord
                 ServiceName::All => unreachable!("Should not check readiness for All"),

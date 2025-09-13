@@ -292,7 +292,10 @@ enum ToolKind {
         file: String,
     },
     DescribeStack {
-        #[clap(long_help = "CloudFormation stack name", default_value = "FractalbitsVpcStack")]
+        #[clap(
+            long_help = "CloudFormation stack name",
+            default_value = "FractalbitsVpcStack"
+        )]
         stack_name: String,
     },
 }
