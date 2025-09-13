@@ -3,7 +3,7 @@ use crate::{
         ObjectRequestContext,
         common::{
             buffer_payload,
-            checksum::{ChecksumAlgorithm, ChecksumValue},
+            checksum::{ChecksumAlgorithm, ChecksumValue, Checksummer},
             extract_metadata_headers, gen_etag, get_raw_object, list_raw_objects,
             mpu_get_part_prefix, mpu_parse_part_number,
             response::xml::{Xml, XmlnsS3},
@@ -17,18 +17,11 @@ use actix_web::http::header::HeaderValue;
 use actix_web::web::Bytes;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::Buf;
-use crc32c::Crc32cHasher as Crc32c;
-use crc32fast::Hasher as Crc32;
-use crc64fast_nvme::Digest as Crc64Nvme;
-use md5::Digest;
 use nss_codec::put_inode_response;
 use rkyv::{self, api::high::to_bytes_in, rancor::Error};
 use rpc_client_common::nss_rpc_retry;
 use serde::{Deserialize, Serialize};
-use sha1::Sha1;
-use sha2::Sha256;
 use std::collections::HashSet;
-use std::hash::Hasher;
 
 #[allow(dead_code)]
 #[derive(Debug, Default)]
@@ -148,80 +141,27 @@ impl CompleteMultipartUploadResult {
 #[derive(Default)]
 pub(crate) struct MpuChecksummer {
     // We only support composite checksum for speed reason
-    pub composite_checksum: Option<MpuChecksummerAlgo>,
-}
-
-pub(crate) enum MpuChecksummerAlgo {
-    Crc32(Crc32),
-    Crc32c(Crc32c),
-    Crc64Nvme(Crc64Nvme),
-    Sha1(Sha1),
-    Sha256(Sha256),
+    pub composite_checksum: Option<Checksummer>,
 }
 
 impl MpuChecksummer {
     pub(crate) fn init(algo: Option<ChecksumAlgorithm>) -> Self {
         Self {
-            composite_checksum: match algo {
-                None => None,
-                Some(ChecksumAlgorithm::Crc32) => Some(MpuChecksummerAlgo::Crc32(Crc32::new())),
-                Some(ChecksumAlgorithm::Crc32c) => {
-                    Some(MpuChecksummerAlgo::Crc32c(Crc32c::default()))
-                }
-                Some(ChecksumAlgorithm::Crc64Nvme) => {
-                    Some(MpuChecksummerAlgo::Crc64Nvme(Crc64Nvme::new()))
-                }
-                Some(ChecksumAlgorithm::Sha1) => Some(MpuChecksummerAlgo::Sha1(Sha1::new())),
-                Some(ChecksumAlgorithm::Sha256) => Some(MpuChecksummerAlgo::Sha256(Sha256::new())),
-            },
+            composite_checksum: algo.map(Checksummer::new),
         }
     }
 
     pub(crate) fn update(&mut self, checksum: Option<ChecksumValue>) -> Result<(), S3Error> {
-        match (&mut self.composite_checksum, checksum) {
-            (None, _) => (),
-            (Some(MpuChecksummerAlgo::Crc32(crc32)), Some(ChecksumValue::Crc32(x))) => {
-                crc32.update(&x);
-            }
-            (Some(MpuChecksummerAlgo::Crc32c(crc32c)), Some(ChecksumValue::Crc32c(x))) => {
-                crc32c.write(&x);
-            }
-            (Some(MpuChecksummerAlgo::Crc64Nvme(crc64nvme)), Some(ChecksumValue::Crc64Nvme(x))) => {
-                crc64nvme.write(&x);
-            }
-            (Some(MpuChecksummerAlgo::Sha1(sha1)), Some(ChecksumValue::Sha1(x))) => {
-                sha1.update(x);
-            }
-            (Some(MpuChecksummerAlgo::Sha256(sha256)), Some(ChecksumValue::Sha256(x))) => {
-                sha256.update(x);
-            }
-            (Some(_), b) => {
-                tracing::error!("part checksum was not computed correctly, got: {:?}", b);
-                return Err(S3Error::InternalError);
-            }
+        if let (Some(checksummer), Some(checksum_value)) = (&mut self.composite_checksum, checksum)
+        {
+            checksummer.update(checksum_value.as_bytes());
         }
         Ok(())
     }
 
     pub(crate) fn finalize(self) -> Option<ChecksumValue> {
-        match self.composite_checksum {
-            None => None,
-            Some(MpuChecksummerAlgo::Crc32(crc32)) => {
-                Some(ChecksumValue::Crc32(u32::to_be_bytes(crc32.finalize())))
-            }
-            Some(MpuChecksummerAlgo::Crc32c(crc32c)) => Some(ChecksumValue::Crc32c(
-                u32::to_be_bytes(u32::try_from(crc32c.finish()).unwrap()),
-            )),
-            Some(MpuChecksummerAlgo::Crc64Nvme(crc64nvme)) => Some(ChecksumValue::Crc64Nvme(
-                u64::to_be_bytes(crc64nvme.sum64()),
-            )),
-            Some(MpuChecksummerAlgo::Sha1(sha1)) => {
-                Some(ChecksumValue::Sha1(sha1.finalize()[..].try_into().unwrap()))
-            }
-            Some(MpuChecksummerAlgo::Sha256(sha256)) => Some(ChecksumValue::Sha256(
-                sha256.finalize()[..].try_into().unwrap(),
-            )),
-        }
+        self.composite_checksum
+            .map(|checksummer| checksummer.finalize())
     }
 }
 

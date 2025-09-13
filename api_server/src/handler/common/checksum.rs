@@ -51,6 +51,16 @@ impl ChecksumValue {
             ChecksumValue::Sha256(_) => ChecksumAlgorithm::Sha256,
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            ChecksumValue::Crc32(bytes) => bytes,
+            ChecksumValue::Crc32c(bytes) => bytes,
+            ChecksumValue::Crc64Nvme(bytes) => bytes,
+            ChecksumValue::Sha1(bytes) => bytes,
+            ChecksumValue::Sha256(bytes) => bytes,
+        }
+    }
 }
 
 pub enum Checksummer {
