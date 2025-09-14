@@ -1,0 +1,257 @@
+use crate::*;
+use cmd_lib::*;
+use comfy_table::{Cell, Color, Table, presets};
+
+#[derive(Clone)]
+struct Repo {
+    path: &'static str,
+    url: &'static str,
+    branch: &'static str,
+}
+
+// Define git repos as constants
+const GIT_REPOS: &[Repo] = &[
+    Repo {
+        path: ".",
+        url: "https://github.com/fractalbits-labs/fractalbits-main.git",
+        branch: "main",
+    },
+    Repo {
+        path: "core",
+        url: "https://github.com/fractalbits-labs/fractalbits-core.git",
+        branch: "main",
+    },
+    Repo {
+        path: "crates/ha",
+        url: "https://github.com/fractalbits-labs/fractalbits-ha.git",
+        branch: "main",
+    },
+    Repo {
+        path: "misc",
+        url: "https://github.com/fractalbits-labs/fractalbits-misc.git",
+        branch: "main",
+    },
+    Repo {
+        path: "crates/root_server",
+        url: "https://github.com/fractalbits-labs/fractalbits-root_server.git",
+        branch: "main",
+    },
+    Repo {
+        path: "ui",
+        url: "https://github.com/fractalbits-labs/fractalbits-ui.git",
+        branch: "main",
+    },
+];
+
+pub fn run_cmd_git(git_cmd: GitCommand) -> CmdResult {
+    match git_cmd {
+        GitCommand::List => list_repos()?,
+        GitCommand::Status => show_repos_status()?,
+        GitCommand::Init => init_repos()?,
+        GitCommand::Foreach { command } => run_foreach_repo(&command)?,
+    }
+    Ok(())
+}
+
+fn list_repos() -> CmdResult {
+    info!("Listing all repos ...");
+
+    let mut table = Table::new();
+    table.load_preset(presets::ASCII_BORDERS_ONLY_CONDENSED);
+    table.set_header(vec!["Path", "URL", "Branch"]);
+
+    for repo in GIT_REPOS {
+        table.add_row(vec![repo.path, repo.url, repo.branch]);
+    }
+
+    println!("{table}");
+    Ok(())
+}
+
+fn repo_has_changes(path: &str) -> bool {
+    if path == "." {
+        run_cmd!(git diff-index --quiet --cached HEAD --).is_err()
+            || run_cmd!(git diff --quiet).is_err()
+    } else {
+        run_cmd! {
+            cd $path;
+            git diff-index --quiet --cached HEAD --
+        }
+        .is_err()
+            || run_cmd! {
+                cd $path;
+                git diff --quiet
+            }
+            .is_err()
+    }
+}
+
+fn repo_has_unpushed_commits(path: &str) -> bool {
+    let count = if path == "." {
+        run_fun!(git rev-list "@{u}..HEAD" --count 2>/dev/null).unwrap_or_else(|_| "0".to_string())
+    } else {
+        run_fun! {
+            cd $path;
+            git rev-list "@{u}..HEAD" --count 2>/dev/null
+        }
+        .unwrap_or_else(|_| "0".to_string())
+    };
+    count.trim() != "0"
+}
+
+fn show_repos_status() -> CmdResult {
+    info!("Checking repo status...");
+
+    let mut table = Table::new();
+    table.load_preset(presets::ASCII_BORDERS_ONLY_CONDENSED);
+    table.set_header(vec!["Path", "Branch", "Status", "Commit", "Message"]);
+
+    for repo in GIT_REPOS {
+        let path = repo.path;
+
+        // Check if directory exists
+        let exists = if path == "." {
+            true
+        } else {
+            std::path::Path::new(path).exists()
+        };
+
+        if !exists {
+            table.add_row(vec![
+                Cell::new(path),
+                Cell::new(repo.branch),
+                Cell::new("not-initialized").fg(Color::Red),
+                Cell::new("N/A"),
+                Cell::new("N/A"),
+            ]);
+            continue;
+        }
+
+        // Get current branch and commit
+        let (branch, commit, message, status) = if path == "." {
+            let branch = run_fun!(git branch --show-current)?;
+            let commit = run_fun!(git rev-parse --short HEAD)?;
+            let message = run_fun!(git log --oneline -1 --pretty=format:"%s")?;
+            let status = if repo_has_changes(path) {
+                "modified"
+            } else if repo_has_unpushed_commits(path) {
+                "uncommitted"
+            } else {
+                "clean"
+            };
+            (
+                branch.trim().to_string(),
+                commit.trim().to_string(),
+                message.trim().to_string(),
+                status,
+            )
+        } else {
+            let branch = run_fun! {
+                cd $path;
+                git branch --show-current
+            }?;
+            let commit = run_fun! {
+                cd $path;
+                git rev-parse --short HEAD
+            }?;
+            let message = run_fun! {
+                cd $path;
+                git log --oneline -1 --pretty=format:"%s"
+            }?;
+            let status = if repo_has_changes(path) {
+                "modified"
+            } else if repo_has_unpushed_commits(path) {
+                "uncommitted"
+            } else {
+                "clean"
+            };
+            (
+                branch.trim().to_string(),
+                commit.trim().to_string(),
+                message.trim().to_string(),
+                status,
+            )
+        };
+
+        // Create cells with appropriate colors
+        let status_cell = match status {
+            "clean" => Cell::new(status).fg(Color::Green),
+            "modified" => Cell::new(status).fg(Color::Cyan),
+            "uncommitted" => Cell::new(status).fg(Color::Yellow),
+            _ => Cell::new(status),
+        };
+
+        let branch_cell = if branch != "main" {
+            Cell::new(&branch).fg(Color::Yellow)
+        } else {
+            Cell::new(&branch)
+        };
+
+        table.add_row(vec![
+            Cell::new(path),
+            branch_cell,
+            status_cell,
+            Cell::new(&commit),
+            Cell::new(&message),
+        ]);
+    }
+
+    println!("{table}");
+    Ok(())
+}
+
+fn init_repos() -> CmdResult {
+    info!("Initializing repos ...");
+
+    // Skip the main repo (.)
+    for repo in GIT_REPOS.iter().skip(1) {
+        let path = repo.path;
+        let branch = repo.branch;
+        let url = repo.url;
+
+        if !std::path::Path::new(path).exists() {
+            run_cmd! {
+                info "Cloning repo: $path";
+                git clone -b $branch $url $path;
+            }?;
+        } else {
+            info!("Git repo already exists: {}", path);
+        }
+    }
+
+    info!("Repos initialized successfully");
+    Ok(())
+}
+
+fn run_foreach_repo(command: &[String]) -> CmdResult {
+    if command.is_empty() {
+        cmd_die!("No command specified for foreach");
+    }
+
+    info!("Running command in each repo: {command:?} ...");
+
+    for repo in GIT_REPOS {
+        let path = repo.path;
+
+        // Check if directory exists
+        if path != "." && !std::path::Path::new(path).exists() {
+            warn!("Skipping non-existent repo: {}", path);
+            continue;
+        }
+
+        if path == "." {
+            run_cmd! {
+                info "Running in main repo";
+                $[command];
+            }?;
+        } else {
+            run_cmd! {
+                info "Running in repo: $path";
+                cd $path;
+                $[command];
+            }?;
+        }
+    }
+
+    Ok(())
+}

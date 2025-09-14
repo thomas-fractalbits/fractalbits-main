@@ -1,6 +1,7 @@
 mod cmd_bench;
 mod cmd_build;
 mod cmd_deploy;
+mod cmd_git;
 mod cmd_nightly;
 mod cmd_precheckin;
 mod cmd_run_tests;
@@ -113,6 +114,10 @@ enum Cmd {
         #[clap(subcommand)]
         test_type: Option<TestType>,
     },
+
+    #[clap(about = "Git repos management commands")]
+    #[command(subcommand)]
+    Git(GitCommand),
 }
 
 #[derive(Parser, Clone)]
@@ -286,6 +291,25 @@ pub enum MultiAzTestType {
 
 #[derive(Parser, Clone)]
 #[clap(rename_all = "snake_case")]
+pub enum GitCommand {
+    #[clap(about = "List all configured git repos")]
+    List,
+
+    #[clap(about = "Show git repo status")]
+    Status,
+
+    #[clap(about = "Initialize all git repos")]
+    Init,
+
+    #[clap(about = "Run a command in each git repo")]
+    Foreach {
+        #[clap(required = true, num_args = 1.., value_name = "COMMAND")]
+        command: Vec<String>,
+    },
+}
+
+#[derive(Parser, Clone)]
+#[clap(rename_all = "snake_case")]
 enum ToolKind {
     GenUuids {
         #[clap(short = 'n', long_help = "Number of uuids", default_value = "1000000")]
@@ -417,6 +441,7 @@ async fn main() -> CmdResult {
             let test_type = test_type.unwrap_or(TestType::All);
             cmd_run_tests::run_tests(test_type).await?
         }
+        Cmd::Git(git_cmd) => cmd_git::run_cmd_git(git_cmd)?,
     }
     Ok(())
 }

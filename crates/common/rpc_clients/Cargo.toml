@@ -1,0 +1,10 @@
+# This is a placeholder to satisfy Cargo workspace requirements
+# This directory contains actual crates in subdirectories
+[package]
+name = "rpc-clients-placeholder"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+path = "lib.rs"

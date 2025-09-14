@@ -19,6 +19,13 @@ data/
 third_party/dynamodb_local/
 third_party/dynamodb_local_latest.tar.gz
 
+# Other repos
+core/
+misc/
+ui/
+crates/ha/
+crates/root_server/
+
 # Claude Code configuration
 .claude/
 

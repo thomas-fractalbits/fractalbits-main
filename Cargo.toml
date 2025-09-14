@@ -1,49 +1,57 @@
 [workspace]
 members = [
-    "api_server",
-    "api_server/benches/rewrk",
-    "api_server/benches/rewrk_rpc",
-    "cdk/fractalbits-bootstrap",
-    "common/crates/aws_signature",
-    "common/crates/data_types",
-    "common/crates/volume_group_proxy",
-    "common/crates/rpc_clients/bss",
-    "common/crates/rpc_clients/client_common",
-    "common/crates/rpc_clients/nss",
-    "common/crates/rpc_clients/rss",
-    "common/crates/rpc_clients/slotmap_conn_pool",
-    "common/crates/rpc_codecs/bss_codec",
-    "common/crates/rpc_codecs/codec_common",
-    "common/crates/rpc_codecs/nss_codec",
-    "common/crates/rpc_codecs/rss_codec",
-    "common/crates/data_blob_tracking",
-    "common/crates/test_common",
-    "ha/multi_az/data_blob_resync_server",
-    #"ha/single_az/ebs-failover",
-    "ha/nss_role_agent",
-    "root_server",
-    "root_server/admin",
-    "xtask",
-    "xtask/tools",
+    "crates/**",
+]
+# workaround due to cargo's limitations
+# (no wildcard support in exclude, or optional/nested workspace)
+exclude = [
+    "crates/api_server/benches",
+    "crates/api_server/src",
+    "crates/api_server/tests",
+    "crates/common/aws_signature/src",
+    "crates/common/data_blob_tracking/src",
+    "crates/common/data_types/src",
+    "crates/common/rpc_clients/bss/src",
+    "crates/common/rpc_clients/bss/tests",
+    "crates/common/rpc_clients/client_common/src",
+    "crates/common/rpc_clients/nss/src",
+    "crates/common/rpc_clients/rss/src",
+    "crates/common/rpc_clients/slotmap_conn_pool/src",
+    "crates/common/rpc_codecs/bss_codec/src",
+    "crates/common/rpc_codecs/codec_common/src",
+    "crates/common/rpc_codecs/nss_codec/src",
+    "crates/common/rpc_codecs/rss_codec/src",
+    "crates/common/test_common/src",
+    "crates/common/volume_group_proxy/src",
+    "crates/xtask/src",
+    "crates/xtask/tools/src",
+    "crates/ha/multi_az",
+    "crates/ha/nss_role_agent/src",
+    "crates/ha/single_az",
+    "crates/ha/src",
+    "crates/ha/.git",
+    "crates/root_server/admin/src",
+    "crates/root_server/src",
+    "crates/root_server/.git",
 ]
 resolver = "2"
 
 [workspace.dependencies]
-aws_signature = { path = "common/crates/aws_signature" }
-data_types = { path = "common/crates/data_types" }
-data_blob_tracking = { path = "common/crates/data_blob_tracking" }
-volume_group_proxy = { path = "common/crates/volume_group_proxy" }
-rpc_client_common = { path = "common/crates/rpc_clients/client_common" }
-rpc_client_bss = { path = "common/crates/rpc_clients/bss" }
-rpc_client_nss = { path = "common/crates/rpc_clients/nss" }
-rpc_client_rss = { path = "common/crates/rpc_clients/rss" }
-slotmap_conn_pool = { path = "common/crates/rpc_clients/slotmap_conn_pool" }
-rpc_codec_common = { path = "common/crates/rpc_codecs/codec_common" }
-bss_codec = { path = "common/crates/rpc_codecs/bss_codec" }
-nss_codec = { path = "common/crates/rpc_codecs/nss_codec" }
-rss_codec = { path = "common/crates/rpc_codecs/rss_codec" }
-test_common = { path = "common/crates/test_common" }
-xtask_tools = { path = "xtask/tools" }
+aws_signature = { path = "crates/common/aws_signature" }
+data_types = { path = "crates/common/data_types" }
+data_blob_tracking = { path = "crates/common/data_blob_tracking" }
+volume_group_proxy = { path = "crates/common/volume_group_proxy" }
+rpc_client_common = { path = "crates/common/rpc_clients/client_common" }
+rpc_client_bss = { path = "crates/common/rpc_clients/bss" }
+rpc_client_nss = { path = "crates/common/rpc_clients/nss" }
+rpc_client_rss = { path = "crates/common/rpc_clients/rss" }
+slotmap_conn_pool = { path = "crates/common/rpc_clients/slotmap_conn_pool" }
+rpc_codec_common = { path = "crates/common/rpc_codecs/codec_common" }
+bss_codec = { path = "crates/common/rpc_codecs/bss_codec" }
+nss_codec = { path = "crates/common/rpc_codecs/nss_codec" }
+rss_codec = { path = "crates/common/rpc_codecs/rss_codec" }
+test_common = { path = "crates/common/test_common" }
+xtask_tools = { path = "crates/xtask/tools" }
 
 tokio-util = { version = "0.7.12", features = ["codec"] }
 tokio-stream = "0.1.16"
