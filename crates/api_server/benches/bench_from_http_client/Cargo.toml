@@ -1,9 +1,0 @@
-[package]
-name = "bench_from_http_client"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-fake = "2.9.2"
-reqwest = "0.12.7"
-tokio = { version = "1.39.3", features = ["full"] }

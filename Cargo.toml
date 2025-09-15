@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/**",
+    "cdk/fractalbits-bootstrap",
 ]
 # workaround due to cargo's limitations
 # (no wildcard support in exclude, or optional/nested workspace)
@@ -8,6 +9,7 @@ exclude = [
     "crates/api_server/benches",
     "crates/api_server/src",
     "crates/api_server/tests",
+    "crates/bench_rpc/src",
     "crates/common/aws_signature/src",
     "crates/common/data_blob_tracking/src",
     "crates/common/data_types/src",

@@ -160,7 +160,6 @@ enum BenchWorkload {
 #[strum(serialize_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
 enum BenchService {
-    ApiServer,
     NssRpc,
     BssRpc,
 }

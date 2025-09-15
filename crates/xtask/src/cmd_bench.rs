@@ -18,10 +18,6 @@ pub fn run_cmd_bench(
     keys_limit: usize,
     service_name: &mut ServiceName,
 ) -> CmdResult {
-    let http_method = match workload {
-        BenchWorkload::Write => "put",
-        BenchWorkload::Read => "get",
-    };
     let build_mode = BuildMode::Release;
     let uri;
     let bench_exe;
@@ -31,26 +27,6 @@ pub fn run_cmd_bench(
 
     build_zig_servers(build_mode)?;
     match service {
-        BenchService::ApiServer => {
-            *service_name = ServiceName::All;
-            build_rust_servers(build_mode)?;
-            build_rewrk()?;
-            stop_service(*service_name)?;
-            init_service(*service_name, build_mode, InitConfig::default())?;
-            start_service(*service_name)?;
-            uri = "http://mybucket.localhost:8080";
-            bench_exe = "./target/release/rewrk";
-            bench_opts.extend_from_slice(&[
-                "-t",
-                "24",
-                "-c",
-                "576",
-                "-m",
-                http_method,
-                "-k",
-                &keys_limit,
-            ]);
-        }
         BenchService::NssRpc => {
             *service_name = ServiceName::Nss;
             build_rewrk_rpc()?;

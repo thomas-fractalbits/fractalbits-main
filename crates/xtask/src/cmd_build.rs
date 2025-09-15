@@ -30,15 +30,6 @@ pub fn build_info() -> String {
     format!("{git_branch}:{git_rev}{dirty}, build time: {build_timestamp}")
 }
 
-pub fn build_rewrk() -> CmdResult {
-    let build_info = BUILD_INFO.get().unwrap();
-    run_cmd! {
-        info "Building benchmark tool `rewrk` ...";
-        cd ./api_server/benches/rewrk;
-        BUILD_INFO=$build_info cargo build --release;
-    }
-}
-
 pub fn build_rewrk_rpc() -> CmdResult {
     let build_info = BUILD_INFO.get().unwrap();
     run_cmd! {
