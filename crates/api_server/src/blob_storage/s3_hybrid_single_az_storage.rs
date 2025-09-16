@@ -68,7 +68,7 @@ impl S3HybridSingleAzStorage {
     pub async fn put_blob(
         &self,
         blob_id: Uuid,
-        volume_id: u32,
+        volume_id: u16,
         block_number: u32,
         body: Bytes,
     ) -> Result<DataBlobGuid, BlobStorageError> {

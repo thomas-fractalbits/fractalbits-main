@@ -235,27 +235,6 @@ message GetDataVgInfoResponse {
   }
 }
 
-message DataVgInfo {
-  repeated DataVolume volumes = 1;
-  QuorumConfig quorum = 2;
-}
-
-message DataVolume {
-  uint32 volume_id = 1;
-  repeated BssNode bss_nodes = 2;
-}
-
-message BssNode {
-  string node_id = 1;
-  string address = 2;  // ip:port format
-}
-
-message QuorumConfig {
-  uint32 n = 1;  // Total replicas per volume
-  uint32 r = 2;  // Read quorum
-  uint32 w = 3;  // Write quorum
-}
-
 // GetMetadataVgInfo - Get metadata volume group configuration
 message GetMetadataVgInfoRequest {
   // Empty for now - could add parameters later

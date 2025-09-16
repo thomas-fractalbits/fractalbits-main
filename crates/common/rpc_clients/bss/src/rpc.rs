@@ -13,7 +13,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         body: Bytes,
         timeout: Option<Duration>,
     ) -> Result<(), RpcError> {
@@ -44,7 +44,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         body: &mut Bytes,
         timeout: Option<Duration>,
     ) -> Result<(), RpcError> {
@@ -76,7 +76,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         timeout: Option<Duration>,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "delete_data_blob");
@@ -108,7 +108,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         version: u32,
         is_new: bool,
         body: Bytes,
@@ -143,7 +143,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         version: u32,
         body: &mut Bytes,
     ) -> Result<u32, RpcError> {
@@ -176,7 +176,7 @@ impl RpcClient {
         &self,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         timeout: Option<Duration>,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "delete_metadata_blob");

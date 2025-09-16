@@ -20,12 +20,12 @@ use uuid::Uuid;
 )]
 pub struct MetadataBlobGuid {
     pub blob_id: Uuid,
-    pub volume_id: u8, // Note: u8 for metadata volumes vs u32 for data volumes
+    pub volume_id: u16,
 }
 
 impl std::fmt::Display for MetadataBlobGuid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "metadata-vol{}-{}", self.volume_id, self.blob_id)
+        write!(f, "{}:{}", self.blob_id, self.volume_id)
     }
 }
 
@@ -38,7 +38,7 @@ pub struct MetadataVgInfo {
 
 #[derive(Debug, Clone)]
 pub struct MetadataVolume {
-    pub volume_id: u8,
+    pub volume_id: u16,
     pub bss_nodes: Vec<MetadataBssNode>,
 }
 
@@ -125,7 +125,7 @@ impl MetadataVgProxy {
         })
     }
 
-    pub fn select_volume_for_blob(&self) -> u8 {
+    pub fn select_volume_for_blob(&self) -> u16 {
         // Use round-robin to select volume
         let counter = self
             .round_robin_counter
@@ -166,7 +166,7 @@ impl MetadataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         version: u32,
         is_new: bool,
         body: Bytes,
@@ -194,7 +194,7 @@ impl MetadataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         version: u32,
         _rpc_timeout: Duration,
     ) -> Result<(Bytes, u32), RpcError> {
@@ -214,7 +214,7 @@ impl MetadataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u8,
+        volume_id: u16,
         rpc_timeout: Duration,
     ) -> Result<(), RpcError> {
         let client = Self::checkout_bss_client_for_async(bss_connection_pools, bss_address)

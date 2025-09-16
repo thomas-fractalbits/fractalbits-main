@@ -341,7 +341,7 @@ impl BlobStorageImpl {
         &self,
         tracking_root_blob_name: Option<&str>,
         blob_id: Uuid,
-        volume_id: u32,
+        volume_id: u16,
         block_number: u32,
         body: Bytes,
     ) -> Result<DataBlobGuid, BlobStorageError> {

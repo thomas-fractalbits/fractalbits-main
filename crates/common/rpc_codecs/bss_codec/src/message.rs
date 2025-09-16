@@ -20,6 +20,9 @@ pub struct MessageHeader {
     /// cluster (for example, staging vs production).
     cluster: u128,
 
+    /// Client session ID for routing consistency across reconnections
+    pub client_session_id: u64,
+
     /// The size of the Header structure (always), plus any associated body.
     pub size: u32,
 
@@ -36,8 +39,17 @@ pub struct MessageHeader {
     /// u32 size, defined as enum type
     pub command: Command,
 
+    /// Version number for quorum protocol
+    pub version: u32,
+
     /// 4k aligned size (header included), to use for direct-io
     pub align_size: u32,
+
+    /// Volume ID for multi-BSS support
+    pub volume_id: u16,
+
+    /// The version of the protocol implementation that originated this message.
+    pub protocol: u16,
 
     /// Bucket Id
     pub bucket_id: [u8; 16],
@@ -45,28 +57,16 @@ pub struct MessageHeader {
     /// Blob Id
     pub blob_id: [u8; 16],
 
-    /// The version of the protocol implementation that originated this message.
-    pub protocol: u16,
-
     pub checksum_algo: u8,
-
-    /// Volume ID for multi-BSS support
-    pub volume_id: u8,
-
-    /// Version number for quorum protocol
-    pub version: u32,
-
-    /// Client session ID for routing consistency across reconnections
-    pub client_session_id: u64,
 
     /// Flag to indicate if this is a new metadata blob (vs update)
     pub is_new: u8,
 
-    /// Reserved parts for padding (reduced by 13 bytes for version, is_new, session_id)
+    /// Reserved parts for padding
     // Note rust arrays of sizes from 0 to 32 (inclusive) implement the Default trait if the element
     // type allows it. As a stopgap, trait implementations are statically generated up to size 32.
     // See [doc](https://doc.rust-lang.org/std/primitive.array.html) for more details.
-    reserved0: [u8; 7],
+    reserved0: [u8; 6],
     reserved1: [u8; 32],
     reserved2: [u8; 32],
     reserved3: [u8; 32],

@@ -20,12 +20,12 @@ use uuid::Uuid;
 )]
 pub struct DataBlobGuid {
     pub blob_id: Uuid,
-    pub volume_id: u32,
+    pub volume_id: u16,
 }
 
 impl std::fmt::Display for DataBlobGuid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "vol{}-{}", self.volume_id, self.blob_id)
+        write!(f, "{}:d{}", self.blob_id, self.volume_id)
     }
 }
 
@@ -106,7 +106,7 @@ impl DataVgProxy {
         })
     }
 
-    pub fn select_volume_for_blob(&self) -> u32 {
+    pub fn select_volume_for_blob(&self) -> u16 {
         // Use round-robin to select volume
         let counter = self
             .round_robin_counter
@@ -142,7 +142,7 @@ impl DataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u32,
+        volume_id: u16,
     ) -> Result<Bytes, RpcError> {
         tracing::debug!(%blob_id, %bss_address, block_number, volume_id, "get_blob_from_node_instance calling BSS");
 
@@ -156,7 +156,7 @@ impl DataVgProxy {
             .get_data_blob(
                 blob_id,
                 block_number,
-                volume_id as u8,
+                volume_id,
                 &mut body,
                 Some(self.rpc_timeout),
             )
@@ -196,7 +196,7 @@ impl DataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u32,
+        volume_id: u16,
         body: Bytes,
         rpc_timeout: Duration,
     ) -> Result<(), RpcError> {
@@ -205,13 +205,7 @@ impl DataVgProxy {
             .map_err(|e| RpcError::InternalResponseError(e.to_string()))?;
 
         client
-            .put_data_blob(
-                blob_id,
-                block_number,
-                volume_id as u8,
-                body,
-                Some(rpc_timeout),
-            )
+            .put_data_blob(blob_id, block_number, volume_id, body, Some(rpc_timeout))
             .await
     }
 
@@ -220,7 +214,7 @@ impl DataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u32,
+        volume_id: u16,
         rpc_timeout: Duration,
     ) -> Result<Bytes, RpcError> {
         let client = Self::checkout_bss_client_for_async(bss_connection_pools, bss_address)
@@ -232,7 +226,7 @@ impl DataVgProxy {
             .get_data_blob(
                 blob_id,
                 block_number,
-                volume_id as u8,
+                volume_id,
                 &mut body,
                 Some(rpc_timeout),
             )
@@ -245,7 +239,7 @@ impl DataVgProxy {
         bss_address: &str,
         blob_id: Uuid,
         block_number: u32,
-        volume_id: u32,
+        volume_id: u16,
         rpc_timeout: Duration,
     ) -> Result<(), RpcError> {
         let client = Self::checkout_bss_client_for_async(bss_connection_pools, bss_address)
@@ -253,7 +247,7 @@ impl DataVgProxy {
             .map_err(|e| RpcError::InternalResponseError(e.to_string()))?;
 
         client
-            .delete_data_blob(blob_id, block_number, volume_id as u8, Some(rpc_timeout))
+            .delete_data_blob(blob_id, block_number, volume_id, Some(rpc_timeout))
             .await
     }
 }

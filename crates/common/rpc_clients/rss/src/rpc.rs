@@ -23,7 +23,7 @@ fn parse_data_vg_info_from_json(json_str: &str) -> Result<DataVgInfo, String> {
         let volume_id = volume_json
             .get("volume_id")
             .and_then(|v| v.as_u64())
-            .ok_or("volume_id not found or not a number")? as u32;
+            .ok_or("volume_id not found or not a number")? as u16;
 
         let bss_nodes_array = volume_json
             .get("bss_nodes")

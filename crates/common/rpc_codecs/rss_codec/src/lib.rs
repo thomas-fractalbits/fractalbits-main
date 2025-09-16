@@ -1,6 +1,8 @@
 pub mod message;
+pub mod volume_types;
 
 pub use message::MessageHeader;
+pub use volume_types::{BssNode, DataVgInfo, DataVolume, QuorumConfig};
 
 // Type alias for shared codec implementation
 pub type MessageCodec = rpc_codec_common::MessageCodec<MessageHeader>;
