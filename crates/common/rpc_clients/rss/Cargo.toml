@@ -23,6 +23,7 @@ rpc_client_common.workspace = true
 socket2.workspace = true
 rss_codec.workspace = true
 rpc_codec_common.workspace = true
+data_types.workspace = true
 
 [dev-dependencies]
 tracing-test.workspace = true

@@ -1,5 +1,6 @@
 use crate::DataVgError;
 use bytes::Bytes;
+use data_types::QuorumConfig;
 use futures::stream::{FuturesUnordered, StreamExt};
 use metrics::histogram;
 use rpc_client_bss::RpcClientBss;
@@ -33,7 +34,7 @@ impl std::fmt::Display for MetadataBlobGuid {
 #[derive(Debug, Clone)]
 pub struct MetadataVgInfo {
     pub volumes: Vec<MetadataVolume>,
-    pub quorum: Option<rss_codec::QuorumConfig>,
+    pub quorum: Option<QuorumConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -52,7 +53,7 @@ pub struct MetadataVgProxy {
     volumes: Vec<MetadataVolume>,
     bss_connection_pools: HashMap<String, ConnPool<Arc<RpcClientBss>, String>>,
     round_robin_counter: AtomicU64,
-    quorum_config: rss_codec::QuorumConfig,
+    quorum_config: QuorumConfig,
     rpc_timeout: Duration,
 }
 
@@ -589,7 +590,6 @@ impl MetadataVgProxy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rss_codec::QuorumConfig;
     use uuid::Uuid;
 
     fn create_test_metadata_vg_info() -> MetadataVgInfo {

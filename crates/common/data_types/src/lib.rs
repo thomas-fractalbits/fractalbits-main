@@ -2,11 +2,13 @@ mod api_key;
 mod bucket;
 pub mod hash;
 mod permission;
+mod volume;
 
 // Re-export the main types for convenience
 pub use api_key::ApiKey;
 pub use bucket::Bucket;
 pub use permission::BucketKeyPerm;
+pub use volume::{BssNode, DataVgInfo, DataVolume, QuorumConfig};
 
 #[derive(Clone)]
 pub struct Versioned<T: Sized> {

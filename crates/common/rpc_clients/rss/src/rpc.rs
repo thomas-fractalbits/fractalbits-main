@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::client::RpcClient;
 use bytes::{Bytes, BytesMut};
+use data_types::{BssNode, DataVgInfo, DataVolume, QuorumConfig};
 use metrics::histogram;
 use prost::Message as PbMessage;
 use rpc_client_common::{ErrorRetryable, InflightRpcGuard, RpcError};

@@ -1,5 +1,6 @@
 use crate::DataVgError;
 use bytes::Bytes;
+use data_types::{DataVgInfo, DataVolume, QuorumConfig};
 use futures::stream::{FuturesUnordered, StreamExt};
 use metrics::histogram;
 use rpc_client_bss::RpcClientBss;
@@ -30,18 +31,15 @@ impl std::fmt::Display for DataBlobGuid {
 }
 
 pub struct DataVgProxy {
-    volumes: Vec<rss_codec::DataVolume>,
+    volumes: Vec<DataVolume>,
     bss_connection_pools: HashMap<String, ConnPool<Arc<RpcClientBss>, String>>,
     round_robin_counter: AtomicU64,
-    quorum_config: rss_codec::QuorumConfig,
+    quorum_config: QuorumConfig,
     rpc_timeout: Duration,
 }
 
 impl DataVgProxy {
-    pub async fn new(
-        data_vg_info: rss_codec::DataVgInfo,
-        rpc_timeout: Duration,
-    ) -> Result<Self, DataVgError> {
+    pub async fn new(data_vg_info: DataVgInfo, rpc_timeout: Duration) -> Result<Self, DataVgError> {
         info!(
             "Initializing DataVgProxy with {} volumes",
             data_vg_info.volumes.len()
