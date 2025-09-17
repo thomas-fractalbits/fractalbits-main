@@ -198,6 +198,31 @@ pub enum ServiceName {
     DdbLocal,
 }
 
+impl ServiceName {
+    pub fn bss_id(&self) -> Option<u32> {
+        match self {
+            ServiceName::Bss0 => Some(0),
+            ServiceName::Bss1 => Some(1),
+            ServiceName::Bss2 => Some(2),
+            ServiceName::Bss3 => Some(3),
+            ServiceName::Bss4 => Some(4),
+            ServiceName::Bss5 => Some(5),
+            _ => None,
+        }
+    }
+
+    pub fn all_bss_services() -> Vec<ServiceName> {
+        vec![
+            ServiceName::Bss0,
+            ServiceName::Bss1,
+            ServiceName::Bss2,
+            ServiceName::Bss3,
+            ServiceName::Bss4,
+            ServiceName::Bss5,
+        ]
+    }
+}
+
 #[derive(AsRefStr, EnumString, Copy, Clone, Default, clap::ValueEnum)]
 #[strum(serialize_all = "snake_case")]
 #[clap(rename_all = "snake_case")]
