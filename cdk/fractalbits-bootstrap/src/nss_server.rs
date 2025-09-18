@@ -34,7 +34,7 @@ pub fn bootstrap(
         download_binaries(&["test_art", "rewrk_rpc"])?;
     }
     format_local_nvme_disks(false)?;
-    download_binaries(&["nss_server", "mirrord", "nss_role_agent"])?;
+    download_binaries(&["nss_server", "nss_role_agent"])?;
     setup_configs(
         bucket_name,
         volume_id,

@@ -195,7 +195,7 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     );
 
     let bss_data_vg_config_item = format!(
-        r#"{{"service_id":{{"S":"bss_data_vg_config"}},"value":{{"S":"{}"}}}}"#,
+        r#"{{"service_id":{{"S":"bss-data-vg-config"}},"value":{{"S":"{}"}}}}"#,
         bss_data_vg_config_json
             .replace('"', r#"\""#)
             .replace('\n', "")
@@ -230,16 +230,16 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
             }}
         ],
         "quorum": {{
-            "n": 3,
-            "r": 2,
-            "w": 2
+            "n": 6,
+            "r": 4,
+            "w": 4
         }}
     }}"#,
         metadata_nodes.join(",")
     );
 
     let bss_metadata_vg_config_item = format!(
-        r#"{{"service_id":{{"S":"bss_metadata_vg_config"}},"value":{{"S":"{}"}}}}"#,
+        r#"{{"service_id":{{"S":"bss-metadata-vg-config"}},"value":{{"S":"{}"}}}}"#,
         bss_metadata_vg_config_json
             .replace('"', r#"\""#)
             .replace('\n', "")

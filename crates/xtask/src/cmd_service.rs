@@ -134,7 +134,7 @@ pub fn init_service(
             }
         }"#;
         let bss_data_vg_config_item = format!(
-            r#"{{"service_id":{{"S":"bss_data_vg_config"}},"value":{{"S":"{}"}}}}"#,
+            r#"{{"service_id":{{"S":"bss-data-vg-config"}},"value":{{"S":"{}"}}}}"#,
             bss_data_vg_config_json
                 .replace('"', r#"\""#)
                 .replace('\n', "")
@@ -173,7 +173,7 @@ pub fn init_service(
             }
         }"#;
         let bss_metadata_vg_config_item = format!(
-            r#"{{"service_id":{{"S":"bss_metadata_vg_config"}},"value":{{"S":"{}"}}}}"#,
+            r#"{{"service_id":{{"S":"bss-metadata-vg-config"}},"value":{{"S":"{}"}}}}"#,
             bss_metadata_vg_config_json
                 .replace('"', r#"\""#)
                 .replace('\n', "")
