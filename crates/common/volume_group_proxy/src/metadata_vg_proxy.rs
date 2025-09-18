@@ -152,9 +152,8 @@ impl MetadataVgProxy {
     async fn put_metadata_blob_to_node(
         bss_connection_pools: &HashMap<String, ConnPool<Arc<RpcClientBss>, String>>,
         bss_address: &str,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         version: u64,
         is_new: bool,
         body: Bytes,
@@ -166,9 +165,8 @@ impl MetadataVgProxy {
 
         client
             .put_metadata_blob(
-                blob_id,
+                blob_guid,
                 block_number,
-                volume_id,
                 version,
                 is_new,
                 body,
@@ -181,9 +179,8 @@ impl MetadataVgProxy {
     async fn get_metadata_blob_from_node(
         bss_connection_pools: &HashMap<String, ConnPool<Arc<RpcClientBss>, String>>,
         bss_address: &str,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         version: u64,
         rpc_timeout: Duration,
     ) -> Result<(Bytes, u64), RpcError> {
@@ -194,9 +191,8 @@ impl MetadataVgProxy {
         let mut body = Bytes::new();
         let actual_version = client
             .get_metadata_blob(
-                blob_id,
+                blob_guid,
                 block_number,
-                volume_id,
                 version,
                 &mut body,
                 Some(rpc_timeout),
@@ -209,9 +205,8 @@ impl MetadataVgProxy {
     async fn delete_metadata_blob_from_node(
         bss_connection_pools: &HashMap<String, ConnPool<Arc<RpcClientBss>, String>>,
         bss_address: &str,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         rpc_timeout: Duration,
     ) -> Result<(), RpcError> {
         let client = Self::checkout_bss_client_for_async(bss_connection_pools, bss_address)
@@ -219,7 +214,7 @@ impl MetadataVgProxy {
             .map_err(|e| RpcError::InternalResponseError(e.to_string()))?;
 
         client
-            .delete_metadata_blob(blob_id, block_number, volume_id, Some(rpc_timeout), 0)
+            .delete_metadata_blob(blob_guid, block_number, Some(rpc_timeout), 0)
             .await
     }
 }
@@ -278,9 +273,8 @@ impl MetadataVgProxy {
                     Self::put_metadata_blob_to_node(
                         &bss_pools,
                         &address,
-                        blob_guid.blob_id,
+                        blob_guid,
                         0, // block_number always 0 for metadata blobs
-                        blob_guid.volume_id,
                         version,
                         is_new,
                         content_clone,
@@ -400,9 +394,8 @@ impl MetadataVgProxy {
                     Self::get_metadata_blob_from_node(
                         &bss_pools,
                         &address,
-                        blob_guid.blob_id,
+                        blob_guid,
                         0, // block_number always 0 for metadata blobs
-                        volume_id,
                         version,
                         rpc_timeout,
                     ),
@@ -518,9 +511,8 @@ impl MetadataVgProxy {
                         Self::delete_metadata_blob_from_node(
                             &bss_pools,
                             &address,
-                            blob_guid.blob_id,
+                            blob_guid,
                             0, // block_number always 0 for metadata blobs
-                            volume_id,
                             rpc_timeout,
                         ),
                     )

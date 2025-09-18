@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
+use data_types::DataBlobGuid;
 use futures_util::stream::{FuturesUnordered, StreamExt};
 use rpc_client_bss::RpcClientBss;
 use rpc_client_nss::RpcClientNss;
@@ -212,11 +213,14 @@ async fn benchmark_bss_write(
         if let Some(uuid) = uuids.pop_front() {
             let rpc_client = rpc_client.clone();
             let content = Bytes::from(vec![0; 4096 - 256]);
-            let blob_id = Uuid::parse_str(&uuid).unwrap();
+            let blob_guid = DataBlobGuid {
+                blob_id: Uuid::parse_str(&uuid).unwrap(),
+                volume_id: 0,
+            };
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
                 let result = rpc_client
-                    .put_data_blob(blob_id, 0, 0, content, None, 0)
+                    .put_data_blob(blob_guid, 0, content, None, 0)
                     .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
@@ -249,11 +253,14 @@ async fn benchmark_bss_write(
         if let Some(uuid) = uuids.pop_front() {
             let rpc_client = rpc_client.clone();
             let content = Bytes::from(vec![0; 4096 - 256]);
-            let blob_id = Uuid::parse_str(&uuid).unwrap();
+            let blob_guid = DataBlobGuid {
+                blob_id: Uuid::parse_str(&uuid).unwrap(),
+                volume_id: 0,
+            };
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
                 let result = rpc_client
-                    .put_data_blob(blob_id, 0, 0, content, None, 0)
+                    .put_data_blob(blob_guid, 0, content, None, 0)
                     .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
@@ -293,10 +300,13 @@ async fn benchmark_bss_read(
             let rpc_client = rpc_client.clone();
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
-                let blob_id = Uuid::parse_str(&uuid).unwrap();
+                let blob_guid = DataBlobGuid {
+                    blob_id: Uuid::parse_str(&uuid).unwrap(),
+                    volume_id: 0,
+                };
                 let mut content = Bytes::new();
                 let result = rpc_client
-                    .get_data_blob(blob_id, 0, 0, &mut content, None, 0)
+                    .get_data_blob(blob_guid, 0, &mut content, None, 0)
                     .await
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result.map(|_| content))
@@ -329,10 +339,13 @@ async fn benchmark_bss_read(
             let rpc_client = rpc_client.clone();
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
-                let blob_id = Uuid::parse_str(&uuid).unwrap();
+                let blob_guid = DataBlobGuid {
+                    blob_id: Uuid::parse_str(&uuid).unwrap(),
+                    volume_id: 0,
+                };
                 let mut content = Bytes::new();
                 let result = rpc_client
-                    .get_data_blob(blob_id, 0, 0, &mut content, None, 0)
+                    .get_data_blob(blob_guid, 0, &mut content, None, 0)
                     .await
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
                 (request_start, result.map(|_| content))

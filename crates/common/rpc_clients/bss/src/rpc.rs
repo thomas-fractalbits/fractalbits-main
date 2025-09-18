@@ -3,17 +3,16 @@ use std::time::Duration;
 use crate::client::RpcClient;
 use bss_codec::{Command, MessageHeader};
 use bytes::Bytes;
+use data_types::{DataBlobGuid, MetadataBlobGuid};
 use rpc_client_common::{ErrorRetryable, InflightRpcGuard, RpcError};
 use rpc_codec_common::MessageFrame;
 use tracing::error;
-use uuid::Uuid;
 
 impl RpcClient {
     pub async fn put_data_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: DataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         body: Bytes,
         timeout: Option<Duration>,
         retry_count: u32,
@@ -22,9 +21,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.command = Command::PutDataBlob;
         header.size = (MessageHeader::SIZE + body.len()) as u32;
         header.retry_count = retry_count;
@@ -35,7 +34,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"put_data_blob", %request_id, %blob_id, %block_number, %volume_id, error=?e, "bss rpc failed");
+                    error!(rpc=%"put_data_blob", %request_id, %blob_guid, %block_number, error=?e, "bss rpc failed");
                 }
                 e
             })?;
@@ -44,9 +43,8 @@ impl RpcClient {
 
     pub async fn get_data_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: DataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         body: &mut Bytes,
         timeout: Option<Duration>,
         retry_count: u32,
@@ -55,9 +53,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.command = Command::GetDataBlob;
         header.size = MessageHeader::SIZE as u32;
         header.retry_count = retry_count;
@@ -68,7 +66,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"get_data_blob", %request_id, %blob_id, %block_number, %volume_id, error=?e, "bss rpc failed");
+                    error!(rpc=%"get_data_blob", %request_id, %blob_guid, %block_number, error=?e, "bss rpc failed");
                 }
                 e
             })?;
@@ -78,9 +76,8 @@ impl RpcClient {
 
     pub async fn delete_data_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: DataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         timeout: Option<Duration>,
         retry_count: u32,
     ) -> Result<(), RpcError> {
@@ -88,9 +85,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.command = Command::DeleteDataBlob;
         header.size = MessageHeader::SIZE as u32;
         header.retry_count = retry_count;
@@ -101,7 +98,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"delete_data_blob", %request_id, %blob_id, %block_number, %volume_id, error=?e, "bss rpc failed");
+                    error!(rpc=%"delete_data_blob", %request_id, %blob_guid, %block_number, error=?e, "bss rpc failed");
                 }
                 e
             })?;
@@ -112,9 +109,8 @@ impl RpcClient {
     #[allow(clippy::too_many_arguments)]
     pub async fn put_metadata_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         version: u64,
         is_new: bool,
         body: Bytes,
@@ -125,9 +121,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.version = version;
         header.is_new = if is_new { 1 } else { 0 };
         header.command = Command::PutMetadataBlob;
@@ -140,7 +136,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"put_metadata_blob", %request_id, %blob_id, %block_number, %volume_id, %version, is_new=%is_new, error=?e, "bss rpc failed");
+                    error!(rpc=%"put_metadata_blob", %request_id, %blob_guid, %block_number, %version, is_new=%is_new, error=?e, "bss rpc failed");
                 }
                 e
             })?;
@@ -149,9 +145,8 @@ impl RpcClient {
 
     pub async fn get_metadata_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         version: u64,
         body: &mut Bytes,
         timeout: Option<Duration>,
@@ -161,9 +156,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.version = version;
         header.command = Command::GetMetadataBlob;
         header.size = MessageHeader::SIZE as u32;
@@ -175,7 +170,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"get_metadata_blob", %request_id, %blob_id, %block_number, %volume_id, %version, error=?e, "bss rpc failed");
+                    error!(rpc=%"get_metadata_blob", %request_id, %blob_guid, %block_number, %version, error=?e, "bss rpc failed");
                 }
                 e
             })?;
@@ -185,9 +180,8 @@ impl RpcClient {
 
     pub async fn delete_metadata_blob(
         &self,
-        blob_id: Uuid,
+        blob_guid: MetadataBlobGuid,
         block_number: u32,
-        volume_id: u16,
         timeout: Option<Duration>,
         retry_count: u32,
     ) -> Result<(), RpcError> {
@@ -195,9 +189,9 @@ impl RpcClient {
         let mut header = MessageHeader::default();
         let request_id = self.gen_request_id();
         header.id = request_id;
-        header.blob_id = blob_id.into_bytes();
+        header.blob_id = blob_guid.blob_id.into_bytes();
+        header.volume_id = blob_guid.volume_id;
         header.block_number = block_number;
-        header.volume_id = volume_id;
         header.command = Command::DeleteMetadataBlob;
         header.size = MessageHeader::SIZE as u32;
         header.retry_count = retry_count;
@@ -208,7 +202,7 @@ impl RpcClient {
             .await
             .map_err(|e| {
                 if !e.retryable() {
-                    error!(rpc=%"delete_metadata_blob", %request_id, %blob_id, %block_number, %volume_id, error=?e, "bss rpc failed");
+                    error!(rpc=%"delete_metadata_blob", %request_id, %blob_guid, %block_number, error=?e, "bss rpc failed");
                 }
                 e
             })?;
