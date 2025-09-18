@@ -166,7 +166,7 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
         let nodes: Vec<String> = (start_idx..end_idx)
             .map(|i| {
                 format!(
-                    r#"{{"node_id": "{}", "address": "{}:8088"}}"#,
+                    r#"{{"node_id": "{}", "ip": "{}", "port": 8088}}"#,
                     bss_addresses[i].0, bss_addresses[i].1
                 )
             })
@@ -198,7 +198,7 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
         r#"{{"service_id":{{"S":"bss_data_vg_config"}},"value":{{"S":"{}"}}}}"#,
         bss_data_vg_config_json
             .replace('"', r#"\""#)
-            .replace(['\n', ' '], "")
+            .replace('\n', "")
     );
 
     run_cmd! {
@@ -214,7 +214,7 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
         .iter()
         .map(|(node_id, address)| {
             format!(
-                r#"{{"node_id": "{}", "address": "{}:8088"}}"#,
+                r#"{{"node_id": "{}", "ip": "{}", "port": 8088}}"#,
                 node_id, address
             )
         })
@@ -239,10 +239,10 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     );
 
     let bss_metadata_vg_config_item = format!(
-        r#"{{"service_id":{{"S":"metadata-vg"}},"value":{{"S":"{}"}}}}"#,
+        r#"{{"service_id":{{"S":"bss_metadata_vg_config"}},"value":{{"S":"{}"}}}}"#,
         bss_metadata_vg_config_json
             .replace('"', r#"\""#)
-            .replace(['\n', ' '], "")
+            .replace('\n', "")
     );
 
     run_cmd! {

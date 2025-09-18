@@ -137,7 +137,7 @@ pub fn init_service(
             r#"{{"service_id":{{"S":"bss_data_vg_config"}},"value":{{"S":"{}"}}}}"#,
             bss_data_vg_config_json
                 .replace('"', r#"\""#)
-                .replace(['\n', ' '], "")
+                .replace('\n', "")
         );
 
         run_cmd! {
@@ -173,10 +173,10 @@ pub fn init_service(
             }
         }"#;
         let bss_metadata_vg_config_item = format!(
-            r#"{{"service_id":{{"S":"metadata-vg"}},"value":{{"S":"{}"}}}}"#,
+            r#"{{"service_id":{{"S":"bss_metadata_vg_config"}},"value":{{"S":"{}"}}}}"#,
             bss_metadata_vg_config_json
                 .replace('"', r#"\""#)
-                .replace(['\n', ' '], "")
+                .replace('\n', "")
         );
 
         run_cmd! {
