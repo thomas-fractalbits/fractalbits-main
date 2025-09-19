@@ -94,7 +94,6 @@ pub fn bootstrap(
 }
 
 fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdResult {
-    const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
     let region = get_current_aws_region()?;
 
     info!("Initializing NSS role states in service-discovery table");
@@ -104,13 +103,15 @@ fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdRes
         info!("Setting {nss_a_id} as active");
         info!("Setting {nss_b_id} as standby");
         format!(
-            r#"{{"service_id":{{"S":"nss_roles"}},"states":{{"M":{{"{nss_a_id}":{{"S":"active"}},"{nss_b_id}":{{"S":"standby"}}}}}}}}"#
+            r#"{{"service_id":{{"S":"{}"}},"states":{{"M":{{"{nss_a_id}":{{"S":"active"}},"{nss_b_id}":{{"S":"standby"}}}}}}}}"#,
+            NSS_ROLES_KEY
         )
     } else {
         // Single-AZ mode: only nss-A as solo
         info!("Setting {nss_a_id} as solo");
         format!(
-            r#"{{"service_id":{{"S":"nss_roles"}},"states":{{"M":{{"{nss_a_id}":{{"S":"solo"}}}}}}}}"#
+            r#"{{"service_id":{{"S":"{}"}},"states":{{"M":{{"{nss_a_id}":{{"S":"solo"}}}}}}}}"#,
+            NSS_ROLES_KEY
         )
     };
 
@@ -127,7 +128,6 @@ fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdRes
 }
 
 fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
-    const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
     const TOTAL_BSS_NODES: usize = 6;
     const NODES_PER_DATA_VOLUME: usize = 3;
 
@@ -145,12 +145,10 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     let mut sorted_instances: Vec<_> = bss_instances.into_iter().collect();
     sorted_instances.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Map to bss0, bss1, etc. based on sorted order
     let mut bss_addresses = Vec::new();
-    for (i, (_instance_id, address)) in sorted_instances.iter().enumerate() {
-        let bss_id = format!("bss{}", i);
-        info!("Found {} at {}", bss_id, address);
-        bss_addresses.push((bss_id, address.clone()));
+    for (instance_id, address) in sorted_instances.iter() {
+        info!("Found {} at {}", instance_id, address);
+        bss_addresses.push((instance_id.clone(), address.clone()));
     }
 
     info!("All BSS nodes registered. Initializing volume group configurations...");
@@ -195,7 +193,8 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     );
 
     let bss_data_vg_config_item = format!(
-        r#"{{"service_id":{{"S":"bss-data-vg-config"}},"value":{{"S":"{}"}}}}"#,
+        r#"{{"service_id":{{"S":"{}"}},"value":{{"S":"{}"}}}}"#,
+        BSS_DATA_VG_CONFIG_KEY,
         bss_data_vg_config_json
             .replace('"', r#"\""#)
             .replace('\n', "")
@@ -239,7 +238,8 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     );
 
     let bss_metadata_vg_config_item = format!(
-        r#"{{"service_id":{{"S":"bss-metadata-vg-config"}},"value":{{"S":"{}"}}}}"#,
+        r#"{{"service_id":{{"S":"{}"}},"value":{{"S":"{}"}}}}"#,
+        BSS_METADATA_VG_CONFIG_KEY,
         bss_metadata_vg_config_json
             .replace('"', r#"\""#)
             .replace('\n', "")
@@ -257,7 +257,6 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
 }
 
 fn wait_for_all_bss_nodes(region: &str, expected_count: usize) -> CmdResult {
-    const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
     let mut attempt = 0;
 
     loop {
@@ -267,7 +266,7 @@ fn wait_for_all_bss_nodes(region: &str, expected_count: usize) -> CmdResult {
         let result = run_fun! {
             aws dynamodb get-item
                 --table-name $DDB_SERVICE_DISCOVERY_TABLE
-                --key "{\"service_id\": {\"S\": \"bss-server\"}}"
+                --key "{\"service_id\": {\"S\": \"$BSS_SERVER_KEY\"}}"
                 --region $region
                 2>/dev/null | jq -r ".Item.instances.M | length // 0"
         };
@@ -298,12 +297,10 @@ fn wait_for_all_bss_nodes(region: &str, expected_count: usize) -> CmdResult {
 fn get_all_bss_addresses(
     region: &str,
 ) -> Result<std::collections::HashMap<String, String>, std::io::Error> {
-    const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
-
     let result = run_fun! {
         aws dynamodb get-item
             --table-name $DDB_SERVICE_DISCOVERY_TABLE
-            --key "{\"service_id\": {\"S\": \"bss-server\"}}"
+            --key "{\"service_id\": {\"S\": \"$BSS_SERVER_KEY\"}}"
             --region $region
             2>/dev/null | jq -r ".Item.instances.M | to_entries | map(\"\\(.key)=\\(.value.S)\") | .[]"
     }?;
@@ -319,7 +316,6 @@ fn get_all_bss_addresses(
 }
 
 fn initialize_az_status_in_ddb(remote_az: &str) -> CmdResult {
-    const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
     let region = get_current_aws_region()?;
     let local_az = get_current_aws_az_id()?;
 
@@ -327,7 +323,8 @@ fn initialize_az_status_in_ddb(remote_az: &str) -> CmdResult {
     info!("Setting {local_az} and {remote_az} to Normal");
 
     let az_status_item = format!(
-        r#"{{"service_id":{{"S":"az_status"}},"status":{{"M":{{"{local_az}":{{"S":"Normal"}},"{remote_az}":{{"S":"Normal"}}}}}}}}"#
+        r#"{{"service_id":{{"S":"{}"}},"status":{{"M":{{"{local_az}":{{"S":"Normal"}},"{remote_az}":{{"S":"Normal"}}}}}}}}"#,
+        AZ_STATUS_KEY
     );
 
     // Put az_status entry with status map

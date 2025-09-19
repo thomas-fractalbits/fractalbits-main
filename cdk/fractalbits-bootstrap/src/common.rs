@@ -15,6 +15,13 @@ pub const BOOTSTRAP_DONE_FILE: &str = "/opt/fractalbits/.bootstrap_done";
 pub const STATS_LOGROTATE_CONFIG: &str = "/etc/logrotate.d/stats_logs";
 pub const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
 pub const NETWORK_TUNING_SYS_CONFIG: &str = "99-network-tuning.conf";
+
+// DDB Service Discovery Keys
+pub const BSS_DATA_VG_CONFIG_KEY: &str = "bss-data-vg-config";
+pub const BSS_METADATA_VG_CONFIG_KEY: &str = "bss-metadata-vg-config";
+pub const BSS_SERVER_KEY: &str = "bss-server";
+pub const NSS_ROLES_KEY: &str = "nss_roles";
+pub const AZ_STATUS_KEY: &str = "az_status";
 #[allow(dead_code)]
 pub const CLOUDWATCH_AGENT_CONFIG: &str = "cloudwatch_agent_config.json";
 pub const CLOUD_INIT_LOG: &str = "/var/log/cloud-init-output.log";

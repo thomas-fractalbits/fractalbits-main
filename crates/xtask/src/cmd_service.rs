@@ -816,21 +816,18 @@ fn create_dirs_for_bss_server(bss_id: u32) -> CmdResult {
         mkdir -p data/bss$bss_id/local/blobs;
     }?;
 
-    // Create volume directories for multi-BSS support
-    // For local testing, create directories for volumes 0 and 1
-    // TODO: only create volumes where this node belongs to
-    for volume_id in 0..2 {
-        // Data volumes
-        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$volume_id)?;
-        for i in 0..256 {
-            run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$volume_id/dir$i)?;
-        }
+    // Data volume
+    let data_volume_id = bss_id / 3;
+    run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$data_volume_id)?;
+    for i in 0..256 {
+        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$data_volume_id/dir$i)?;
+    }
 
-        // Metadata volumes
-        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$volume_id)?;
-        for i in 0..256 {
-            run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$volume_id/dir$i)?;
-        }
+    // Metadata volume
+    let metadata_volume_id = bss_id / 6;
+    run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id)?;
+    for i in 0..256 {
+        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id/dir$i)?;
     }
 
     Ok(())
