@@ -818,6 +818,7 @@ fn create_dirs_for_bss_server(bss_id: u32) -> CmdResult {
 
     // Create volume directories for multi-BSS support
     // For local testing, create directories for volumes 0 and 1
+    // TODO: only create volumes where this node belongs to
     for volume_id in 0..2 {
         // Data volumes
         run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$volume_id)?;

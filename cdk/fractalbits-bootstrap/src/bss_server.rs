@@ -11,8 +11,20 @@ pub fn bootstrap(meta_stack_testing: bool, for_bench: bool) -> CmdResult {
 
     info!("Creating directories for bss_server");
     run_cmd!(mkdir -p "/data/local/stats")?;
-    for i in 0..256 {
-        run_cmd!(mkdir -p /data/local/blobs/dir$i)?;
+    // Create volume directories for multi-BSS support
+    // TODO: only create volumes where this node belongs to
+    for volume_id in 0..2 {
+        // Data volumes
+        run_cmd!(mkdir -p data/local/blobs/data_volume$volume_id)?;
+        for i in 0..256 {
+            run_cmd!(mkdir -p data/local/blobs/data_volume$volume_id/dir$i)?;
+        }
+
+        // Metadata volumes
+        run_cmd!(mkdir -p data/local/blobs/metadata_volume$volume_id)?;
+        for i in 0..256 {
+            run_cmd!(mkdir -p data/local/blobs/metadata_volume$volume_id/dir$i)?;
+        }
     }
 
     create_bss_config()?;
