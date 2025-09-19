@@ -1,36 +1,21 @@
-build:
-  cargo xtask build
+build *args:
+  cargo xtask build {{args}}
 
-build_zig:
-  cargo xtask build zig
+service *args:
+  cargo xtask service {{args}}
 
-init_service:
-  cargo xtask service init
+precheckin *args:
+  cargo xtask precheckin {{args}}
 
-start_service:
-  cargo xtask service start
+deploy *args:
+  cargo xtask deploy {{args}}
 
-check_service:
-  cargo xtask service status
-
-test_s3_api:
-  cargo xtask precheckin --s3_api_only
-
-precheckin:
-  cargo xtask precheckin
-
-deploy:
-  cargo xtask deploy
-
-describe_stack:
+describe-stack:
   cargo xtask tools describe_stack
 
-git_status:
-  cargo xtask git status
+repo *args:
+  cargo xtask git {{args}}
 
-git_each_status:
-  cargo xtask git foreach git status
-
-git_pull_rebase:
-  cargo xtask git foreach git pull -- --rebase
+git *args:
+    @cargo xtask git foreach git {{args}}
 
