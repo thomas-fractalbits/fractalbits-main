@@ -383,17 +383,6 @@ where
     pub async fn send_request(
         &self,
         request_id: u32,
-        frame: MessageFrame<Header>,
-        timeout: Option<std::time::Duration>,
-    ) -> Result<MessageFrame<Header>, RpcError> {
-        self.send_request_with_retry_count(0, request_id, frame, timeout)
-            .await
-    }
-
-    pub async fn send_request_with_retry_count(
-        &self,
-        retry_count: u32,
-        request_id: u32,
         mut frame: MessageFrame<Header>,
         timeout: Option<std::time::Duration>,
     ) -> Result<MessageFrame<Header>, RpcError> {
@@ -405,7 +394,6 @@ where
 
         // Set routing fields for session-based routing
         frame.header.set_client_session_id(self.client_session_id);
-        frame.header.set_retry_count(retry_count);
 
         let (tx, rx) = oneshot::channel();
         {
