@@ -1,3 +1,4 @@
+# Public commands
 build *args:
   cargo xtask build {{args}}
 
@@ -13,9 +14,13 @@ deploy *args:
 describe-stack:
   cargo xtask tools describe-stack
 
+# Internal commands
 repo *args:
   cargo xtask git {{args}}
 
 git *args:
-    @cargo xtask git foreach git {{args}}
+  cargo xtask git foreach git {{args}}
+
+publish *args:
+  cargo xtask publish {{args}}
 

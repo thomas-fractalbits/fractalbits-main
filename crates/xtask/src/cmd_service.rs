@@ -337,7 +337,15 @@ pub fn stop_service(service: ServiceName) -> CmdResult {
         single_service => vec![single_service],
     };
 
-    info!("Killing previous service(s) (if any) ...");
+    info!(
+        "Killing previous {} {} (if any) ...",
+        if services.len() > 1 {
+            "services"
+        } else {
+            "service"
+        },
+        service.as_ref()
+    );
     for service in services {
         let service_name = service.as_ref();
         if run_cmd!(systemctl --user is-active --quiet $service_name.service).is_err() {
@@ -393,7 +401,7 @@ fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
 }
 
 fn get_data_blob_storage_setting() -> DataBlobStorage {
-    if run_cmd!(grep -q multi_az data/etc/api_server.service).is_ok() {
+    if run_cmd!(grep -q multi_az data/etc/api_server.service &>/dev/null).is_ok() {
         DataBlobStorage::S3ExpressMultiAz
     } else {
         DataBlobStorage::S3HybridSingleAz
@@ -511,7 +519,7 @@ fn start_all_services() -> CmdResult {
     info!("Starting supporting services (ddb_local, minio instances)");
     start_service(ServiceName::DdbLocal)?;
     start_service(ServiceName::Minio)?; // Original minio for NSS metadata (port 9000)
-    if run_cmd!(grep -q multi_az data/etc/api_server.service).is_ok() {
+    if run_cmd!(grep -q multi_az data/etc/api_server.service &>/dev/null).is_ok() {
         start_service(ServiceName::MinioAz1)?; // Local AZ data blobs (port 9001)
         start_service(ServiceName::MinioAz2)?; // Remote AZ data blobs (port 9002)
     }

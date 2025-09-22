@@ -105,11 +105,16 @@ pub fn build_all(release: bool) -> CmdResult {
 }
 
 pub fn run_zig_unit_tests() -> CmdResult {
-    let working_dir = run_fun!(pwd)?;
+    if !std::path::Path::new(&format!("{ZIG_REPO_PATH}/build.zig")).exists() {
+        info!("Skipping zig unit-tests");
+        return Ok(());
+    }
+
     for bss_service in ServiceName::all_bss_services() {
         cmd_service::start_service(bss_service)?;
     }
 
+    let working_dir = run_fun!(pwd)?;
     run_cmd! {
         info "Formatting nss_server";
         $working_dir/$ZIG_DEBUG_OUT/bin/nss_server format;

@@ -4,6 +4,7 @@ mod cmd_deploy;
 mod cmd_git;
 mod cmd_nightly;
 mod cmd_precheckin;
+mod cmd_publish;
 mod cmd_run_tests;
 mod cmd_service;
 mod cmd_tool;
@@ -94,6 +95,12 @@ enum Cmd {
         target: DeployTarget,
     },
 
+    #[clap(about = "Build in debug mode and strip debugging symbols for distribution")]
+    Publish {
+        #[clap(subcommand)]
+        command: PublishCommand,
+    },
+
     #[clap(about = "Run various test suites")]
     RunTests {
         #[clap(subcommand)]
@@ -128,6 +135,14 @@ pub enum ZigCommand {
 pub enum DeployCommand {
     #[clap(about = "Cleanup builds bucket (empty and delete)")]
     Cleanup,
+}
+
+#[derive(Parser, Clone)]
+pub enum PublishCommand {
+    #[clap(about = "Build and strip binaries")]
+    Build,
+    #[clap(about = "Add pre-built binaries to git")]
+    GitAdd,
 }
 
 #[derive(Clone, AsRefStr, EnumString, clap::ValueEnum)]
@@ -417,6 +432,10 @@ async fn main() -> CmdResult {
         } => match command {
             Some(DeployCommand::Cleanup) => cmd_deploy::cleanup_builds_bucket()?,
             None => cmd_deploy::run_cmd_deploy(target, release)?,
+        },
+        Cmd::Publish { command } => match command {
+            PublishCommand::Build => cmd_publish::run_build_and_strip()?,
+            PublishCommand::GitAdd => cmd_publish::run_git_add()?,
         },
         Cmd::RunTests { test_type } => {
             let test_type = test_type.unwrap_or(TestType::All);
