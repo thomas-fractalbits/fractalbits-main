@@ -108,7 +108,7 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
     BUILD_INFO.get_or_init(cmd_build::build_info);
     let build_info = BUILD_INFO.get().unwrap();
 
-    // Step 1: Build Rust binaries with size optimization flags (release mode)
+    // Build Rust binaries with size optimization flags (release mode)
     run_cmd! {
         info "Building Rust binaries for generic x86_64 (size-optimized release mode)...";
         RUSTFLAGS="-C target-cpu=x86-64 -C opt-level=z -C codegen-units=1 -C strip=symbols"
@@ -117,7 +117,7 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
             --workspace --exclude fractalbits-bootstrap --exclude rewrk*;
     }?;
 
-    // Step 2: Build Zig binaries for portable x86_64
+    // Build Zig binaries for portable x86_64
     // Note: Using x86_64_v3 which supports 128-bit atomics and is widely compatible
     if Path::new(ZIG_REPO_PATH).exists() {
         run_cmd! {
@@ -132,24 +132,7 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
         }?;
     }
 
-    // Step 3: Strip debug symbols from Rust binaries
-    run_cmd! {
-        info "Stripping debug symbols from Rust binaries...";
-        find target/release -maxdepth 1 -type f -executable ! -name "*.d"
-            -exec strip --strip-all "{}" +;
-    }?;
-
-    // Step 4: Strip debug symbols from Zig binaries
-    if Path::new("target/release/zig-out/bin").exists() {
-        run_cmd! {
-            info "Stripping debug symbols from Zig binaries...";
-            find target/release/zig-out/bin -type f -executable
-                -exec strip --strip-all "{}" +;
-        }?;
-    }
-
-    // Step 5: Copy stripped binaries to prebuilt directory
-    info!("Copying stripped binaries to prebuilt directory...");
+    info!("Copying binaries to prebuilt directory...");
     run_cmd!(mkdir -p prebuilt)?;
     for bin in [
         "nss_role_agent",
@@ -161,6 +144,13 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
         run_cmd!(cp -f target/release/$bin prebuilt/)?;
     }
 
-    info!("Build, strip, and copy complete");
+    // Strip debug symbols
+    run_cmd! {
+        info "Stripping debug symbols...";
+        find prebuilt -maxdepth 1 -type f -executable ! -name "*.d"
+            -exec strip --strip-all "{}" +;
+    }?;
+
+    info!("Prebuilt binaries are ready");
     Ok(())
 }
