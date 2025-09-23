@@ -67,10 +67,10 @@ async fn main() {
         ))
         .init();
 
-    eprintln!(
-        "build info: {}",
-        option_env!("BUILD_INFO").unwrap_or_default()
-    );
+    let main_build_info = option_env!("MAIN_BUILD_INFO").unwrap_or("unknown");
+    let build_timestamp = option_env!("BUILD_TIMESTAMP").unwrap_or("unknown");
+    let build_info = format!("{}, build time: {}", main_build_info, build_timestamp);
+    eprintln!("build info: {}", build_info);
 
     let opt = Opt::parse();
     let mut config = match opt.config_file {

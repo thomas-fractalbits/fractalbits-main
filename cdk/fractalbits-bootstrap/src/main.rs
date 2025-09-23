@@ -56,7 +56,7 @@ enum Command {
         rss_endpoint: String,
     },
 
-    #[clap(about = "Run on api_server instance to bootstrap fractalbits service(s)")]
+    #[clap(about = "Run on gui_server instance to bootstrap fractalbits service(s)")]
     GuiServer {
         #[clap(
             long,
@@ -172,10 +172,10 @@ fn main() -> CmdResult {
         .filter(None, log::LevelFilter::Info)
         .init();
 
-    info!(
-        "build info: {}",
-        option_env!("BUILD_INFO").unwrap_or_default()
-    );
+    let main_build_info = option_env!("MAIN_BUILD_INFO").unwrap_or("unknown");
+    let build_timestamp = option_env!("BUILD_TIMESTAMP").unwrap_or("unknown");
+    let build_info = format!("{}, build time: {}", main_build_info, build_timestamp);
+    eprintln!("build info: {}", build_info);
 
     let opts = Opts::parse();
     let for_bench = opts.common.for_bench;

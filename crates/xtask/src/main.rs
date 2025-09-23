@@ -9,7 +9,7 @@ mod cmd_service;
 mod cmd_tool;
 
 use clap::{ArgAction, Parser};
-use cmd_build::{BUILD_INFO, BuildMode};
+use cmd_build::BuildMode;
 use cmd_lib::*;
 use strum::{AsRefStr, EnumString};
 
@@ -331,7 +331,6 @@ async fn main() -> CmdResult {
         .format_target(false)
         .init();
     rlimit::increase_nofile_limit(1000000).unwrap();
-    BUILD_INFO.get_or_init(cmd_build::build_info);
 
     match Cmd::parse() {
         Cmd::Build { command, release } => match command {
