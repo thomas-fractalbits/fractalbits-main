@@ -87,16 +87,8 @@ enum Cmd {
     Tools(ToolKind),
 
     #[clap(about = "Deploy binaries to s3 builds bucket")]
-    Deploy {
-        #[clap(subcommand)]
-        command: Option<DeployCommand>,
-
-        #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
-        release: bool,
-
-        #[clap(long, default_value = "all", value_enum)]
-        target: DeployTarget,
-    },
+    #[clap(subcommand)]
+    Deploy(DeployCommand),
 
     #[clap(about = "Run various test suites")]
     RunTests {
@@ -132,7 +124,19 @@ pub enum ZigCommand {
 
 #[derive(Parser, Clone)]
 pub enum DeployCommand {
-    #[clap(about = "Cleanup builds bucket (empty and delete)")]
+    #[clap(about = "Build binaries for deployment")]
+    Build {
+        #[clap(long, default_value = "all", value_enum)]
+        target: DeployTarget,
+
+        #[clap(long, action=ArgAction::Set, default_value = "true", num_args = 0..=1)]
+        release: bool,
+    },
+
+    #[clap(about = "Upload prebuilt binaries to s3 builds bucket")]
+    Upload,
+
+    #[clap(about = "Cleanup s3 builds bucket (empty and delete)")]
     Cleanup,
 }
 
@@ -193,12 +197,12 @@ pub enum DataBlobStorage {
 
 #[derive(AsRefStr, EnumString, Copy, Clone, Default, PartialEq, clap::ValueEnum)]
 pub enum DeployTarget {
-    #[default]
-    All,
     Zig,
     Rust,
     Bootstrap,
     Ui,
+    #[default]
+    All,
 }
 
 #[derive(AsRefStr, EnumString, Copy, Clone, Default)]
@@ -430,13 +434,10 @@ async fn main() -> CmdResult {
             }
         },
         Cmd::Tools(tool_kind) => cmd_tool::run_cmd_tool(tool_kind)?,
-        Cmd::Deploy {
-            command,
-            target,
-            release,
-        } => match command {
-            Some(DeployCommand::Cleanup) => cmd_deploy::cleanup_builds_bucket()?,
-            None => cmd_deploy::run_cmd_deploy(target, release)?,
+        Cmd::Deploy(deploy_cmd) => match deploy_cmd {
+            DeployCommand::Build { target, release } => cmd_deploy::build(target, release)?,
+            DeployCommand::Upload => cmd_deploy::upload()?,
+            DeployCommand::Cleanup => cmd_deploy::cleanup()?,
         },
         Cmd::RunTests { test_type } => {
             let test_type = test_type.unwrap_or(TestType::All);

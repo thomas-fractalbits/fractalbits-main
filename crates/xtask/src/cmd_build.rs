@@ -8,7 +8,7 @@ pub static BUILD_ENVS: LazyLock<Vec<String>> =
     LazyLock::new(|| build_envs().expect("failed to initialize BUILD_ENVS"));
 
 pub fn get_build_envs() -> &'static Vec<String> {
-    &*BUILD_ENVS
+    &BUILD_ENVS
 }
 pub const ZIG_REPO_PATH: &str = "core";
 pub const UI_REPO_PATH: &str = "ui";

@@ -49,19 +49,7 @@ const RUST_BINS: &[&str] = &[
 
 const ZIG_BINS: &[&str] = &["nss_server", "bss_server", "test_art"];
 
-pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdResult {
-    let bucket_name = get_build_bucket_name()?;
-    let bucket = format!("s3://{bucket_name}");
-
-    // Check if the bucket exists; create if it doesn't
-    let bucket_exists = run_cmd!(aws s3api head-bucket --bucket $bucket_name &>/dev/null).is_ok();
-    if !bucket_exists {
-        run_cmd! {
-            info "Creating bucket $bucket";
-            aws s3 mb $bucket
-        }?;
-    }
-
+pub fn build(deploy_target: DeployTarget, release_mode: bool) -> CmdResult {
     let (zig_build_opt, rust_build_opt, build_dir) = if release_mode {
         ("--release=safe", "--release", "release")
     } else {
@@ -70,12 +58,12 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
 
     // Create deploy directories for all CPU targets
     for target in CPU_TARGETS {
-        let deploy_dir = format!("data/deploy/{}/{}", target.arch, target.name);
+        let deploy_dir = format!("prebuilt/deploy/{}/{}", target.arch, target.name);
         run_cmd!(mkdir -p $deploy_dir)?;
     }
 
     // Build fractalbits-bootstrap separately for each architecture without CPU flags
-    if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Bootstrap {
+    if deploy_target == DeployTarget::Bootstrap || deploy_target == DeployTarget::All {
         let build_envs = cmd_build::get_build_envs();
         for arch in ["x86_64", "aarch64"] {
             let rust_target = format!("{arch}-unknown-linux-gnu");
@@ -87,14 +75,14 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
 
             // Copy fractalbits-bootstrap to arch-level directory
             let src_path = format!("target/{}/{}/fractalbits-bootstrap", rust_target, build_dir);
-            let dst_path = format!("data/deploy/{}/fractalbits-bootstrap", arch);
-            run_cmd!(mkdir -p data/deploy/$arch)?;
+            let dst_path = format!("prebuilt/deploy/{}/fractalbits-bootstrap", arch);
+            run_cmd!(mkdir -p prebuilt/deploy/$arch)?;
             run_cmd!(cp $src_path $dst_path)?;
         }
     }
 
     // Build other Rust projects with CPU-specific optimizations
-    if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Rust {
+    if deploy_target == DeployTarget::Rust || deploy_target == DeployTarget::All {
         info!("Building Rust projects for all CPU targets");
         let build_envs = cmd_build::get_build_envs();
 
@@ -109,7 +97,7 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
             }?;
 
             // Copy Rust binaries to deploy directory (excluding fractalbits-bootstrap)
-            let deploy_dir = format!("data/deploy/{}/{}", target.arch, target.name);
+            let deploy_dir = format!("prebuilt/deploy/{}/{}", target.arch, target.name);
             for bin in RUST_BINS {
                 if *bin != "fractalbits-bootstrap" {
                     let src_path = format!("target/{}/{}/{}", rust_target, build_dir, bin);
@@ -121,7 +109,7 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
     }
 
     // Build Zig projects for all CPU targets
-    if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Zig {
+    if deploy_target == DeployTarget::Zig || deploy_target == DeployTarget::All {
         info!("Building Zig projects for all CPU targets");
         let build_envs = cmd_build::get_build_envs();
 
@@ -143,7 +131,7 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
             }?;
 
             // Copy Zig binaries to deploy directory
-            let deploy_dir = format!("data/deploy/{}/{}", target.arch, target.name);
+            let deploy_dir = format!("prebuilt/deploy/{}/{}", target.arch, target.name);
             for bin in ZIG_BINS {
                 let src_path = format!("{}/bin/{}", zig_out_dir, bin);
                 let dst_path = format!("{}/{}", deploy_dir, bin);
@@ -153,26 +141,19 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
     }
 
     // Build and copy UI
-    if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Ui {
+    if deploy_target == DeployTarget::Ui || deploy_target == DeployTarget::All {
         let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
         cmd_build::build_ui(&region)?;
-        run_cmd!(cp -r ui/dist data/deploy/ui)?;
+        run_cmd!(cp -r ui/dist prebuilt/deploy/ui)?;
     }
 
-    // Deploy warp binary for each architecture
-    deploy_warp_binaries()?;
-
-    // Sync all binaries to S3 at once
-    run_cmd! {
-        info "Syncing all binaries to S3 bucket $bucket";
-        aws s3 sync --quiet data/deploy $bucket;
-        info "Syncing all binaries done";
-    }?;
+    // Build (extract) warp binary for each architecture
+    build_warp_binaries()?;
 
     Ok(())
 }
 
-fn deploy_warp_binaries() -> CmdResult {
+fn build_warp_binaries() -> CmdResult {
     for arch in ["x86_64", "aarch64"] {
         let linux_arch = if arch == "aarch64" { "arm64" } else { "x86_64" };
 
@@ -201,7 +182,7 @@ fn deploy_warp_binaries() -> CmdResult {
         }?;
 
         // Extract warp to arch-level directory
-        let deploy_dir = format!("data/deploy/{}", arch);
+        let deploy_dir = format!("prebuilt/deploy/{}", arch);
         run_cmd! {
             info "Extracting warp binary to $deploy_dir for $linux_arch";
             tar -xzf third_party/$warp_file -C $deploy_dir warp;
@@ -211,13 +192,35 @@ fn deploy_warp_binaries() -> CmdResult {
     Ok(())
 }
 
+pub fn upload() -> CmdResult {
+    // Check/create S3 bucket and sync
+    let bucket_name = get_build_bucket_name()?;
+    let bucket = format!("s3://{bucket_name}");
+
+    // Check if the bucket exists; create if it doesn't
+    let bucket_exists = run_cmd!(aws s3api head-bucket --bucket $bucket_name &>/dev/null).is_ok();
+    if !bucket_exists {
+        run_cmd! {
+            info "Creating bucket $bucket";
+            aws s3 mb $bucket
+        }?;
+    }
+
+    run_cmd! {
+        info "Syncing all binaries to S3 bucket $bucket";
+        aws s3 sync prebuilt/deploy $bucket;
+        info "Syncing all binaries done";
+    }?;
+    Ok(())
+}
+
 fn get_build_bucket_name() -> FunResult {
     let region = run_fun!(aws configure list | grep region | awk r"{print $2}")?;
     let account_id = run_fun!(aws sts get-caller-identity --query Account --output text)?;
     Ok(format!("fractalbits-builds-{region}-{account_id}"))
 }
 
-pub fn cleanup_builds_bucket() -> CmdResult {
+pub fn cleanup() -> CmdResult {
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
 
