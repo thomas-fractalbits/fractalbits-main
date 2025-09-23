@@ -21,6 +21,3 @@ repo *args:
 git *args:
   cargo xtask git foreach git {{args}}
 
-publish *args:
-  cargo xtask publish {{args}}
-

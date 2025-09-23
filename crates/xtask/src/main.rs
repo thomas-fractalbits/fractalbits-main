@@ -4,7 +4,6 @@ mod cmd_deploy;
 mod cmd_git;
 mod cmd_nightly;
 mod cmd_precheckin;
-mod cmd_publish;
 mod cmd_run_tests;
 mod cmd_service;
 mod cmd_tool;
@@ -18,6 +17,7 @@ pub const TS_FMT: &str = "%b %d %H:%M:%.S";
 // Need to match with api_server's default config to make authentication work
 pub const UI_DEFAULT_REGION: &str = "localdev";
 pub const ZIG_DEBUG_OUT: &str = "target/debug/zig-out";
+pub const ZIG_RELEASE_OUT: &str = "target/release/zig-out";
 
 #[derive(Parser)]
 #[clap(name = "xtask", about = "Misc project related tasks")]
@@ -98,12 +98,6 @@ enum Cmd {
         target: DeployTarget,
     },
 
-    #[clap(about = "Build in debug mode and strip debugging symbols for distribution")]
-    Publish {
-        #[clap(subcommand)]
-        command: PublishCommand,
-    },
-
     #[clap(about = "Run various test suites")]
     RunTests {
         #[clap(subcommand)]
@@ -126,6 +120,8 @@ pub enum BuildCommand {
     },
     #[clap(about = "Build only rust components")]
     Rust,
+    #[clap(about = "Build prebuilt binaries")]
+    Prebuilt,
 }
 
 #[derive(Parser, Clone)]
@@ -138,14 +134,6 @@ pub enum ZigCommand {
 pub enum DeployCommand {
     #[clap(about = "Cleanup builds bucket (empty and delete)")]
     Cleanup,
-}
-
-#[derive(Parser, Clone)]
-pub enum PublishCommand {
-    #[clap(about = "Build and strip binaries")]
-    Build,
-    #[clap(about = "Add pre-built binaries to git")]
-    GitAdd,
 }
 
 #[derive(Clone, AsRefStr, EnumString, clap::ValueEnum)]
@@ -350,7 +338,9 @@ async fn main() -> CmdResult {
             Some(build_cmd) => match build_cmd {
                 BuildCommand::All => cmd_build::build_all(release)?,
                 BuildCommand::Zig { command } => match command {
-                    Some(ZigCommand::Test) => cmd_build::run_zig_unit_tests(InitConfig::default())?,
+                    Some(ZigCommand::Test) => {
+                        cmd_precheckin::run_zig_unit_tests(InitConfig::default())?
+                    }
                     None => {
                         let build_mode = cmd_build::build_mode(release);
                         cmd_build::build_zig_servers(build_mode)?;
@@ -360,6 +350,7 @@ async fn main() -> CmdResult {
                     let build_mode = cmd_build::build_mode(release);
                     cmd_build::build_rust_servers(build_mode)?;
                 }
+                BuildCommand::Prebuilt => cmd_build::build_prebuilt(release)?,
             },
             None => {
                 // Default to building all components
@@ -447,10 +438,6 @@ async fn main() -> CmdResult {
         } => match command {
             Some(DeployCommand::Cleanup) => cmd_deploy::cleanup_builds_bucket()?,
             None => cmd_deploy::run_cmd_deploy(target, release)?,
-        },
-        Cmd::Publish { command } => match command {
-            PublishCommand::Build => cmd_publish::run_build_and_strip()?,
-            PublishCommand::GitAdd => cmd_publish::run_git_add()?,
         },
         Cmd::RunTests { test_type } => {
             let test_type = test_type.unwrap_or(TestType::All);

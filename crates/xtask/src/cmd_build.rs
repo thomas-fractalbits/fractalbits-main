@@ -104,33 +104,63 @@ pub fn build_all(release: bool) -> CmdResult {
     Ok(())
 }
 
-pub fn run_zig_unit_tests(init_config: InitConfig) -> CmdResult {
-    if !std::path::Path::new(&format!("{ZIG_REPO_PATH}/build.zig")).exists() {
-        info!("Skipping zig unit-tests");
-        return Ok(());
-    }
+pub fn build_prebuilt(_release: bool) -> CmdResult {
+    BUILD_INFO.get_or_init(cmd_build::build_info);
+    let build_info = BUILD_INFO.get().unwrap();
 
-    cmd_service::init_service(ServiceName::All, BuildMode::Debug, init_config)?;
-
-    // Start all BSS instances for testing
-    for id in 0..init_config.bss_count {
-        cmd_service::start_bss_instance(id)?;
-    }
-
-    let working_dir = run_fun!(pwd)?;
+    // Step 1: Build Rust binaries with size optimization flags (release mode)
     run_cmd! {
-        info "Formatting nss_server";
-        $working_dir/$ZIG_DEBUG_OUT/bin/nss_server format;
+        info "Building Rust binaries for generic x86_64 (size-optimized release mode)...";
+        RUSTFLAGS="-C target-cpu=x86-64 -C opt-level=z -C codegen-units=1 -C strip=symbols"
+        BUILD_INFO=$build_info
+            cargo build --release
+            --workspace --exclude fractalbits-bootstrap --exclude rewrk*;
     }?;
 
-    run_cmd! {
-        info "Running zig unit tests";
-        cd $ZIG_REPO_PATH;
-        zig build -p ../$ZIG_DEBUG_OUT test --summary all 2>&1;
-    }?;
-    // Stop all BSS instances
-    cmd_service::stop_service(ServiceName::Bss)?;
+    // Step 2: Build Zig binaries for portable x86_64
+    // Note: Using x86_64_v3 which supports 128-bit atomics and is widely compatible
+    if Path::new(ZIG_REPO_PATH).exists() {
+        run_cmd! {
+            info "Building Zig binaries for x86_64_v3 (release mode)...";
+            cd $ZIG_REPO_PATH;
+            zig build -p ../$ZIG_RELEASE_OUT
+                -Dbuild_info=$build_info
+                -Doptimize=ReleaseSafe
+                -Dtarget=x86_64-linux-gnu
+                -Dcpu=x86_64_v3 2>&1;
+            info "Zig build complete";
+        }?;
+    }
 
-    info!("Zig unit tests completed successfully");
+    // Step 3: Strip debug symbols from Rust binaries
+    run_cmd! {
+        info "Stripping debug symbols from Rust binaries...";
+        find target/release -maxdepth 1 -type f -executable ! -name "*.d"
+            -exec strip --strip-all "{}" +;
+    }?;
+
+    // Step 4: Strip debug symbols from Zig binaries
+    if Path::new("target/release/zig-out/bin").exists() {
+        run_cmd! {
+            info "Stripping debug symbols from Zig binaries...";
+            find target/release/zig-out/bin -type f -executable
+                -exec strip --strip-all "{}" +;
+        }?;
+    }
+
+    // Step 5: Copy stripped binaries to prebuilt directory
+    info!("Copying stripped binaries to prebuilt directory...");
+    run_cmd!(mkdir -p prebuilt)?;
+    for bin in [
+        "nss_role_agent",
+        "root_server",
+        "rss_admin",
+        "zig-out/bin/bss_server",
+        "zig-out/bin/nss_server",
+    ] {
+        run_cmd!(cp -f target/release/$bin prebuilt/)?;
+    }
+
+    info!("Build, strip, and copy complete");
     Ok(())
 }
