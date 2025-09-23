@@ -107,13 +107,16 @@ pub fn build_all(release: bool) -> CmdResult {
 pub fn build_prebuilt(_release: bool) -> CmdResult {
     BUILD_INFO.get_or_init(cmd_build::build_info);
     let build_info = BUILD_INFO.get().unwrap();
+    let build_target = "x86_64-unknown-linux-gnu";
+    let build_dir = format!("target/{build_target}/release");
 
-    // Build Rust binaries with size optimization flags (release mode)
+    // Build Rust binaries with size optimization flags (release mode) using zigbuild for GLIBC compatibility
+    // Using x86_64_v3 to match Zig build and provide better performance
     run_cmd! {
-        info "Building Rust binaries for generic x86_64 (size-optimized release mode)...";
-        RUSTFLAGS="-C target-cpu=x86-64 -C opt-level=z -C codegen-units=1 -C strip=symbols"
+        info "Building Rust binaries for x86_64_v3 (size-optimized release mode with zigbuild)...";
+        RUSTFLAGS="-C target-cpu=x86-64-v3 -C opt-level=z -C codegen-units=1 -C strip=symbols"
         BUILD_INFO=$build_info
-            cargo build --release
+            cargo zigbuild --release --target $build_target
             --workspace --exclude fractalbits-bootstrap --exclude rewrk*;
     }?;
 
@@ -123,7 +126,7 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
         run_cmd! {
             info "Building Zig binaries for x86_64_v3 (release mode)...";
             cd $ZIG_REPO_PATH;
-            zig build -p ../$ZIG_RELEASE_OUT
+            zig build -p ../$build_dir/zig-out
                 -Dbuild_info=$build_info
                 -Doptimize=ReleaseSafe
                 -Dtarget=x86_64-linux-gnu
@@ -134,6 +137,8 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
 
     info!("Copying binaries to prebuilt directory...");
     run_cmd!(mkdir -p prebuilt)?;
+
+    // Copy binaries from build_dir
     for bin in [
         "nss_role_agent",
         "root_server",
@@ -141,7 +146,7 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
         "zig-out/bin/bss_server",
         "zig-out/bin/nss_server",
     ] {
-        run_cmd!(cp -f target/release/$bin prebuilt/)?;
+        run_cmd!(cp -f $build_dir/$bin prebuilt/)?;
     }
 
     // Strip debug symbols
