@@ -50,7 +50,7 @@ const RUST_BINS: &[&str] = &[
 const ZIG_BINS: &[&str] = &["nss_server", "bss_server", "test_art"];
 
 pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdResult {
-    let build_info = BUILD_INFO.get().unwrap();
+    let main_build_info = BUILD_INFO.get().unwrap();
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
 
@@ -81,7 +81,7 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
             let rust_target = format!("{arch}-unknown-linux-gnu");
             run_cmd! {
                 info "Building fractalbits-bootstrap for $arch";
-                BUILD_INFO=$build_info
+                BUILD_INFO=$main_build_info
                 cargo zigbuild -p fractalbits-bootstrap --target $rust_target $rust_build_opt;
             }?;
 
@@ -96,15 +96,42 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
     // Build other Rust projects with CPU-specific optimizations
     if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Rust {
         info!("Building Rust projects for all CPU targets");
+
+        // Get build info for submodules
+        let ha_build_info = cmd_build::get_combined_build_info("crates/ha");
+        let rs_build_info = cmd_build::get_combined_build_info("crates/root_server");
+
         for target in CPU_TARGETS {
             let rust_cpu = target.rust_cpu;
             let rust_target = target.rust_target;
 
+            // Build binaries from crates/ha with combined build info
+            if std::path::Path::new("crates/ha").exists() {
+                run_cmd! {
+                    info "Building nss_role_agent for $rust_target ($rust_cpu)";
+                    RUSTFLAGS="-C target-cpu=$rust_cpu"
+                    BUILD_INFO=$ha_build_info
+                    cargo zigbuild --target $rust_target $rust_build_opt -p nss_role_agent;
+                }?;
+            }
+
+            // Build binaries from crates/root_server with combined build info
+            if std::path::Path::new("crates/root_server").exists() {
+                run_cmd! {
+                    info "Building root_server and rss_admin for $rust_target ($rust_cpu)";
+                    RUSTFLAGS="-C target-cpu=$rust_cpu"
+                    BUILD_INFO=$rs_build_info
+                    cargo zigbuild --target $rust_target $rust_build_opt -p root_server -p rss_admin;
+                }?;
+            }
+
+            // Build main repo binaries
             run_cmd! {
-                info "Building Rust projects for $rust_target ($rust_cpu)";
+                info "Building main repo Rust projects for $rust_target ($rust_cpu)";
                 RUSTFLAGS="-C target-cpu=$rust_cpu"
-                BUILD_INFO=$build_info
-                cargo zigbuild --target $rust_target $rust_build_opt;
+                BUILD_INFO=$main_build_info
+                cargo zigbuild --target $rust_target $rust_build_opt
+                    -p api_server -p rewrk_rpc;
             }?;
 
             // Copy Rust binaries to deploy directory (excluding fractalbits-bootstrap)
@@ -122,6 +149,8 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
     // Build Zig projects for all CPU targets
     if deploy_target == DeployTarget::All || deploy_target == DeployTarget::Zig {
         info!("Building Zig projects for all CPU targets");
+        let zig_build_info = cmd_build::get_combined_build_info(cmd_build::ZIG_REPO_PATH);
+
         for target in CPU_TARGETS {
             let zig_out_dir = if target.arch == "aarch64" {
                 format!("target/aarch64-unknown-linux-gnu/{build_dir}/zig-out")
@@ -135,7 +164,7 @@ pub fn run_cmd_deploy(deploy_target: DeployTarget, release_mode: bool) -> CmdRes
                 info "Building Zig projects for $zig_target ($zig_cpu)";
                 cd ./core;
                 zig build -p ../$zig_out_dir
-                    -Dbuild_info=$build_info
+                    -Dbuild_info=$zig_build_info
                     -Dtarget=$zig_target -Dcpu=$zig_cpu $zig_build_opt 2>&1;
             }?;
 

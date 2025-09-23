@@ -30,7 +30,60 @@ pub fn build_info() -> String {
     } else {
         "+"
     };
-    format!("{git_branch}:{git_rev}{dirty}, build time: {build_timestamp}")
+    format!("main:{git_branch}-{git_rev}{dirty}, build time: {build_timestamp}")
+}
+
+pub fn build_info_for_repo(repo_path: &str) -> String {
+    if repo_path == "." || repo_path.is_empty() {
+        return build_info();
+    }
+
+    // Check if the repo path exists
+    if !Path::new(repo_path).exists() {
+        return String::new();
+    }
+
+    let git_branch = run_fun!(cd $repo_path; git branch --show-current)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let git_rev = run_fun!(cd $repo_path; git rev-parse --short HEAD)
+        .unwrap_or_else(|_| "unknown".to_string());
+    let dirty = if run_cmd!(cd $repo_path; git diff-index --quiet HEAD).is_ok() {
+        ""
+    } else {
+        "+"
+    };
+
+    // Extract the last component of the repo path for the label
+    let repo_name = Path::new(repo_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(repo_path);
+
+    format!("{repo_name}:{git_branch}-{git_rev}{dirty}")
+}
+
+pub fn get_combined_build_info(repo_path: &str) -> String {
+    let main_info = BUILD_INFO.get().unwrap();
+    if repo_path == "." || repo_path.is_empty() {
+        return main_info.clone();
+    }
+
+    let repo_info = build_info_for_repo(repo_path);
+    if repo_info.is_empty() {
+        return main_info.clone();
+    }
+
+    // Extract timestamp from main_info
+    let timestamp_part = main_info.split(", build time: ").nth(1).unwrap_or("");
+
+    // Extract the main repo part without timestamp
+    let main_part = main_info
+        .split(", build time: ")
+        .next()
+        .unwrap_or(main_info);
+
+    // Combine: main:branch-rev/submodule:branch-rev, build time: timestamp
+    format!("{main_part}/{repo_info}, build time: {timestamp_part}")
 }
 
 pub fn build_bench_rpc() -> CmdResult {
@@ -47,7 +100,7 @@ pub fn build_zig_servers(mode: BuildMode) -> CmdResult {
         return Ok(());
     }
 
-    let build_info = BUILD_INFO.get().unwrap();
+    let build_info = get_combined_build_info(ZIG_REPO_PATH);
     let opts = match mode {
         BuildMode::Debug => "",
         BuildMode::Release => "--release=safe",
@@ -62,11 +115,35 @@ pub fn build_zig_servers(mode: BuildMode) -> CmdResult {
 
 pub fn build_rust_servers(mode: BuildMode) -> CmdResult {
     let build_info = BUILD_INFO.get().unwrap();
+    let release_flag = match mode {
+        BuildMode::Release => "--release",
+        BuildMode::Debug => "",
+    };
+
+    if Path::new("crates/ha").exists() {
+        let ha_build_info = get_combined_build_info("crates/ha");
+        run_cmd! {
+            info "Building nss_role_agent ...";
+            BUILD_INFO=$ha_build_info cargo build $release_flag -p nss_role_agent;
+        }?;
+    }
+
+    if Path::new("crates/root_server").exists() {
+        let rs_build_info = get_combined_build_info("crates/root_server");
+        run_cmd! {
+            info "Building root_server and rss_admin ...";
+            BUILD_INFO=$rs_build_info cargo build $release_flag -p root_server -p rss_admin;
+        }?;
+    }
+
     match mode {
         BuildMode::Debug => {
             run_cmd! {
                 info "Building rust-based servers in debug mode ...";
                 BUILD_INFO=$build_info cargo build --workspace
+                    --exclude nss_role_agent
+                    --exclude root_server
+                    --exclude rss_admin
                     --exclude fractalbits-bootstrap
                     --exclude rewrk*;
             }
@@ -74,7 +151,11 @@ pub fn build_rust_servers(mode: BuildMode) -> CmdResult {
         BuildMode::Release => {
             run_cmd! {
                 info "Building rust-based servers in release mode ...";
-                BUILD_INFO=$build_info cargo build --release;
+                BUILD_INFO=$build_info cargo build --workspace
+                    --exclude nss_role_agent
+                    --exclude root_server
+                    --exclude rss_admin
+                    --release;
             }
         }
     }
@@ -106,39 +187,38 @@ pub fn build_all(release: bool) -> CmdResult {
 
 pub fn build_prebuilt(_release: bool) -> CmdResult {
     BUILD_INFO.get_or_init(cmd_build::build_info);
-    let build_info = BUILD_INFO.get().unwrap();
     let build_target = "x86_64-unknown-linux-gnu";
     let build_dir = format!("target/{build_target}/release");
+    let ha_build_info = get_combined_build_info("crates/ha");
+    let rs_build_info = get_combined_build_info("crates/root_server");
+    let rustflags = "-C target-cpu=x86-64-v3 -C opt-level=z -C codegen-units=1 -C strip=symbols";
 
-    // Build Rust binaries with size optimization flags (release mode) using zigbuild for GLIBC compatibility
-    // Using x86_64_v3 to match Zig build and provide better performance
     run_cmd! {
-        info "Building Rust binaries for x86_64_v3 (size-optimized release mode with zigbuild)...";
-        RUSTFLAGS="-C target-cpu=x86-64-v3 -C opt-level=z -C codegen-units=1 -C strip=symbols"
-        BUILD_INFO=$build_info
-            cargo zigbuild --release --target $build_target
-            --workspace --exclude fractalbits-bootstrap --exclude rewrk*;
+        info "Building nss_role_agent for x86_64_v3 (size-optimized release mode with zigbuild)...";
+        RUSTFLAGS=$rustflags
+        BUILD_INFO=$ha_build_info
+            cargo zigbuild --release --target $build_target -p nss_role_agent;
+
+        info "Building root_server and rss_admin for x86_64_v3 (size-optimized release mode with zigbuild)...";
+        RUSTFLAGS=$rustflags
+        BUILD_INFO=$rs_build_info
+            cargo zigbuild --release --target $build_target -p root_server -p rss_admin;
     }?;
 
-    // Build Zig binaries for portable x86_64
-    // Note: Using x86_64_v3 which supports 128-bit atomics and is widely compatible
-    if Path::new(ZIG_REPO_PATH).exists() {
-        run_cmd! {
-            info "Building Zig binaries for x86_64_v3 (release mode)...";
-            cd $ZIG_REPO_PATH;
-            zig build -p ../$build_dir/zig-out
-                -Dbuild_info=$build_info
-                -Doptimize=ReleaseSafe
-                -Dtarget=x86_64-linux-gnu
-                -Dcpu=x86_64_v3 2>&1;
-            info "Zig build complete";
-        }?;
-    }
+    let zig_build_info = get_combined_build_info(ZIG_REPO_PATH);
+    run_cmd! {
+        info "Building Zig binaries for x86_64_v3 (release mode)...";
+        cd $ZIG_REPO_PATH;
+        zig build -p ../$build_dir/zig-out
+            -Dbuild_info=$zig_build_info
+            -Doptimize=ReleaseSafe
+            -Dtarget=x86_64-linux-gnu
+            -Dcpu=x86_64_v3 2>&1;
+        info "Zig build complete";
+    }?;
 
     info!("Copying binaries to prebuilt directory...");
     run_cmd!(mkdir -p prebuilt)?;
-
-    // Copy binaries from build_dir
     for bin in [
         "nss_role_agent",
         "root_server",
@@ -149,7 +229,6 @@ pub fn build_prebuilt(_release: bool) -> CmdResult {
         run_cmd!(cp -f $build_dir/$bin prebuilt/)?;
     }
 
-    // Strip debug symbols
     run_cmd! {
         info "Stripping debug symbols...";
         find prebuilt -maxdepth 1 -type f -executable ! -name "*.d"
