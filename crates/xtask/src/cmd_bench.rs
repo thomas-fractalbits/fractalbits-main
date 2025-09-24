@@ -31,6 +31,10 @@ pub fn run_cmd_bench(
             *service_name = ServiceName::Nss;
             build_bench_rpc()?;
             init_service(*service_name, build_mode, InitConfig::default())?;
+            for id in 0..6 {
+                start_bss_instance(id)?;
+            }
+
             start_service(ServiceName::Nss)?;
             uri = "127.0.0.1:8087";
             bench_exe = "./target/release/rewrk_rpc";
@@ -76,7 +80,7 @@ pub fn run_cmd_bench(
         }
     }
 
-    let duration_secs = 30;
+    let duration_secs = 300;
     let perf_handle = if with_flame_graph {
         run_cmd! {
             info "Start perf in the background ...";
@@ -108,6 +112,6 @@ pub fn run_cmd_bench(
 
     // stop service after benchmark to save cpu power
     stop_service(*service_name)?;
-
+    stop_service(ServiceName::Bss)?;
     Ok(())
 }

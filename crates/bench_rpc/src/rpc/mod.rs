@@ -24,7 +24,7 @@ mod user_input;
 
 pub type Handle = JoinHandle<anyhow::Result<WorkerResult>>;
 
-const TEST_BUCKET_ROOT_BLOB_NAME: &str = "947ef2be-44b2-4ac2-969b-2574eb85662b";
+const TEST_BUCKET_ROOT_BLOB_NAME: &str = "12345678-1234567890abcdef-1234";
 const INODE_SIZE: usize = 187;
 
 fn read_keys(filename: &str, num_tasks: usize, keys_limit: usize) -> Vec<VecDeque<String>> {
@@ -70,8 +70,7 @@ pub async fn start_tasks_for_nss(
         let workload = workload.clone();
         let handle = match workload.as_str() {
             "read" => tokio::spawn(benchmark_nss_read(deadline, rpc_client, keys, io_depth)),
-            "write" => tokio::spawn(benchmark_nss_write(deadline, rpc_client, keys, io_depth)),
-            _ => unimplemented!(),
+            _ => tokio::spawn(benchmark_nss_write(deadline, rpc_client, keys, io_depth)),
         };
 
         handles.push(handle);
