@@ -42,18 +42,19 @@ const GIT_REPOS: &[Repo] = &[
         url: "https://github.com/fractalbits-labs/fractalbits-ui.git",
         branch: "main",
     },
-    Repo {
-        path: "prebuilt",
-        url: "https://github.com/fractalbits-labs/fractalbits-prebuilt.git",
-        branch: "main",
-    },
+    PREBUILT_REPO,
 ];
+const PREBUILT_REPO: Repo = Repo {
+    path: "prebuilt",
+    url: "https://github.com/fractalbits-labs/fractalbits-prebuilt.git",
+    branch: "main",
+};
 
 pub fn run_cmd_git(git_cmd: GitCommand) -> CmdResult {
     match git_cmd {
         GitCommand::List => list_repos()?,
         GitCommand::Status => show_repos_status()?,
-        GitCommand::Init => init_repos()?,
+        GitCommand::Init { all } => init_repos(all)?,
         GitCommand::Foreach { command } => run_foreach_repo(&command)?,
     }
     Ok(())
@@ -66,12 +67,18 @@ fn list_repos() -> CmdResult {
     table.load_preset(presets::ASCII_BORDERS_ONLY_CONDENSED);
     table.set_header(vec!["Path", "URL", "Branch"]);
 
-    for repo in GIT_REPOS {
+    for repo in all_repos() {
         table.add_row(vec![repo.path, repo.url, repo.branch]);
     }
 
     println!("{table}");
     Ok(())
+}
+
+fn all_repos() -> impl Iterator<Item = &'static Repo> {
+    GIT_REPOS
+        .iter()
+        .filter(|repo| Path::new(&format!("{}/.git/", repo.path)).exists())
 }
 
 fn repo_has_changes(path: &str) -> bool {
@@ -97,27 +104,8 @@ fn show_repos_status() -> CmdResult {
     table.load_preset(presets::ASCII_BORDERS_ONLY_CONDENSED);
     table.set_header(vec!["Path", "Branch", "Status", "Commit", "Message"]);
 
-    for repo in GIT_REPOS {
+    for repo in all_repos() {
         let path = repo.path;
-
-        // Check if directory exists
-        let exists = if path == "." {
-            true
-        } else {
-            Path::new(path).exists()
-        };
-
-        if !exists {
-            table.add_row(vec![
-                Cell::new(path),
-                Cell::new(repo.branch),
-                Cell::new("not-initialized").fg(Color::Red),
-                Cell::new("N/A"),
-                Cell::new("N/A"),
-            ]);
-            continue;
-        }
-
         // Get current branch and commit
         let (branch, commit, message, status) = if path == "." {
             let branch = run_fun!(git branch --show-current)?;
@@ -191,11 +179,15 @@ fn show_repos_status() -> CmdResult {
     Ok(())
 }
 
-fn init_repos() -> CmdResult {
+fn init_repos(all: bool) -> CmdResult {
     info!("Initializing repos ...");
 
-    // Skip the main repo (.)
-    for repo in GIT_REPOS.iter().skip(1) {
+    let all_repos = if all {
+        &GIT_REPOS[1..] // Skip the main repo (.)
+    } else {
+        &[PREBUILT_REPO]
+    };
+    for repo in all_repos {
         let path = repo.path;
         let branch = repo.branch;
         let url = repo.url;
@@ -228,15 +220,8 @@ fn run_foreach_repo(command: &[String]) -> CmdResult {
 
     info!("Running command in each repo: {command:?} ...");
 
-    for repo in GIT_REPOS {
+    for repo in all_repos() {
         let path = repo.path;
-
-        // Check if directory exists
-        if path != "." && !Path::new(path).exists() {
-            warn!("Skipping non-existent repo: {}", path);
-            continue;
-        }
-
         if path == "." {
             run_cmd! {
                 info "Running in main repo";

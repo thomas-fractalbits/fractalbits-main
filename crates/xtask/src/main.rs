@@ -301,7 +301,10 @@ pub enum GitCommand {
     Status,
 
     #[clap(about = "Initialize all git repos")]
-    Init,
+    Init {
+        #[clap(long, long_help = "Initialize all repos (including private ones)")]
+        all: bool,
+    },
 
     #[clap(about = "Run a command in each git repo")]
     Foreach {
