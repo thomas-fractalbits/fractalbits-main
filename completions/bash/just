@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Bash completion for just with dynamic cargo xtask subcommands and descriptions
+
+_just_completion() {
+    local cur prev words cword
+    _init_completion || return
+
+    # If we're completing the first argument (the recipe name)
+    if [[ $cword -eq 1 ]]; then
+        # Get available recipes from just
+        local recipes=$(just --summary 2>/dev/null)
+        COMPREPLY=($(compgen -W "$recipes" -- "$cur"))
+        return
+    fi
+
+    # If we're completing the second argument (subcommand for a recipe)
+    if [[ $cword -eq 2 ]]; then
+        local recipe="${words[1]}"
+
+        # Try to get subcommands from cargo xtask
+        local help_output=$(cargo xtask "$recipe" --help 2>/dev/null)
+
+        # Check if it has subcommands
+        if echo "$help_output" | grep -q "^Commands:"; then
+            # For bash, we'll create completion with descriptions in a special format
+            # Extract subcommands with descriptions
+            local subcommands_raw=$(echo "$help_output" | awk '/^Commands:/{flag=1; next} /^Options:/{flag=0} flag && /^  [a-z]/')
+
+            if [[ -n "$subcommands_raw" ]]; then
+                # Extract just the command names for basic completion
+                local subcommands=$(echo "$subcommands_raw" | awk '{print $1}')
+
+                # Build COMPREPLY with formatted descriptions
+                local IFS=$'\n'
+                local matches=()
+
+                while IFS= read -r line; do
+                    if [[ "$line" =~ ^[[:space:]]+([a-z-]+)[[:space:]]+(.*) ]]; then
+                        local cmd="${BASH_REMATCH[1]}"
+                        local desc="${BASH_REMATCH[2]}"
+
+                        # Check if this command matches the current input
+                        if [[ "$cmd" == "$cur"* ]]; then
+                            # Format: "command -- description" for better visibility
+                            matches+=("$cmd")
+
+                            # If only one match and it's exact, show description
+                            if [[ "$cmd" == "$cur" ]]; then
+                                printf '\n  %s -- %s' "$cmd" "$desc" >&2
+                            fi
+                        fi
+                    fi
+                done <<< "$subcommands_raw"
+
+                # If we have matches and current word is empty, show all with descriptions
+                if [[ -z "$cur" ]] && [[ ${#matches[@]} -gt 0 ]]; then
+                    printf '\nAvailable subcommands:\n' >&2
+                    while IFS= read -r line; do
+                        if [[ "$line" =~ ^[[:space:]]+([a-z-]+)[[:space:]]+(.*) ]]; then
+                            printf '  %-15s -- %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" >&2
+                        fi
+                    done <<< "$subcommands_raw"
+                    printf '\n' >&2
+                fi
+
+                COMPREPLY=("${matches[@]}")
+                return
+            fi
+        fi
+    fi
+
+    # Default to file completion
+    _filedir
+}
+
+complete -F _just_completion just
