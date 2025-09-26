@@ -141,6 +141,7 @@ rstest = "0.25.0"
 colored = "2"
 comfy-table = "7.1"
 glob = "0.3"
+dialoguer = "0.12"
 
 # Build dependencies
 prost-build = "0.13"

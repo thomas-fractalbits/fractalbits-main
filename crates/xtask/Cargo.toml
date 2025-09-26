@@ -20,3 +20,4 @@ serde_json.workspace = true
 uuid.workspace = true
 comfy-table.workspace = true
 glob.workspace = true
+dialoguer.workspace = true

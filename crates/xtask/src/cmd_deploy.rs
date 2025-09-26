@@ -1,4 +1,5 @@
 use crate::*;
+use dialoguer::Input;
 use std::path::Path;
 
 #[derive(Clone)]
@@ -231,7 +232,40 @@ fn get_build_bucket_name() -> FunResult {
     Ok(format!("fractalbits-builds-{region}-{account_id}"))
 }
 
-pub fn cleanup() -> CmdResult {
+pub fn destroy_vpc() -> CmdResult {
+    // Display warning message
+    warn!("This will permanently destroy the VPC and all associated resources!");
+    warn!("This action cannot be undone.");
+
+    // Require user to type exact confirmation text
+    let _confirmation: String = Input::new()
+        .with_prompt("Type 'permanent destroy' to confirm VPC destruction")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            if input == "permanent destroy" {
+                Ok(())
+            } else {
+                Err("You must type 'permanent destroy' exactly to confirm")
+            }
+        })
+        .interact_text()
+        .map_err(|e| std::io::Error::other(format!("Failed to read confirmation: {e}")))?;
+
+    // First destroy the CDK stack
+    run_cmd! {
+        info "Destroying CDK stack...";
+        cd vpc/fractalbits-cdk;
+        npx cdk destroy FractalbitsVpcStack 2>&1;
+        info "CDK stack destroyed successfully";
+    }?;
+
+    // Then cleanup S3 bucket
+    cleanup_builds_bucket()?;
+
+    info!("VPC destruction completed successfully");
+    Ok(())
+}
+
+fn cleanup_builds_bucket() -> CmdResult {
     let bucket_name = get_build_bucket_name()?;
     let bucket = format!("s3://{bucket_name}");
 
@@ -258,7 +292,7 @@ pub fn cleanup() -> CmdResult {
     Ok(())
 }
 
-pub fn deploy_vpc() -> CmdResult {
+pub fn create_vpc() -> CmdResult {
     let cdk_dir = "vpc/fractalbits-cdk";
 
     // Check if node_modules exists, if not run npm install
