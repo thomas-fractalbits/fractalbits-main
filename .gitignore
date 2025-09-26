@@ -24,7 +24,7 @@ third_party/*.tar.gz
 .claude/
 
 # CDK generated JavaScript files (keep TypeScript sources and Lambda JS)
-vpc/fractalbits-vpc/bin/*.js
-vpc/fractalbits-vpc/lib/*.js
-!vpc/fractalbits-vpc/lib/lambda/**/*.js
-vpc/fractalbits-vpc/test/*.js
+vpc/fractalbits-cdk/bin/*.js
+vpc/fractalbits-cdk/lib/*.js
+!vpc/fractalbits-cdk/lib/lambda/**/*.js
+vpc/fractalbits-cdk/test/*.js
