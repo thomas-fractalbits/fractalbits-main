@@ -726,6 +726,7 @@ fn create_systemd_unit_file(
     let build = build_mode.as_ref();
     let service_name = service.as_ref();
     let mut env_settings = String::new();
+    let mut managed_service = false;
     let env_rust_log = |build_mode: BuildMode| -> &'static str {
         match build_mode {
             BuildMode::Debug => {
@@ -749,10 +750,14 @@ Environment="BSS_WORKING_DIR=./data/bss%i""##;
             format!("/bin/bash -c 'BSS_PORT=$((8088 + %i)) {bss_binary}'")
         }
         ServiceName::Nss => {
+            managed_service = true;
             let nss_binary = resolve_binary_path("nss_server", build_mode);
             format!("{nss_binary} serve")
         }
-        ServiceName::Mirrord => resolve_binary_path("mirrord", build_mode),
+        ServiceName::Mirrord => {
+            managed_service = true;
+            resolve_binary_path("mirrord", build_mode)
+        }
         ServiceName::NssRoleAgentA => {
             env_settings += env_rust_log(build_mode);
             env_settings += "\nEnvironment=\"INSTANCE_ID=nss-A\"";
@@ -846,13 +851,26 @@ Environment="MINIO_REGION=localdev""##
         _ => "",
     };
 
+    let (restart_settings, auto_restart) = if managed_service {
+        ("", "")
+    } else {
+        (
+            r##"# Limit to 3 restarts within a 10-minute (600 second) interval
+StartLimitIntervalSec=600
+StartLimitBurst=3
+        "##,
+            "Restart=on-failure\nRestartSec=5",
+        )
+    };
+
     let systemd_unit_content = format!(
         r##"[Unit]
 Description={service_name} Service
 {dependencies}
-StartLimitIntervalSec=600
-StartLimitBurst=1
+{restart_settings}
+
 [Service]
+{auto_restart}
 LimitNOFILE=1000000
 LimitCORE=infinity
 WorkingDirectory={working_dir}{env_settings}
