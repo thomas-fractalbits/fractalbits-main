@@ -262,6 +262,7 @@ pub fn init_service(
             }
         }
         ServiceName::DdbLocal => init_ddb_local()?,
+        ServiceName::Minio => init_minio()?,
         ServiceName::MinioAz1 => init_minio_dev_az1()?,
         ServiceName::MinioAz2 => init_minio_dev_az2()?,
         ServiceName::Bss => {
@@ -487,6 +488,7 @@ fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
                 ServiceName::Bss,
                 ServiceName::Rss,
                 ServiceName::DdbLocal,
+                ServiceName::Minio,
             ]
         }
         DataBlobStorage::S3ExpressMultiAz => vec![
@@ -497,6 +499,7 @@ fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
             ServiceName::Mirrord,
             ServiceName::Rss,
             ServiceName::DdbLocal,
+            ServiceName::Minio,
             ServiceName::MinioAz1,
             ServiceName::MinioAz2,
         ],
@@ -594,6 +597,7 @@ pub fn start_service(service: ServiceName) -> CmdResult {
 
             // Post-start actions
             match service {
+                ServiceName::Minio => create_minio_bucket(9000, "fractalbits-bucket")?,
                 ServiceName::MinioAz1 => {
                     create_minio_bucket(9001, "fractalbits-localdev-az1-data-bucket")?
                 }
@@ -649,6 +653,7 @@ fn start_all_services() -> CmdResult {
     // Start supporting services first
     info!("Starting supporting services (ddb_local, minio instances)");
     start_service(ServiceName::DdbLocal)?;
+    start_service(ServiceName::Minio)?; // Original minio for NSS metadata (port 9000)
     if run_cmd!(grep -q multi_az data/etc/api_server.service &>/dev/null).is_ok() {
         start_service(ServiceName::MinioAz1)?; // Local AZ data blobs (port 9001)
         start_service(ServiceName::MinioAz2)?; // Remote AZ data blobs (port 9002)
@@ -698,6 +703,7 @@ fn create_systemd_unit_files_for_init(
         | ServiceName::Mirrord
         | ServiceName::Rss
         | ServiceName::DdbLocal
+        | ServiceName::Minio
         | ServiceName::MinioAz1
         | ServiceName::MinioAz2 => {
             create_systemd_unit_file(service, build_mode, init_config)?;
@@ -803,6 +809,12 @@ Environment="GUI_WEB_ROOT=ui/dist""##;
                 "{java} -Djava.library.path={java_lib} -jar {java_lib}/../DynamoDBLocal.jar -sharedDb -dbPath ./rss"
             )
         }
+        ServiceName::Minio => {
+            env_settings = r##"
+Environment="MINIO_REGION=localdev""##
+                .to_string();
+            format!("{minio_bin} server --address :9000 data/s3/")
+        }
         ServiceName::MinioAz1 => {
             env_settings = r##"
 Environment="MINIO_REGION=localdev""##
@@ -833,6 +845,7 @@ Environment="MINIO_REGION=localdev""##
             "After=rss.service nss.service\nWants=rss.service nss.service\n"
         }
         ServiceName::DdbLocal
+        | ServiceName::Minio
         | ServiceName::MinioAz1
         | ServiceName::MinioAz2 => "",
         _ => "",
@@ -946,6 +959,7 @@ pub fn wait_for_service_ready(service: ServiceName, timeout_secs: u32) -> CmdRes
             // For network services, also check port availability
             let port_ready = match service {
                 ServiceName::DdbLocal => check_port_ready(8000),
+                ServiceName::Minio => check_port_ready(9000),
                 ServiceName::MinioAz1 => check_port_ready(9001),
                 ServiceName::MinioAz2 => check_port_ready(9002),
                 ServiceName::Rss => check_port_ready(8086),

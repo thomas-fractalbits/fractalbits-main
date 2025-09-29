@@ -179,6 +179,7 @@ pub enum ServiceName {
     Mirrord,
     Rss,
     All,
+    Minio,
     MinioAz1,
     MinioAz2,
     DdbLocal,
