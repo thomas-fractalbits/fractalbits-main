@@ -842,11 +842,11 @@ Environment="MINIO_REGION=localdev""##
         ("", "")
     } else {
         (
-            r##"# Limit to 3 restarts within a 10-minute (600 second) interval
+            r##"# Limit to restarts within a 10-minute (600 second) interval
 StartLimitIntervalSec=600
-StartLimitBurst=3
+StartLimitBurst=100
         "##,
-            "Restart=on-failure\nRestartSec=5",
+            "Restart=on-failure\nRestartSec=1",
         )
     };
 
