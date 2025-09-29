@@ -151,7 +151,7 @@ pub fn init_service(
         let bss_metadata_vg_config_json = r#"{
             "volumes": [
                 {
-                    "volume_id": 0,
+                    "volume_id": 1,
                     "bss_nodes": [
                         {"node_id": "bss0", "ip": "127.0.0.1", "port": 8088},
                         {"node_id": "bss1", "ip": "127.0.0.1", "port": 8089},
@@ -935,7 +935,7 @@ fn create_dirs_for_bss_server(bss_id: u32) -> CmdResult {
     }
 
     // Metadata volume
-    let metadata_volume_id = bss_id / 6;
+    let metadata_volume_id = (bss_id / 6) + 1;
     run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id)?;
     for i in 0..256 {
         run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id/dir$i)?;
