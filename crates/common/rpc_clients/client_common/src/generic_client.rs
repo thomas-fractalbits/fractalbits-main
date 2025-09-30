@@ -170,7 +170,7 @@ where
                 )
                 .await
                 {
-                    warn!(%socket_fd, %e, "send task failed");
+                    warn!(%rpc_type, %socket_fd, %e, "send task failed");
                 }
             });
         }
@@ -189,12 +189,12 @@ where
                 )
                 .await
                 {
-                    warn!(%socket_fd, %e, "receive task failed");
+                    warn!(%rpc_type, %socket_fd, %e, "receive task failed");
                 }
             });
         }
 
-        debug!(%socket_fd, %session_id, "Creating RPC client with session ID");
+        debug!(%rpc_type, %socket_fd, %session_id, "Creating RPC client with session ID");
 
         Ok(RpcClient {
             requests,
@@ -218,7 +218,7 @@ where
     ) -> Result<(), RpcError> {
         while let Some(frame) = receiver.recv().await {
             let request_id = frame.header.get_id();
-            debug!(%socket_fd, %request_id, "sending request:");
+            debug!(%rpc_type, %socket_fd, %request_id, "sending request:");
             let mut buf = BytesMut::new();
             // Encode header first
             frame.header.encode(&mut buf);
@@ -229,7 +229,7 @@ where
         }
         is_closed.store(true, Ordering::SeqCst);
         Self::drain_requests(requests, DrainFrom::SendTask);
-        warn!(%socket_fd, "sender closed, send message task quit");
+        warn!(%rpc_type, %socket_fd, "sender closed, send message task quit");
         Ok(())
     }
 
@@ -245,32 +245,32 @@ where
         while let Some(frame) = reader.next().await {
             let frame = frame?;
             let request_id = frame.header.get_id();
-            debug!(%socket_fd, %request_id, "receiving response:");
+            debug!(%rpc_type, %socket_fd, %request_id, "receiving response:");
             counter!("rpc_response_received", "type" => rpc_type, "name" => "all").increment(1);
             let tx: oneshot::Sender<MessageFrame<Header>> =
                 match requests.lock().remove(&request_id) {
                     Some(tx) => tx,
                     None => {
-                        warn!(%socket_fd, %request_id,
-                            "received {rpc_type} rpc message with id not in the resp_map");
+                        warn!(%rpc_type, %socket_fd, %request_id,
+                            "received rpc message with id not in the resp_map");
                         continue;
                     }
                 };
             gauge!("rpc_request_pending_in_resp_map", "type" => rpc_type).decrement(1.0);
             if tx.send(frame).is_err() {
-                warn!(%socket_fd, %request_id, "oneshot response send failed");
+                warn!(%rpc_type, %socket_fd, %request_id, "oneshot response send failed");
             }
         }
         is_closed.store(true, Ordering::SeqCst);
         Self::drain_requests(requests, DrainFrom::ReceiveTask);
-        warn!(%socket_fd, "connection closed, receive message task quit");
+        warn!(%rpc_type, %socket_fd, "connection closed, receive message task quit");
         Ok(())
     }
 
     fn drain_requests(requests: &RequestMap<Header>, drain_from: DrainFrom) {
         let drained_requests = std::mem::take(&mut *requests.lock());
         for (request_id, _tx) in drained_requests {
-            debug!(%request_id, drain_from = %drain_from.as_ref(), "dropping pending request");
+            debug!(rpc_type = Codec::RPC_TYPE, %request_id, drain_from = %drain_from.as_ref(), "dropping pending request");
         }
     }
 
@@ -347,7 +347,7 @@ where
             ));
         }
 
-        debug!(socket_fd = %self.socket_fd, session_id = %assigned_session_id, "Received session ID from handshake");
+        debug!(rpc_type = %Codec::RPC_TYPE, socket_fd = %self.socket_fd, session_id = %assigned_session_id, "Received session ID from handshake");
         Ok(assigned_session_id)
     }
 
@@ -366,7 +366,7 @@ where
             )));
         }
 
-        debug!(socket_fd = %self.socket_fd, session_id = %session_id, "Handshake completed with existing session ID");
+        debug!(rpc_type = %Codec::RPC_TYPE, socket_fd = %self.socket_fd, session_id = %session_id, "Handshake completed with existing session ID");
         Ok(())
     }
 
@@ -424,7 +424,7 @@ where
             Some(rpc_timeout) => match tokio::time::timeout(rpc_timeout, rx).await {
                 Ok(result) => result,
                 Err(_) => {
-                    warn!(socket_fd=%self.socket_fd, %request_id, "{} rpc request timeout", Codec::RPC_TYPE);
+                    warn!(rpc_type=%Codec::RPC_TYPE, socket_fd=%self.socket_fd, %request_id, "rpc request timeout");
                     return Err(RpcError::InternalRequestError("timeout".into()));
                 }
             },

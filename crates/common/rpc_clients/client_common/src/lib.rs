@@ -168,7 +168,7 @@ macro_rules! nss_rpc_retry_with_session {
                                 } else {
                                     if e.retryable() {
                                         tracing::error!(
-                                            "RPC call failed after multiple retries. Error: {}",
+                                            "nss RPC call failed after multiple retries. Error: {}",
                                             e
                                         );
                                     }
@@ -192,7 +192,7 @@ macro_rules! nss_rpc_retry_with_session {
                                 } else {
                                     if e.retryable() {
                                         tracing::error!(
-                                            "RPC call failed after multiple retries. Error: {}",
+                                            "nss RPC call failed after multiple retries. Error: {}",
                                             e
                                         );
                                     }
@@ -232,7 +232,7 @@ macro_rules! rss_rpc_retry_with_session {
                         } else {
                             if e.retryable() {
                                 tracing::error!(
-                                    "RPC call failed after multiple retries. Error: {}",
+                                    "rss RPC call failed after multiple retries. Error: {}",
                                     e
                                 );
                             }

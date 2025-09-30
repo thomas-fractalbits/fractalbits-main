@@ -3,7 +3,7 @@ use cmd_lib::*;
 use std::io::Error;
 
 const BLOB_DRAM_MEM_PERCENT: f64 = 0.8;
-// AWS EBS has 500 IOPS/GB limit, so we need to have 20GB 
+// AWS EBS has 500 IOPS/GB limit, so we need to have 20GB
 // space for 10K IOPS. but journal size is much smaller.
 const EBS_SPACE_PERCENT: f64 = 0.2;
 
