@@ -426,7 +426,7 @@ fn wait_for_port_ready(port: u16, timeout_secs: u32) -> CmdResult {
 
 pub fn stop_service(service: ServiceName) -> CmdResult {
     let services: Vec<ServiceName> = match service {
-        ServiceName::All => all_services(get_data_blob_storage_setting()),
+        ServiceName::All => all_services(get_data_blob_storage_setting(), false),
         single_service => vec![single_service],
     };
 
@@ -442,6 +442,10 @@ pub fn stop_service(service: ServiceName) -> CmdResult {
     for service in services {
         if service == ServiceName::Nss || service == ServiceName::Mirrord {
             // skip stopping managed services directly
+            warn!(
+                "{} is managed by nss_role_agent service, please stop the agent service instead",
+                service.as_ref()
+            );
         } else if service == ServiceName::Bss {
             // Handle BSS template instances using helper function
             for_each_bss_service(|service_name| {
@@ -482,32 +486,45 @@ pub fn stop_service(service: ServiceName) -> CmdResult {
     Ok(())
 }
 
-fn all_services(data_blob_storage: DataBlobStorage) -> Vec<ServiceName> {
-    match data_blob_storage {
+fn all_services(
+    data_blob_storage: DataBlobStorage,
+    with_managed_service: bool,
+) -> Vec<ServiceName> {
+    let mut services = match data_blob_storage {
         DataBlobStorage::S3HybridSingleAz => {
-            vec![
+            let mut services = vec![
                 ServiceName::ApiServer,
                 ServiceName::NssRoleAgentA,
-                ServiceName::Nss,
                 ServiceName::Bss,
                 ServiceName::Rss,
                 ServiceName::DdbLocal,
                 ServiceName::Minio,
-            ]
+            ];
+            if with_managed_service {
+                services.push(ServiceName::Nss);
+            }
+            services
         }
-        DataBlobStorage::S3ExpressMultiAz => vec![
-            ServiceName::ApiServer,
-            ServiceName::NssRoleAgentA,
-            ServiceName::Nss,
-            ServiceName::NssRoleAgentB,
-            ServiceName::Mirrord,
-            ServiceName::Rss,
-            ServiceName::DdbLocal,
-            ServiceName::Minio,
-            ServiceName::MinioAz1,
-            ServiceName::MinioAz2,
-        ],
-    }
+        DataBlobStorage::S3ExpressMultiAz => {
+            let mut services = vec![
+                ServiceName::ApiServer,
+                ServiceName::NssRoleAgentA,
+                ServiceName::NssRoleAgentB,
+                ServiceName::Rss,
+                ServiceName::DdbLocal,
+                ServiceName::Minio,
+                ServiceName::MinioAz1,
+                ServiceName::MinioAz2,
+            ];
+            if with_managed_service {
+                services.push(ServiceName::Nss);
+                services.push(ServiceName::Mirrord);
+            }
+            services
+        }
+    };
+    services.sort_by_key(|s| s.as_ref().to_string());
+    services
 }
 
 fn get_data_blob_storage_setting() -> DataBlobStorage {
@@ -524,7 +541,7 @@ pub fn show_service_status(service: ServiceName) -> CmdResult {
             println!("Service Status:");
             println!("─────────────────────────────────────");
 
-            for svc in all_services(get_data_blob_storage_setting()) {
+            for svc in all_services(get_data_blob_storage_setting(), true) {
                 if svc == ServiceName::Bss {
                     // Handle BSS template instances using helper functions
                     for bss_service_name in get_bss_service_names() {
@@ -713,7 +730,7 @@ fn create_systemd_unit_files_for_init(
             create_systemd_unit_file(service, build_mode, init_config)?;
         }
         ServiceName::All => {
-            for service in all_services(init_config.data_blob_storage) {
+            for service in all_services(init_config.data_blob_storage, true) {
                 create_systemd_unit_file(service, build_mode, init_config)?;
             }
         }
