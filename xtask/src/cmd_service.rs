@@ -107,7 +107,7 @@ pub fn init_service(
         let bss_data_vg_config_json = r#"{
             "volumes": [
                 {
-                    "volume_id": 0,
+                    "volume_id": 1,
                     "bss_nodes": [
                         {"node_id": "bss0", "ip": "127.0.0.1", "port": 8088},
                         {"node_id": "bss1", "ip": "127.0.0.1", "port": 8089},
@@ -115,7 +115,7 @@ pub fn init_service(
                     ]
                 },
                 {
-                    "volume_id": 1,
+                    "volume_id": 2,
                     "bss_nodes": [
                         {"node_id": "bss3", "ip": "127.0.0.1", "port": 8091},
                         {"node_id": "bss4", "ip": "127.0.0.1", "port": 8092},

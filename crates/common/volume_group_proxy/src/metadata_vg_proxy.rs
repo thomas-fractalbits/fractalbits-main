@@ -581,7 +581,7 @@ mod tests {
         MetadataVgInfo {
             volumes: vec![
                 MetadataVolume {
-                    volume_id: 0,
+                    volume_id: 1,
                     bss_nodes: vec![
                         MetadataBssNode {
                             node_id: "bss0".to_string(),
@@ -601,7 +601,7 @@ mod tests {
                     ],
                 },
                 MetadataVolume {
-                    volume_id: 1,
+                    volume_id: 2,
                     bss_nodes: vec![
                         MetadataBssNode {
                             node_id: "bss3".to_string(),
@@ -650,19 +650,19 @@ mod tests {
 
         let guid1 = MetaBlobGuid {
             blob_id: blob_id1,
-            volume_id: 0,
+            volume_id: 1,
         };
         let guid2 = MetaBlobGuid {
             blob_id: blob_id1,
-            volume_id: 0,
+            volume_id: 1,
         };
         let guid3 = MetaBlobGuid {
             blob_id: blob_id2,
-            volume_id: 0,
+            volume_id: 1,
         };
         let guid4 = MetaBlobGuid {
             blob_id: blob_id1,
-            volume_id: 1,
+            volume_id: 2,
         };
 
         // Test equality
@@ -687,8 +687,8 @@ mod tests {
         let vg_info = create_test_metadata_vg_info();
 
         assert_eq!(vg_info.volumes.len(), 2);
-        assert_eq!(vg_info.volumes[0].volume_id, 0);
-        assert_eq!(vg_info.volumes[1].volume_id, 1);
+        assert_eq!(vg_info.volumes[0].volume_id, 1);
+        assert_eq!(vg_info.volumes[1].volume_id, 2);
 
         assert_eq!(vg_info.volumes[0].bss_nodes.len(), 3);
         assert_eq!(vg_info.volumes[1].bss_nodes.len(), 3);

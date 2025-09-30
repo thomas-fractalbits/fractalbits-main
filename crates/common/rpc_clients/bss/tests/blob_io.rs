@@ -24,7 +24,7 @@ async fn test_basic_blob_io_with_fixed_bytes() {
     for _ in 0..1 {
         let blob_guid = DataBlobGuid {
             blob_id: Uuid::now_v7(),
-            volume_id: 0,
+            volume_id: 1,
         };
         let content: Bytes = vec![0xff; 1024 * 1024 - 256].into();
         let mut readback_content = Bytes::new();
@@ -59,7 +59,7 @@ async fn test_basic_blob_io_with_random_bytes() {
     for _ in 0..1 {
         let blob_guid = DataBlobGuid {
             blob_id: Uuid::now_v7(),
-            volume_id: 0,
+            volume_id: 1,
         };
         let content = Bytes::from((4096..1024 * 1024 - 256).fake::<String>());
         let mut readback_content = Bytes::new();

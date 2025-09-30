@@ -214,7 +214,7 @@ async fn benchmark_bss_write(
             let content = Bytes::from(vec![0; 4096 - 256]);
             let blob_guid = DataBlobGuid {
                 blob_id: Uuid::parse_str(&uuid).unwrap(),
-                volume_id: 0,
+                volume_id: 1,
             };
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
@@ -254,7 +254,7 @@ async fn benchmark_bss_write(
             let content = Bytes::from(vec![0; 4096 - 256]);
             let blob_guid = DataBlobGuid {
                 blob_id: Uuid::parse_str(&uuid).unwrap(),
-                volume_id: 0,
+                volume_id: 1,
             };
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
@@ -301,7 +301,7 @@ async fn benchmark_bss_read(
                 let request_start = Instant::now();
                 let blob_guid = DataBlobGuid {
                     blob_id: Uuid::parse_str(&uuid).unwrap(),
-                    volume_id: 0,
+                    volume_id: 1,
                 };
                 let mut content = Bytes::new();
                 let result = rpc_client
@@ -340,7 +340,7 @@ async fn benchmark_bss_read(
                 let request_start = Instant::now();
                 let blob_guid = DataBlobGuid {
                     blob_id: Uuid::parse_str(&uuid).unwrap(),
-                    volume_id: 0,
+                    volume_id: 1,
                 };
                 let mut content = Bytes::new();
                 let result = rpc_client
