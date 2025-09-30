@@ -60,6 +60,7 @@ pub fn run_cmd_bench(
                     for_gui: false,
                     with_https: false,
                     bss_count: 1,
+                    nss_disable_restart_limit: false,
                 },
             )?;
             cmd_service::start_bss_instance(0)?;

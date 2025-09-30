@@ -223,6 +223,7 @@ pub struct InitConfig {
     pub data_blob_storage: DataBlobStorage,
     pub with_https: bool,
     pub bss_count: u32,
+    pub nss_disable_restart_limit: bool,
 }
 
 impl Default for InitConfig {
@@ -232,6 +233,7 @@ impl Default for InitConfig {
             data_blob_storage: Default::default(),
             with_https: false,
             bss_count: 6,
+            nss_disable_restart_limit: false,
         }
     }
 }
@@ -261,6 +263,9 @@ pub enum ServiceCommand {
             default_value = "6"
         )]
         bss_count: u32,
+
+        #[clap(long, long_help = "disable restart limit for NSS role agent")]
+        nss_disable_restart_limit: bool,
     },
     Stop {
         #[clap(default_value = "all", value_enum)]
@@ -425,12 +430,14 @@ async fn main() -> CmdResult {
                 data_blob_storage,
                 with_https,
                 bss_count,
+                nss_disable_restart_limit,
             } => {
                 let init_config = InitConfig {
                     for_gui,
                     data_blob_storage,
                     with_https,
                     bss_count,
+                    nss_disable_restart_limit,
                 };
                 cmd_service::init_service(service, cmd_build::build_mode(release), init_config)?;
             }

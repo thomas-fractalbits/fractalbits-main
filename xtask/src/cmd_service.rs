@@ -782,11 +782,19 @@ Environment="BSS_WORKING_DIR=./data/bss%i""##;
         ServiceName::NssRoleAgentA => {
             env_settings += env_rust_log(build_mode);
             env_settings += "\nEnvironment=\"INSTANCE_ID=nss-A\"";
+            env_settings += "\nEnvironment=\"RESTART_LOCKOUT_DIR=./data\"";
+            if init_config.nss_disable_restart_limit {
+                env_settings += "\nEnvironment=\"NSS_DISABLE_RESTART_LIMIT=1\"";
+            }
             resolve_binary_path("nss_role_agent", build_mode)
         }
         ServiceName::NssRoleAgentB => {
             env_settings += env_rust_log(build_mode);
             env_settings += "\nEnvironment=\"INSTANCE_ID=nss-B\"";
+            env_settings += "\nEnvironment=\"RESTART_LOCKOUT_DIR=./data\"";
+            if init_config.nss_disable_restart_limit {
+                env_settings += "\nEnvironment=\"NSS_DISABLE_RESTART_LIMIT=1\"";
+            }
             resolve_binary_path("nss_role_agent", build_mode)
         }
         ServiceName::Rss => {

@@ -118,8 +118,10 @@ mod tests {
     }
 
     fn create_fake_app_state(root_domain: &str) -> Arc<AppState> {
-        let mut config = crate::Config::default();
-        config.root_domain = root_domain.to_string();
+        let config = crate::Config {
+            root_domain: root_domain.to_string(),
+            ..Default::default()
+        };
         Arc::new(AppState {
             config: Arc::new(config),
         })
