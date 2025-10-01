@@ -317,7 +317,7 @@ impl DataVgProxy {
             if successful_writes >= write_quorum {
                 histogram!("datavg_put_blob_nanos", "result" => "success")
                     .record(start.elapsed().as_nanos() as f64);
-                info!(
+                debug!(
                     "Write quorum achieved ({}/{}) for blob {}:{}, remaining operations continue in background",
                     successful_writes,
                     selected_volume.bss_nodes.len(),
@@ -459,7 +459,7 @@ impl DataVgProxy {
         if let Some(blob_data) = successful_blob_data {
             histogram!("datavg_get_blob_nanos", "result" => "success")
                 .record(start.elapsed().as_nanos() as f64);
-            info!(
+            debug!(
                 "Read successful from {}/{} nodes for blob {}:{}",
                 successful_reads,
                 volume.bss_nodes.len(),

@@ -322,7 +322,7 @@ impl MetadataVgProxy {
             if successful_writes >= write_quorum {
                 histogram!("metadatavg_put_metadata_blob_nanos", "result" => "success")
                     .record(start.elapsed().as_nanos() as f64);
-                info!(
+                debug!(
                     "Metadata blob write quorum achieved ({}/{}) for blob {} version {}, remaining operations continue in background",
                     successful_writes,
                     selected_volume.bss_nodes.len(),
@@ -440,7 +440,7 @@ impl MetadataVgProxy {
 
                         histogram!("metadatavg_get_metadata_blob_nanos", "result" => "quorum_success")
                             .record(start.elapsed().as_nanos() as f64);
-                        info!(
+                        debug!(
                             "Metadata blob read quorum achieved ({}/{}) for blob {} with version {}",
                             successful_reads,
                             volume.bss_nodes.len(),

@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 pub struct S3HybridSingleAzStorage {
@@ -23,7 +23,7 @@ impl S3HybridSingleAzStorage {
         s3_hybrid_config: &S3HybridSingleAzConfig,
         rpc_timeout: Duration,
     ) -> Result<Self, BlobStorageError> {
-        info!("Fetching DataVg configuration from RSS...");
+        debug!("Fetching DataVg configuration from RSS...");
 
         // Fetch DataVg configuration from RSS
         let data_vg_info = rss_client
