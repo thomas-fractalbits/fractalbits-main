@@ -435,76 +435,83 @@ impl DataVgProxy {
                 ))
             })?;
 
-        // Send delete to all replicas (best effort) using stream-based approach
         let rpc_timeout = self.rpc_timeout;
-        let node_count = volume.bss_nodes.len();
+        let write_quorum = self.quorum_config.w as usize;
 
-        let tasks: Vec<_> = volume
-            .bss_nodes
-            .iter()
-            .map(|bss_node| {
-                let address = bss_node.address.clone();
-                let pool = bss_node.pool.clone();
-                let pool_for_retry = BssNodePoolWrapper {
-                    pool,
-                    address: address.clone(),
-                };
+        let mut delete_futures = FuturesUnordered::new();
+        for bss_node in &volume.bss_nodes {
+            let address = bss_node.address.clone();
+            let pool = bss_node.pool.clone();
+            let pool_for_retry = BssNodePoolWrapper {
+                pool,
+                address: address.clone(),
+            };
 
-                async move {
-                    let result = bss_rpc_retry!(
-                        pool_for_retry,
-                        delete_data_blob(blob_guid, block_number, Some(rpc_timeout))
-                    )
-                    .await;
-                    (address, result)
-                }
-            })
-            .collect();
+            let delete_task = tokio::spawn(async move {
+                let start_node = Instant::now();
+                let result = bss_rpc_retry!(
+                    pool_for_retry,
+                    delete_data_blob(blob_guid, block_number, Some(rpc_timeout))
+                )
+                .await;
 
-        let delete_results: Vec<(String, Result<_, _>)> = futures::stream::iter(tasks)
-            .buffer_unordered(node_count)
-            .collect()
-            .await;
+                let result_label = if result.is_ok() { "success" } else { "failure" };
+                histogram!("datavg_delete_blob_node_nanos", "bss_node" => address.clone(), "result" => result_label)
+                    .record(start_node.elapsed().as_nanos() as f64);
+
+                (address, result)
+            });
+            delete_futures.push(delete_task);
+        }
 
         let mut successful_deletes = 0;
         let mut errors = Vec::new();
 
-        for (address, result) in delete_results {
+        while let Some(join_result) = delete_futures.next().await {
+            let (address, result) = match join_result {
+                Ok(task_result) => task_result,
+                Err(_join_error) => {
+                    warn!("Task join error for delete operation");
+                    continue;
+                }
+            };
+
             match result {
                 Ok(()) => {
                     successful_deletes += 1;
                     debug!("Successful delete from BSS node: {}", address);
                 }
                 Err(rpc_error) => {
-                    warn!(
-                        "RPC error deleting from BSS node {}: {}",
-                        address, rpc_error
-                    );
+                    warn!("RPC error deleting from BSS node {}: {}", address, rpc_error);
                     errors.push(format!("{}: {}", address, rpc_error));
                 }
             }
-        }
 
-        histogram!("datavg_delete_blob_nanos").record(start.elapsed().as_nanos() as f64);
-
-        if successful_deletes > 0 {
-            if !errors.is_empty() {
-                warn!(
-                    "Delete partially succeeded ({}/{}) with errors: {:?}",
+            if successful_deletes >= write_quorum {
+                histogram!("datavg_delete_blob_nanos", "result" => "success")
+                    .record(start.elapsed().as_nanos() as f64);
+                debug!(
+                    "Delete quorum achieved ({}/{}) for blob {}:{}, remaining operations continue in background",
                     successful_deletes,
                     volume.bss_nodes.len(),
-                    errors
+                    blob_guid.blob_id,
+                    block_number
                 );
-            } else {
-                debug!("Delete succeeded on all {} replicas", successful_deletes);
+                return Ok(());
             }
-            Ok(())
-        } else {
-            error!("Delete failed on all replicas: {:?}", errors);
-            Err(DataVgError::QuorumFailure(format!(
-                "Delete failed on all replicas: {}",
-                errors.join("; ")
-            )))
         }
+
+        histogram!("datavg_delete_blob_nanos", "result" => "quorum_failure")
+            .record(start.elapsed().as_nanos() as f64);
+        error!(
+            "Delete quorum failed ({}/{}). Errors: {:?}",
+            successful_deletes, self.quorum_config.w, errors
+        );
+        Err(DataVgError::QuorumFailure(format!(
+            "Delete quorum failed ({}/{}): {}",
+            successful_deletes,
+            self.quorum_config.w,
+            errors.join("; ")
+        )))
     }
 }
