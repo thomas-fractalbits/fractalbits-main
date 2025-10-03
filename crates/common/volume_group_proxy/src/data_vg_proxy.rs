@@ -154,6 +154,34 @@ impl DataVgProxy {
 
         Ok(body)
     }
+
+    fn delete_blob_from_node(
+        bss_node: &BssNodeWithPool,
+        blob_guid: DataBlobGuid,
+        block_number: u32,
+        rpc_timeout: Duration,
+    ) -> impl std::future::Future<Output = (String, Result<(), RpcError>)> + Send + 'static {
+        let start_node = Instant::now();
+        let address = bss_node.address.clone();
+        let pool_for_retry = BssNodePoolWrapper {
+            pool: bss_node.pool.clone(),
+            address: address.clone(),
+        };
+
+        async move {
+            let result = bss_rpc_retry!(
+                pool_for_retry,
+                delete_data_blob(blob_guid, block_number, Some(rpc_timeout))
+            )
+            .await;
+
+            let result_label = if result.is_ok() { "success" } else { "failure" };
+            histogram!("datavg_delete_blob_node_nanos", "bss_node" => address.clone(), "result" => result_label)
+                .record(start_node.elapsed().as_nanos() as f64);
+
+            (address, result)
+        }
+    }
 }
 
 impl DataVgProxy {
@@ -187,56 +215,26 @@ impl DataVgProxy {
             })?;
         debug!("Using volume {} for put_blob", selected_volume.volume_id);
 
-        // Spawn individual tasks for each write operation
         let rpc_timeout = self.rpc_timeout;
         let write_quorum = self.quorum_config.w as usize;
 
-        // Spawn all write tasks immediately
         let mut write_futures = FuturesUnordered::new();
         for bss_node in &selected_volume.bss_nodes {
-            let body_for_task = body.clone();
-            let address = bss_node.address.clone();
-            let pool = bss_node.pool.clone();
-            let pool_for_retry = BssNodePoolWrapper {
-                pool,
-                address: address.clone(),
-            };
-
-            let write_task = tokio::spawn(async move {
-                let start_node = Instant::now();
-                let result = bss_rpc_retry!(
-                    pool_for_retry,
-                    put_data_blob(
-                        blob_guid,
-                        block_number,
-                        body_for_task.clone(),
-                        Some(rpc_timeout)
-                    )
-                )
-                .await;
-
-                let result_label = if result.is_ok() { "success" } else { "failure" };
-                histogram!("datavg_put_blob_node_nanos", "bss_node" => address.clone(), "result" => result_label)
-                    .record(start_node.elapsed().as_nanos() as f64);
-
-                (address, result)
-            });
-            write_futures.push(write_task);
+            let future = Self::put_blob_to_node(
+                bss_node,
+                blob_guid,
+                block_number,
+                body.clone(),
+                rpc_timeout,
+            );
+            write_futures.push(future);
         }
 
         let mut successful_writes = 0;
-        let mut errors = Vec::new();
+        let mut errors = Vec::with_capacity(selected_volume.bss_nodes.len());
 
         // Wait only until we achieve write quorum
-        while let Some(join_result) = write_futures.next().await {
-            let (address, result) = match join_result {
-                Ok(task_result) => task_result,
-                Err(_join_error) => {
-                    warn!("Task join error for write operation");
-                    continue;
-                }
-            };
-
+        while let Some((address, result)) = write_futures.next().await {
             match result {
                 Ok(()) => {
                     successful_writes += 1;
@@ -250,10 +248,23 @@ impl DataVgProxy {
 
             // Check if we've achieved write quorum
             if successful_writes >= write_quorum {
+                tokio::spawn(async move {
+                    while let Some((addr, res)) = write_futures.next().await {
+                        match res {
+                            Ok(()) => {
+                                debug!("Background write to {} completed", addr);
+                            }
+                            Err(e) => {
+                                warn!("Background write to {} failed: {}", addr, e);
+                            }
+                        }
+                    }
+                });
+
                 histogram!("datavg_put_blob_nanos", "result" => "success")
                     .record(start.elapsed().as_nanos() as f64);
                 debug!(
-                    "Write quorum achieved ({}/{}) for blob {}:{}, remaining operations continue in background",
+                    "Write quorum achieved ({}/{}) for blob {}:{}",
                     successful_writes,
                     selected_volume.bss_nodes.len(),
                     blob_guid.blob_id,
@@ -276,6 +287,36 @@ impl DataVgProxy {
             self.quorum_config.w,
             errors.join("; ")
         )))
+    }
+
+    fn put_blob_to_node(
+        bss_node: &BssNodeWithPool,
+        blob_guid: DataBlobGuid,
+        block_number: u32,
+        body: Bytes,
+        rpc_timeout: Duration,
+    ) -> impl std::future::Future<Output = (String, Result<(), RpcError>)> + Send + 'static {
+        let start_node = Instant::now();
+        let address = bss_node.address.clone();
+        let pool_for_retry = BssNodePoolWrapper {
+            pool: bss_node.pool.clone(),
+            address: address.clone(),
+        };
+
+        async move {
+            let body_ref = &body;
+            let result = bss_rpc_retry!(
+                pool_for_retry,
+                put_data_blob(blob_guid, block_number, body_ref.clone(), Some(rpc_timeout))
+            )
+            .await;
+
+            let result_label = if result.is_ok() { "success" } else { "failure" };
+            histogram!("datavg_put_blob_node_nanos", "bss_node" => address.clone(), "result" => result_label)
+                .record(start_node.elapsed().as_nanos() as f64);
+
+            (address, result)
+        }
     }
 
     /// Multi-BSS get_blob with quorum-based reads
@@ -440,58 +481,49 @@ impl DataVgProxy {
 
         let mut delete_futures = FuturesUnordered::new();
         for bss_node in &volume.bss_nodes {
-            let address = bss_node.address.clone();
-            let pool = bss_node.pool.clone();
-            let pool_for_retry = BssNodePoolWrapper {
-                pool,
-                address: address.clone(),
-            };
-
-            let delete_task = tokio::spawn(async move {
-                let start_node = Instant::now();
-                let result = bss_rpc_retry!(
-                    pool_for_retry,
-                    delete_data_blob(blob_guid, block_number, Some(rpc_timeout))
-                )
-                .await;
-
-                let result_label = if result.is_ok() { "success" } else { "failure" };
-                histogram!("datavg_delete_blob_node_nanos", "bss_node" => address.clone(), "result" => result_label)
-                    .record(start_node.elapsed().as_nanos() as f64);
-
-                (address, result)
-            });
-            delete_futures.push(delete_task);
+            let future =
+                Self::delete_blob_from_node(bss_node, blob_guid, block_number, rpc_timeout);
+            delete_futures.push(future);
         }
 
         let mut successful_deletes = 0;
-        let mut errors = Vec::new();
+        let mut errors = Vec::with_capacity(volume.bss_nodes.len());
 
-        while let Some(join_result) = delete_futures.next().await {
-            let (address, result) = match join_result {
-                Ok(task_result) => task_result,
-                Err(_join_error) => {
-                    warn!("Task join error for delete operation");
-                    continue;
-                }
-            };
-
+        while let Some((address, result)) = delete_futures.next().await {
             match result {
                 Ok(()) => {
                     successful_deletes += 1;
                     debug!("Successful delete from BSS node: {}", address);
                 }
                 Err(rpc_error) => {
-                    warn!("RPC error deleting from BSS node {}: {}", address, rpc_error);
+                    warn!(
+                        "RPC error deleting from BSS node {}: {}",
+                        address, rpc_error
+                    );
                     errors.push(format!("{}: {}", address, rpc_error));
                 }
             }
 
             if successful_deletes >= write_quorum {
+                if !delete_futures.is_empty() {
+                    tokio::spawn(async move {
+                        while let Some((addr, res)) = delete_futures.next().await {
+                            match res {
+                                Ok(()) => {
+                                    debug!("Background delete to {} completed", addr);
+                                }
+                                Err(e) => {
+                                    warn!("Background delete to {} failed: {}", addr, e);
+                                }
+                            }
+                        }
+                    });
+                }
+
                 histogram!("datavg_delete_blob_nanos", "result" => "success")
                     .record(start.elapsed().as_nanos() as f64);
                 debug!(
-                    "Delete quorum achieved ({}/{}) for blob {}:{}, remaining operations continue in background",
+                    "Delete quorum achieved ({}/{}) for blob {}:{}",
                     successful_deletes,
                     volume.bss_nodes.len(),
                     blob_guid.blob_id,
