@@ -13,7 +13,7 @@ const numApiServers = app.node.tryGetContext("numApiServers") ?? 1;
 const numBenchClients = app.node.tryGetContext("numBenchClients") ?? 1;
 const benchType = app.node.tryGetContext("benchType") ?? null;
 const bssInstanceTypes =
-  app.node.tryGetContext("bssInstanceTypes") ?? "m8gd.large";
+  app.node.tryGetContext("bssInstanceTypes") ?? "i8g.xlarge";
 const browserIp = app.node.tryGetContext("browserIp") ?? null;
 const dataBlobStorage =
   app.node.tryGetContext("dataBlobStorage") ?? "s3HybridSingleAz";
