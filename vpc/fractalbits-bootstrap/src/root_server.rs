@@ -129,10 +129,10 @@ fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdRes
 
 fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     const TOTAL_BSS_NODES: usize = 6;
-    const NODES_PER_DATA_VOLUME: usize = 1;
-    const DATA_VG_QUORUM_N: usize = 1;
-    const DATA_VG_QUORUM_R: usize = 1;
-    const DATA_VG_QUORUM_W: usize = 1;
+    const NODES_PER_DATA_VOLUME: usize = 3;
+    const DATA_VG_QUORUM_N: usize = 3;
+    const DATA_VG_QUORUM_R: usize = 2;
+    const DATA_VG_QUORUM_W: usize = 2;
     const META_DATA_VG_QUORUM_N: usize = 6;
     const META_DATA_VG_QUORUM_R: usize = 4;
     const META_DATA_VG_QUORUM_W: usize = 4;
