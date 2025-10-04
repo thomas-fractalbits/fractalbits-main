@@ -242,12 +242,18 @@ pub fn destroy_vpc() -> CmdResult {
 
     // Require user to type exact confirmation text
     let _confirmation: String = Input::new()
-        .with_prompt(&format!("Type {} to confirm VPC destruction", "permanent destroy".bold()))
+        .with_prompt(&format!(
+            "Type {} to confirm VPC destruction",
+            "permanent destroy".bold()
+        ))
         .validate_with(|input: &String| -> Result<(), String> {
             if input == "permanent destroy" {
                 Ok(())
             } else {
-                Err(format!("You must type {} exactly to confirm", "permanent destroy".bold()))
+                Err(format!(
+                    "You must type {} exactly to confirm",
+                    "permanent destroy".bold()
+                ))
             }
         })
         .interact_text()

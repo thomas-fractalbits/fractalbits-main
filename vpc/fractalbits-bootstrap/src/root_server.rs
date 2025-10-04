@@ -129,7 +129,6 @@ fn initialize_nss_roles_in_ddb(nss_a_id: &str, nss_b_id: Option<&str>) -> CmdRes
 
 fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
     const TOTAL_BSS_NODES: usize = 6;
-    const NODES_PER_DATA_VOLUME: usize = 3;
     const DATA_VG_QUORUM_N: usize = 3;
     const DATA_VG_QUORUM_R: usize = 2;
     const DATA_VG_QUORUM_W: usize = 2;
@@ -159,43 +158,11 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
 
     info!("All BSS nodes registered. Initializing volume group configurations...");
 
-    // Build BSS data volume group configuration dynamically
-    let num_data_volumes = TOTAL_BSS_NODES / NODES_PER_DATA_VOLUME;
-
-    let mut data_volumes = Vec::new();
-    for vol_id_idx in 0..num_data_volumes {
-        let start_idx = vol_id_idx * NODES_PER_DATA_VOLUME;
-        let end_idx = start_idx + NODES_PER_DATA_VOLUME;
-
-        let nodes: Vec<String> = (start_idx..end_idx)
-            .map(|i| {
-                format!(
-                    r#"{{"node_id": "{}", "ip": "{}", "port": 8088}}"#,
-                    bss_addresses[i].0, bss_addresses[i].1
-                )
-            })
-            .collect();
-
-        data_volumes.push(format!(
-            r#"{{
-                "volume_id": {},
-                "bss_nodes": [{}]
-            }}"#,
-            vol_id_idx + 1,
-            nodes.join(",")
-        ));
-    }
-
-    let bss_data_vg_config_json = format!(
-        r#"{{
-        "volumes": [{}],
-        "quorum": {{
-            "n": {DATA_VG_QUORUM_N},
-            "r": {DATA_VG_QUORUM_R},
-            "w": {DATA_VG_QUORUM_W}
-        }}
-    }}"#,
-        data_volumes.join(",")
+    let bss_data_vg_config_json = build_volume_group_config(
+        &bss_addresses,
+        DATA_VG_QUORUM_N,
+        DATA_VG_QUORUM_R,
+        DATA_VG_QUORUM_W,
     );
 
     let bss_data_vg_config_item = format!(
@@ -213,34 +180,11 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
             --region $region
     }?;
 
-    // Initialize BSS metadata volume group configuration
-    // For metadata, all nodes are in a single volume
-    let metadata_nodes: Vec<String> = bss_addresses
-        .iter()
-        .map(|(node_id, address)| {
-            format!(
-                r#"{{"node_id": "{}", "ip": "{}", "port": 8088}}"#,
-                node_id, address
-            )
-        })
-        .collect();
-
-    // Metadata volume contains all nodes but still uses same quorum settings
-    let bss_metadata_vg_config_json = format!(
-        r#"{{
-        "volumes": [
-            {{
-                "volume_id": 1,
-                "bss_nodes": [{}]
-            }}
-        ],
-        "quorum": {{
-            "n": {META_DATA_VG_QUORUM_N},
-            "r": {META_DATA_VG_QUORUM_R},
-            "w": {META_DATA_VG_QUORUM_W}
-        }}
-    }}"#,
-        metadata_nodes.join(",")
+    let bss_metadata_vg_config_json = build_volume_group_config(
+        &bss_addresses,
+        META_DATA_VG_QUORUM_N,
+        META_DATA_VG_QUORUM_R,
+        META_DATA_VG_QUORUM_W,
     );
 
     let bss_metadata_vg_config_item = format!(
@@ -260,6 +204,51 @@ fn initialize_bss_volume_groups_in_ddb() -> CmdResult {
 
     info!("BSS volume group configurations initialized in service-discovery table");
     Ok(())
+}
+
+fn build_volume_group_config(
+    bss_addresses: &[(String, String)],
+    quorum_n: usize,
+    quorum_r: usize,
+    quorum_w: usize,
+) -> String {
+    let num_volumes = bss_addresses.len() / quorum_n;
+
+    let mut volumes = Vec::new();
+    for vol_id_idx in 0..num_volumes {
+        let start_idx = vol_id_idx * quorum_n;
+        let end_idx = start_idx + quorum_n;
+
+        let nodes: Vec<String> = (start_idx..end_idx)
+            .map(|i| {
+                format!(
+                    r#"{{"node_id": "{}", "ip": "{}", "port": 8088}}"#,
+                    bss_addresses[i].0, bss_addresses[i].1
+                )
+            })
+            .collect();
+
+        volumes.push(format!(
+            r#"{{
+                "volume_id": {},
+                "bss_nodes": [{}]
+            }}"#,
+            vol_id_idx + 1,
+            nodes.join(",")
+        ));
+    }
+
+    format!(
+        r#"{{
+        "volumes": [{}],
+        "quorum": {{
+            "n": {quorum_n},
+            "r": {quorum_r},
+            "w": {quorum_w}
+        }}
+    }}"#,
+        volumes.join(",")
+    )
 }
 
 fn wait_for_all_bss_nodes(region: &str, expected_count: usize) -> CmdResult {
