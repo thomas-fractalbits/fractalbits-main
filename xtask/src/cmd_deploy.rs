@@ -1,4 +1,5 @@
 use crate::*;
+use colored::*;
 use dialoguer::Input;
 use std::path::Path;
 
@@ -241,12 +242,12 @@ pub fn destroy_vpc() -> CmdResult {
 
     // Require user to type exact confirmation text
     let _confirmation: String = Input::new()
-        .with_prompt("Type 'permanent destroy' to confirm VPC destruction")
-        .validate_with(|input: &String| -> Result<(), &str> {
+        .with_prompt(&format!("Type {} to confirm VPC destruction", "permanent destroy".bold()))
+        .validate_with(|input: &String| -> Result<(), String> {
             if input == "permanent destroy" {
                 Ok(())
             } else {
-                Err("You must type 'permanent destroy' exactly to confirm")
+                Err(format!("You must type {} exactly to confirm", "permanent destroy".bold()))
             }
         })
         .interact_text()

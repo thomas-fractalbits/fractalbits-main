@@ -158,6 +158,23 @@ fn describe_stack(stack_name: &str) -> CmdResult {
     // Sort by name (first column)
     instances.sort_by(|a, b| a.0.cmp(&b.0));
 
+    // Add (1/N, 2/N, ...) suffixes for ASG instances with the same name
+    let mut name_counts: HashMap<String, usize> = HashMap::new();
+    for (name, _, _, _, _, _, _) in &instances {
+        *name_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    let mut name_indices: HashMap<String, usize> = HashMap::new();
+    for (name, _, _, _, _, _, _) in &mut instances {
+        if let Some(&count) = name_counts.get(name) {
+            if count > 1 {
+                let idx = name_indices.entry(name.clone()).or_insert(0);
+                *idx += 1;
+                *name = format!("{} ({}/{})", name, idx, count);
+            }
+        }
+    }
+
     // Create and populate the table
     let mut table = Table::new();
     table.load_preset(presets::NOTHING);
