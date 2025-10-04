@@ -343,13 +343,19 @@ impl DataVgProxy {
             })?;
 
         // Fast path: try reading from a random BSS node first
-        if let Some(first_node) = volume.bss_nodes.first() {
+        if !volume.bss_nodes.is_empty() {
+            let node_index = (self
+                .round_robin_counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                as usize)
+                % volume.bss_nodes.len();
+            let selected_node = &volume.bss_nodes[node_index];
             debug!(
                 "Attempting fast path read from BSS node: {}",
-                first_node.address
+                selected_node.address
             );
             match self
-                .get_blob_from_node_instance(first_node, blob_guid, block_number)
+                .get_blob_from_node_instance(selected_node, blob_guid, block_number)
                 .await
             {
                 Ok(blob_data) => {
@@ -361,7 +367,7 @@ impl DataVgProxy {
                 Err(e) => {
                     warn!(
                         "Fast path read failed from {}: {}, falling back to quorum read",
-                        first_node.address, e
+                        selected_node.address, e
                     );
                 }
             }
