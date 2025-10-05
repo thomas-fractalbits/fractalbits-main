@@ -3,6 +3,7 @@ use bytes::Bytes;
 use data_types::{DataBlobGuid, DataVgInfo, QuorumConfig};
 use futures::stream::{FuturesUnordered, StreamExt};
 use metrics::histogram;
+use rand::seq::SliceRandom;
 use rpc_client_bss::RpcClientBss;
 use rpc_client_common::{RpcError, bss_rpc_retry};
 use slotmap_conn_pool::{ConnPool, Poolable};
@@ -218,8 +219,12 @@ impl DataVgProxy {
         let rpc_timeout = self.rpc_timeout;
         let write_quorum = self.quorum_config.w as usize;
 
+        let mut bss_node_indices: Vec<usize> = (0..selected_volume.bss_nodes.len()).collect();
+        bss_node_indices.shuffle(&mut rand::thread_rng());
+
         let mut write_futures = FuturesUnordered::new();
-        for bss_node in &selected_volume.bss_nodes {
+        for &index in &bss_node_indices {
+            let bss_node = &selected_volume.bss_nodes[index];
             let future = Self::put_blob_to_node(
                 bss_node,
                 blob_guid,
