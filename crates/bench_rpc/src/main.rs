@@ -1,5 +1,5 @@
 use anyhow::{Error, Result};
-use clap::{App, Arg, ArgMatches};
+use clap::{Arg, ArgMatches, Command};
 use regex::Regex;
 use tokio::time::Duration;
 
@@ -22,7 +22,7 @@ fn main() {
 
     let args = parse_args();
 
-    let threads: usize = match args.value_of("threads").unwrap_or("1").trim().parse() {
+    let threads: usize = match args.get_one::<String>("threads").unwrap().trim().parse() {
         Ok(v) => v,
         Err(_) => {
             eprintln!("invalid parameter for 'threads' given, input type must be a integer.");
@@ -30,7 +30,12 @@ fn main() {
         }
     };
 
-    let conns: usize = match args.value_of("connections").unwrap_or("1").trim().parse() {
+    let conns: usize = match args
+        .get_one::<String>("connections")
+        .unwrap()
+        .trim()
+        .parse()
+    {
         Ok(v) => v,
         Err(_) => {
             eprintln!("invalid parameter for 'connections' given, input type must be a integer.");
@@ -38,7 +43,7 @@ fn main() {
         }
     };
 
-    let host: &str = match args.value_of("host") {
+    let host: &str = match args.get_one::<String>("host") {
         Some(v) => v,
         None => {
             eprintln!("missing 'host' parameter.");
@@ -46,9 +51,12 @@ fn main() {
         }
     };
 
-    let json: bool = args.is_present("json");
+    let json: bool = args.get_flag("json");
 
-    let duration: &str = args.value_of("duration").unwrap_or("60s");
+    let duration: &str = args
+        .get_one::<String>("duration")
+        .map(|s| s.as_str())
+        .unwrap_or("60s");
     let duration = match parse_duration(duration) {
         Ok(dur) => dur,
         Err(e) => {
@@ -58,32 +66,31 @@ fn main() {
     };
 
     let keys_limit: usize = args
-        .value_of("keys_limit")
-        .unwrap_or("10000000")
-        .trim()
-        .parse::<usize>()
+        .get_one::<String>("keys_limit")
+        .map(|s| s.trim().parse::<usize>().unwrap_or(10_000_000))
         .unwrap_or(10_000_000);
 
-    let pct: bool = args.is_present("pct");
+    let pct: bool = args.get_flag("pct");
 
     let rounds: usize = args
-        .value_of("rounds")
-        .unwrap_or("1")
-        .trim()
-        .parse::<usize>()
+        .get_one::<String>("rounds")
+        .map(|s| s.trim().parse::<usize>().unwrap_or(1))
         .unwrap_or(1);
 
     let io_depth: usize = args
-        .value_of("io_depth")
-        .unwrap_or("1")
-        .trim()
-        .parse::<usize>()
+        .get_one::<String>("io_depth")
+        .map(|s| s.trim().parse::<usize>().unwrap_or(1))
         .unwrap_or(1);
 
-    let rpc = args.value_of("rpc").unwrap_or("nss").into();
+    let rpc = args
+        .get_one::<String>("rpc")
+        .map(|s| s.as_str())
+        .unwrap_or("nss")
+        .into();
 
     let input = args
-        .value_of("input")
+        .get_one::<String>("input")
+        .map(|s| s.as_str())
         .unwrap_or(if rpc == "nss" {
             "test.data"
         } else {
@@ -91,7 +98,11 @@ fn main() {
         })
         .into();
 
-    let workload = args.value_of("workload").unwrap_or("write").into();
+    let workload = args
+        .get_one::<String>("workload")
+        .map(|s| s.as_str())
+        .unwrap_or("write")
+        .into();
 
     let settings = bench::BenchmarkSettings {
         threads,
@@ -157,115 +168,95 @@ fn parse_duration(duration: &str) -> Result<Duration> {
 }
 
 /// Contains Clap's app setup.
-fn parse_args() -> ArgMatches<'static> {
-    App::new("ReWrk")
+fn parse_args() -> ArgMatches {
+    Command::new("ReWrk")
         .version("0.3.1")
         .author("Harrison Burt <hburt2003@gmail.com>")
         .about("Benchmark HTTP/1 and HTTP/2 frameworks without pipelining bias.")
         .arg(
-            Arg::with_name("threads")
-                .short("t")
+            Arg::new("threads")
+                .short('t')
                 .long("threads")
                 .help("Set the amount of threads to use e.g. '-t 12'")
-                .takes_value(true)
+                .value_name("NUM")
                 .default_value("1"),
         )
         .arg(
-            Arg::with_name("connections")
-                .short("c")
+            Arg::new("connections")
+                .short('c')
                 .long("connections")
                 .help("Set the amount of concurrent e.g. '-c 512'")
-                .takes_value(true)
+                .value_name("NUM")
                 .default_value("1"),
         )
         .arg(
-            Arg::with_name("host")
-                .short("h")
+            Arg::new("host")
+                .short('h')
                 .long("host")
                 .help("Set the host to bench e.g. '-h http://127.0.0.1:5050'")
-                .takes_value(true)
+                .value_name("HOST")
                 .required(true),
         )
         .arg(
-            Arg::with_name("duration")
-                .short("d")
+            Arg::new("duration")
+                .short('d')
                 .long("duration")
                 .help("Set the duration of the benchmark.")
-                .takes_value(true)
-                .required(false),
+                .value_name("DURATION"),
         )
         .arg(
-            Arg::with_name("keys_limit")
-                .short("k")
+            Arg::new("keys_limit")
+                .short('k')
                 .long("keys_limit")
                 .help("Number of keys limit.")
-                .takes_value(true)
-                .required(false),
+                .value_name("NUM"),
         )
         .arg(
-            Arg::with_name("pct")
+            Arg::new("pct")
                 .long("pct")
                 .help("Displays the percentile table after benchmarking.")
-                .takes_value(false)
-                .required(false),
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("json")
+            Arg::new("json")
                 .long("json")
                 .help("Displays the results in a json format")
-                .takes_value(false)
-                .required(false),
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
-            Arg::with_name("rounds")
+            Arg::new("rounds")
                 .long("rounds")
-                .short("r")
+                .short('r')
                 .help("Repeats the benchmarks n amount of times")
-                .takes_value(true)
-                .required(false),
+                .value_name("NUM"),
         )
         .arg(
-            Arg::with_name("io_depth")
+            Arg::new("io_depth")
                 .long("io_depth")
-                .short("D")
+                .short('D')
                 .help("IO depth (number of concurrent rpc requests for one connection)")
-                .takes_value(true)
-                .required(false),
+                .value_name("NUM"),
         )
         .arg(
-            Arg::with_name("input")
-                .short("i")
+            Arg::new("input")
+                .short('i')
                 .long("input data file")
                 .help("Get input data from file")
-                .takes_value(true)
-                .required(false),
+                .value_name("FILE"),
         )
         .arg(
-            Arg::with_name("workload")
-                .short("w")
+            Arg::new("workload")
+                .short('w')
                 .long("workload")
                 .help("Workload (read/write/mixed)")
-                .takes_value(true)
-                .required(false),
+                .value_name("TYPE"),
         )
         .arg(
-            Arg::with_name("rpc")
-                .short("p")
+            Arg::new("rpc")
+                .short('p')
                 .long("rpc")
                 .help("rpc (nss/bss)")
-                .takes_value(true)
-                .required(false),
+                .value_name("TYPE"),
         )
-        //.arg(
-        //    Arg::with_name("random")
-        //        .long("rand")
-        //        .help(
-        //            "Sets the benchmark type to random mode, \
-        //             clients will randomly connect and re-connect.\n\
-        //             NOTE: This will cause the HTTP2 flag to be ignored."
-        //        )
-        //        .takes_value(false)
-        //        .required(false)
-        //)
         .get_matches()
 }
