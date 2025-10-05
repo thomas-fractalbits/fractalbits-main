@@ -97,7 +97,8 @@ pub fn build(deploy_target: DeployTarget, release_mode: bool) -> CmdResult {
                 info "Building Rust projects for $rust_target ($rust_cpu)";
                 RUSTFLAGS="-C target-cpu=$rust_cpu"
                 $[build_envs] cargo zigbuild
-                    --target $rust_target $rust_build_opt;
+                    --target $rust_target $rust_build_opt
+                    --workspace --exclude xtask --exclude fractalbits-bootstrap;
             }?;
 
             // Copy Rust binaries to deploy directory (excluding fractalbits-bootstrap)
