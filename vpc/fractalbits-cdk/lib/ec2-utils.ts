@@ -130,15 +130,15 @@ export const createInstance = (
   sg: ec2.SecurityGroup,
   role: iam.Role,
 ): ec2.Instance => {
+  const arch = instanceType.architecture === ec2.InstanceArchitecture.ARM_64 ? 'arm64' : 'x86_64';
+  const machineImage = ec2.MachineImage.fromSsmParameter(
+    `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.12-${arch}`
+  );
+
   return new ec2.Instance(scope, id, {
     vpc: vpc,
     instanceType: instanceType,
-    machineImage: ec2.MachineImage.latestAmazonLinux2023({
-      cpuType:
-        instanceType.architecture === ec2.InstanceArchitecture.ARM_64
-          ? ec2.AmazonLinuxCpuType.ARM_64
-          : ec2.AmazonLinuxCpuType.X86_64,
-    }),
+    machineImage: machineImage,
     vpcSubnets: { subnets: [specificSubnet] },
     securityGroup: sg,
     role: role,
@@ -194,12 +194,14 @@ export const createEc2Asg = (
     process.exit(1);
   }
 
-  const cpuType = isArm
-    ? ec2.AmazonLinuxCpuType.ARM_64
-    : ec2.AmazonLinuxCpuType.X86_64;
+  const arch = isArm ? 'arm64' : 'x86_64';
+  const machineImage = ec2.MachineImage.fromSsmParameter(
+    `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.12-${arch}`
+  );
+
   const launchTemplate = new ec2.LaunchTemplate(scope, `${id}Template`, {
     instanceType: new ec2.InstanceType(instanceTypeNames[0]),
-    machineImage: ec2.MachineImage.latestAmazonLinux2023({ cpuType }),
+    machineImage: machineImage,
     securityGroup: sg,
     role: role,
     userData: createUserData(scope, bootstrapOptions),
