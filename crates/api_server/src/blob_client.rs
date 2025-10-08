@@ -31,6 +31,7 @@ impl BlobClient {
         blob_storage_config: &BlobStorageConfig,
         rx: Receiver<BlobDeletionRequest>,
         rpc_timeout: Duration,
+        bss_conn_num: u16,
         data_blob_tracker: Option<Arc<DataBlobTracker>>,
         rss_clients: Option<
             Arc<slotmap_conn_pool::ConnPool<Arc<rpc_client_rss::RpcClientRss>, String>>,
@@ -40,6 +41,7 @@ impl BlobClient {
         let (storage, az_status_cache) = Self::create_storage_impl(
             blob_storage_config,
             rpc_timeout,
+            bss_conn_num,
             data_blob_tracker,
             rss_clients,
             rss_addr,
@@ -53,6 +55,7 @@ impl BlobClient {
     async fn create_storage_impl(
         blob_storage_config: &BlobStorageConfig,
         rpc_timeout: Duration,
+        bss_conn_num: u16,
         data_blob_tracker: Option<Arc<DataBlobTracker>>,
         rss_clients: Option<
             Arc<slotmap_conn_pool::ConnPool<Arc<rpc_client_rss::RpcClientRss>, String>>,
@@ -87,7 +90,13 @@ impl BlobClient {
                     })?;
 
                 BlobStorageImpl::HybridSingleAz(
-                    S3HybridSingleAzStorage::new(rss_client, s3_hybrid_config, rpc_timeout).await?,
+                    S3HybridSingleAzStorage::new(
+                        rss_client,
+                        s3_hybrid_config,
+                        rpc_timeout,
+                        bss_conn_num,
+                    )
+                    .await?,
                 )
             }
             BlobStorageBackend::S3ExpressMultiAz => {

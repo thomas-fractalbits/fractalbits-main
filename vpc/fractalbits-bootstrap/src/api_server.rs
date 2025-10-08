@@ -64,6 +64,7 @@ pub fn create_config(
 rss_addr = "{rss_endpoint}:8088"
 nss_conn_num = {num_cores}
 rss_conn_num = 1
+bss_conn_num = {num_cores}
 region = "{aws_region}"
 port = 80
 mgmt_port = 18088
@@ -117,6 +118,7 @@ backoff_multiplier = 1.0
 rss_addr = "{rss_endpoint}:8088"
 nss_conn_num = {num_cores}
 rss_conn_num = 1
+bss_conn_num = {num_cores}
 region = "{aws_region}"
 port = 80
 mgmt_port = 18088

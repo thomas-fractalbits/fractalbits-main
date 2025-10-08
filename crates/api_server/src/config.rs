@@ -97,6 +97,7 @@ pub struct Config {
     pub rss_addr: String,
     pub nss_conn_num: u16,
     pub rss_conn_num: u16,
+    pub bss_conn_num: u16,
 
     pub port: u16,
     pub mgmt_port: u16,
@@ -146,6 +147,7 @@ impl Config {
             rss_addr: "127.0.0.1:8086".to_string(),
             nss_conn_num: 2,
             rss_conn_num: 1,
+            bss_conn_num: 2,
             port: 8080,
             mgmt_port: 18080,
             https: HttpsConfig::default(),
@@ -169,6 +171,7 @@ impl Config {
             rss_addr: "127.0.0.1:8086".to_string(),
             nss_conn_num: 2,
             rss_conn_num: 1,
+            bss_conn_num: 2,
             port: 8080,
             mgmt_port: 18080,
             https: HttpsConfig::default(),

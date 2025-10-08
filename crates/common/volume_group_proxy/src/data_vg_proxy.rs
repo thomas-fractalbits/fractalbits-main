@@ -68,7 +68,11 @@ pub struct DataVgProxy {
 }
 
 impl DataVgProxy {
-    pub async fn new(data_vg_info: DataVgInfo, rpc_timeout: Duration) -> Result<Self, DataVgError> {
+    pub async fn new(
+        data_vg_info: DataVgInfo,
+        rpc_timeout: Duration,
+        bss_conn_num: u16,
+    ) -> Result<Self, DataVgError> {
         info!(
             "Initializing DataVgProxy with {} volumes",
             data_vg_info.volumes.len()
@@ -93,7 +97,6 @@ impl DataVgProxy {
                 );
 
                 let pool = ConnPool::new();
-                let bss_conn_num = 4;
 
                 for i in 0..bss_conn_num {
                     debug!(
