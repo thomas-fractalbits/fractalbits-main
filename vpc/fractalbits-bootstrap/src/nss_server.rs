@@ -23,11 +23,9 @@ fn calculate_art_journal_segment_size(volume_dev: &str) -> Result<u64, Error> {
 }
 
 pub fn bootstrap(
-    bucket_name: &str,
     volume_id: &str,
     meta_stack_testing: bool,
     for_bench: bool,
-    iam_role: &str,
     mirrord_endpoint: Option<&str>,
     rss_endpoint: &str,
 ) -> CmdResult {
@@ -38,9 +36,7 @@ pub fn bootstrap(
     format_local_nvme_disks(false)?;
     download_binaries(&["nss_server", "nss_role_agent"])?;
     setup_configs(
-        bucket_name,
         volume_id,
-        iam_role,
         "nss",
         mirrord_endpoint,
         rss_endpoint,
@@ -56,15 +52,13 @@ pub fn bootstrap(
 }
 
 fn setup_configs(
-    bucket_name: &str,
     volume_id: &str,
-    iam_role: &str,
     service_name: &str,
     mirrord_endpoint: Option<&str>,
     rss_endpoint: &str,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
-    create_nss_config(bucket_name, &volume_dev, iam_role)?;
+    create_nss_config(&volume_dev)?;
     create_mirrord_config(&volume_dev)?;
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
     create_ebs_udev_rule(volume_id, "nss_role_agent")?;
@@ -77,9 +71,7 @@ fn setup_configs(
     Ok(())
 }
 
-fn create_nss_config(bucket_name: &str, volume_dev: &str, iam_role: &str) -> CmdResult {
-    let aws_region = get_current_aws_region()?;
-
+fn create_nss_config(volume_dev: &str) -> CmdResult {
     // Get total memory in kilobytes from /proc/meminfo
     let total_mem_kb_str = run_fun!(cat /proc/meminfo | grep MemTotal | awk r"{print $2}")?;
     let total_mem_kb = total_mem_kb_str
@@ -112,14 +104,7 @@ art_thread_dataop_count = {art_thread_dataop_count}
 blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
-iam_role = "{iam_role}"
 mirrord_port = 9999
-
-[metadata_blob_in_s3]
-s3_host = "s3.{aws_region}.amazonaws.com"
-s3_port = 80
-s3_region = "{aws_region}"
-s3_bucket = "{bucket_name}"
 "##
     );
     run_cmd! {

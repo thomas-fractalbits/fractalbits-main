@@ -212,18 +212,16 @@ fn main() -> CmdResult {
             bss_server::bootstrap(meta_stack_testing, for_bench)?
         }
         Command::NssServer {
-            bucket,
+            bucket: _,
             volume_id,
             meta_stack_testing,
-            iam_role,
+            iam_role: _,
             mirrord_endpoint,
             rss_endpoint,
         } => nss_server::bootstrap(
-            &bucket,
             &volume_id,
             meta_stack_testing,
             for_bench,
-            &iam_role,
             mirrord_endpoint.as_deref(),
             &rss_endpoint,
         )?,
