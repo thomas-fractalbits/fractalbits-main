@@ -81,6 +81,7 @@ pub async fn delete_objects_handler(
         let key = format!("/{}\0", obj.key);
         let delete_ctx = ObjectRequestContext::new(
             ctx.app.clone(),
+            ctx.per_core.clone(),
             ctx.request.clone(),
             None,
             None,

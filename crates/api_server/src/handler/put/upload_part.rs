@@ -54,6 +54,7 @@ pub async fn upload_part_handler(
     // Create a new context for the part object
     let part_ctx = ObjectRequestContext::new(
         ctx.app,
+        ctx.per_core,
         ctx.request,
         ctx.api_key,
         ctx.auth,

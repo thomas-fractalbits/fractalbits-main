@@ -3,6 +3,8 @@ mod blob_storage;
 mod config;
 pub mod handler;
 mod object_layout;
+pub mod runtime;
+pub mod uring;
 
 use blob_client::{BlobClient, BlobDeletionRequest};
 pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridSingleAzConfig};
@@ -13,6 +15,8 @@ use moka::future::Cache;
 use rpc_client_common::{RpcError, rss_rpc_retry};
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcClientRss;
+pub use runtime::per_core::PerCoreContext;
+pub use uring::ring::PerCoreRing;
 
 use slotmap_conn_pool::{ConnPool, Poolable};
 use std::{

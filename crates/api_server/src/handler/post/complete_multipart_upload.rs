@@ -257,6 +257,7 @@ pub async fn complete_multipart_upload_handler(
         tracing::info!("Deleting invalid part: {}", invalid_key);
         let delete_ctx = ObjectRequestContext::new(
             ctx.app.clone(),
+            ctx.per_core.clone(),
             ctx.request.clone(),
             None,
             None,

@@ -68,6 +68,11 @@ tikv-jemallocator.workspace = true
 arrayvec.workspace = true
 governor.workspace = true
 futures-util.workspace = true
+socket2.workspace = true
+num_cpus.workspace = true
+core_affinity.workspace = true
+io-uring.workspace = true
+parking_lot.workspace = true
 
 [dev-dependencies]
 aws_signature = { workspace = true, features = ["testutils"] }

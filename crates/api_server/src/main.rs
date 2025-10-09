@@ -1,10 +1,15 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 mod api_key_routes;
 mod cache_mgmt;
 
 use actix_web::{App, HttpServer, middleware::Logger, web};
+use api_server::runtime::{
+    listeners,
+    per_core::{PerCoreBuilder, PerCoreConfig},
+};
+use api_server::uring::config::UringConfig;
 use api_server::{AppState, Config, handler::any_handler};
 use clap::Parser;
 use tracing::{error, info};
@@ -113,16 +118,44 @@ async fn main() {
     let app_state = AppState::new(Arc::new(config)).await;
     let app_state_arc = Arc::new(app_state);
 
-    // Create app factory closure
-    let create_app = {
+    let worker_count = num_cpus::get();
+    let uring_config = UringConfig::default();
+    let http_per_core = PerCoreBuilder::new(PerCoreConfig {
+        uring: uring_config.clone(),
+    });
+    let mgmt_per_core = PerCoreBuilder::new(PerCoreConfig {
+        uring: uring_config.clone(),
+    });
+
+    let http_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
+    let mgmt_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), mgmt_port);
+
+    let http_listeners = listeners::bind_reuseport(http_addr, worker_count).unwrap_or_else(|e| {
+        error!("Failed to bind HTTP listeners on {http_addr}: {e}");
+        std::process::exit(1);
+    });
+    let mgmt_listeners = listeners::bind_reuseport(mgmt_addr, worker_count).unwrap_or_else(|e| {
+        error!("Failed to bind management listeners on {mgmt_addr}: {e}");
+        std::process::exit(1);
+    });
+
+    info!(
+        port,
+        worker_count, "HTTP server started with reuseport listeners"
+    );
+    let mut http_server = HttpServer::new({
         let app_state_arc = app_state_arc.clone();
+        let per_core_builder = http_per_core.clone();
         move || {
+            let per_core_ctx = per_core_builder
+                .build_context()
+                .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
+            per_core_builder.pin_current_thread(per_core_ctx.worker_index());
+
             App::new()
                 .app_data(web::Data::new(app_state_arc.clone()))
-                // Configure payload size limits for S3 operations
-                // S3 supports up to 5GB per object, but multipart uploads can be up to 5TB
-                // Set a reasonable limit for testing and production use
-                .app_data(web::PayloadConfig::default().limit(5_368_709_120)) // 5GB limit
+                .app_data(web::Data::new(per_core_ctx))
+                .app_data(web::PayloadConfig::default().limit(5_368_709_120))
                 .wrap(Logger::default())
                 .service(
                     web::scope("/api_keys")
@@ -135,21 +168,30 @@ async fn main() {
                 )
                 .default_service(web::route().to(any_handler))
         }
-    };
+    });
 
-    // Start HTTP server
-    info!("HTTP server started at port {port}");
-    let http_server = HttpServer::new(create_app)
-        .bind(format!("0.0.0.0:{port}"))
-        .unwrap();
+    http_server = http_server.workers(worker_count);
 
-    // Start management server
-    info!("Management server started at port {mgmt_port}");
-    let mgmt_server = HttpServer::new({
+    for listener in http_listeners {
+        http_server = http_server.listen(listener).unwrap();
+    }
+
+    info!(
+        mgmt_port,
+        worker_count, "Management server started with reuseport listeners"
+    );
+    let mut mgmt_server = HttpServer::new({
         let app_state_arc = app_state_arc.clone();
+        let per_core_builder = mgmt_per_core.clone();
         move || {
+            let per_core_ctx = per_core_builder
+                .build_context()
+                .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
+            per_core_builder.pin_current_thread(per_core_ctx.worker_index());
+
             App::new()
                 .app_data(web::Data::new(app_state_arc.clone()))
+                .app_data(web::Data::new(per_core_ctx))
                 .wrap(Logger::default())
                 .service(
                     web::scope("/mgmt")
@@ -169,11 +211,14 @@ async fn main() {
                         .route("/cache/clear", web::post().to(cache_mgmt::clear_cache)),
                 )
         }
-    })
-    .bind(format!("0.0.0.0:{mgmt_port}"))
-    .unwrap();
+    });
 
-    // Run all servers concurrently
+    mgmt_server = mgmt_server.workers(worker_count);
+
+    for listener in mgmt_listeners {
+        mgmt_server = mgmt_server.listen(listener).unwrap();
+    }
+
     let http_server_future = http_server.run();
     let mgmt_server_future = mgmt_server.run();
 
