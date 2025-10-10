@@ -122,12 +122,18 @@ async fn main() {
     let http_app_states = Arc::new(build_per_core_app_states(worker_count, config.clone()).await);
     let mgmt_app_states = Arc::new(build_per_core_app_states(worker_count, config.clone()).await);
 
-    let http_per_core = PerCoreBuilder::new(PerCoreConfig {
-        uring: uring_config.clone(),
-    });
-    let mgmt_per_core = PerCoreBuilder::new(PerCoreConfig {
-        uring: uring_config.clone(),
-    });
+    let http_per_core = PerCoreBuilder::new(
+        worker_count,
+        PerCoreConfig {
+            uring: uring_config.clone(),
+        },
+    );
+    let mgmt_per_core = PerCoreBuilder::new(
+        worker_count,
+        PerCoreConfig {
+            uring: uring_config.clone(),
+        },
+    );
 
     let http_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
     let mgmt_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), mgmt_port);
