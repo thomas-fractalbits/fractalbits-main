@@ -34,7 +34,7 @@ use tokio::sync::{
     OnceCell,
     mpsc::{self, Sender},
 };
-use tracing::info;
+use tracing::debug;
 pub type BlobId = uuid::Uuid;
 
 pub struct AppState {
@@ -151,7 +151,7 @@ impl AppState {
                     Ok(client) => client,
                     Err(slotmap_conn_pool::Error::NoConnectionAvailable) => {
                         // Pool is empty, create connection on-demand (with transport already set in worker thread)
-                        info!(
+                        debug!(
                             "Creating NSS connection on-demand for {}",
                             self.config.nss_addr
                         );
@@ -191,7 +191,7 @@ impl AppState {
                     Ok(client) => client,
                     Err(slotmap_conn_pool::Error::NoConnectionAvailable) => {
                         // Pool is empty, create connection on-demand (with transport already set in worker thread)
-                        info!(
+                        debug!(
                             "Creating RSS connection on-demand for {}",
                             self.config.rss_addr
                         );
@@ -214,7 +214,7 @@ impl AppState {
     pub async fn get_blob_client(&self) -> Option<Arc<BlobClient>> {
         self.blob_client
             .get_or_try_init(|| async {
-                info!("Lazy-initializing BlobClient for worker thread");
+                debug!("Lazy-initializing BlobClient for worker thread");
 
                 let (tx, rx) = mpsc::channel(1024 * 1024);
 

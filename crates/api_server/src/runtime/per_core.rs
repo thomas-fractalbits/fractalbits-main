@@ -3,7 +3,7 @@ use core_affinity::{self, CoreId};
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 #[derive(Clone)]
 pub struct PerCoreBuilder {
@@ -62,7 +62,7 @@ impl PerCoreBuilder {
         }
         let core = self.core_ids[worker_index % self.core_ids.len()];
         if core_affinity::set_for_current(core) {
-            info!(worker_index, core_id = core.id, "pinned worker to core");
+            debug!(worker_index, core_id = core.id, "pinned worker to core");
         } else {
             warn!(
                 worker_index,
