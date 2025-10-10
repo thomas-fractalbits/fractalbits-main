@@ -372,7 +372,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       subnet1,
       privateSg,
       ec2Role,
-      ["c8g.2xlarge"],
+      ["c8g.xlarge"],
       apiServerBootstrapOptions,
       props.numApiServers,
       props.numApiServers,
