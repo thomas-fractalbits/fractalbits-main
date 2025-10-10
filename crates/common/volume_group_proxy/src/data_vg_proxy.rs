@@ -1,7 +1,10 @@
 use crate::DataVgError;
 use bytes::Bytes;
 use data_types::{DataBlobGuid, DataVgInfo, QuorumConfig};
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::{
+    future::BoxFuture,
+    stream::{FuturesUnordered, StreamExt},
+};
 use metrics::histogram;
 use rand::seq::SliceRandom;
 use rpc_client_bss::RpcClientBss;
@@ -71,7 +74,7 @@ impl DataVgProxy {
     pub async fn new(
         data_vg_info: DataVgInfo,
         rpc_timeout: Duration,
-        bss_conn_num: u16,
+        _bss_conn_num: u16,
     ) -> Result<Self, DataVgError> {
         info!(
             "Initializing DataVgProxy with {} volumes",
@@ -96,27 +99,19 @@ impl DataVgProxy {
                     bss_node.node_id, address
                 );
 
+                debug!("Creating single connection to BSS {}", address);
                 let pool = ConnPool::new();
-
-                for i in 0..bss_conn_num {
-                    debug!(
-                        "Creating connection {}/{} to BSS {}",
-                        i + 1,
-                        bss_conn_num,
-                        address
-                    );
-                    let client = Arc::new(
-                        <RpcClientBss as Poolable>::new(address.clone())
-                            .await
-                            .map_err(|e| {
-                                DataVgError::InitializationError(format!(
-                                    "Failed to connect to BSS {}: {}",
-                                    address, e
-                                ))
-                            })?,
-                    );
-                    pool.pooled(address.clone(), client);
-                }
+                let client = Arc::new(
+                    <RpcClientBss as Poolable>::new(address.clone())
+                        .await
+                        .map_err(|e| {
+                            DataVgError::InitializationError(format!(
+                                "Failed to connect to BSS {}: {}",
+                                address, e
+                            ))
+                        })?,
+                );
+                pool.pooled(address.clone(), client);
 
                 bss_nodes_with_pools.push(BssNodeWithPool {
                     node_id: bss_node.node_id,
@@ -184,7 +179,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         rpc_timeout: Duration,
-    ) -> impl std::future::Future<Output = (String, Result<(), RpcError>)> + Send + 'static {
+    ) -> BoxFuture<'static, (String, Result<(), RpcError>)> {
         let start_node = Instant::now();
         let address = bss_node.address.clone();
         let pool_for_retry = BssNodePoolWrapper {
@@ -192,7 +187,7 @@ impl DataVgProxy {
             address: address.clone(),
         };
 
-        async move {
+        Box::pin(async move {
             let result = bss_rpc_retry!(
                 pool_for_retry,
                 delete_data_blob(blob_guid, block_number, Some(rpc_timeout))
@@ -204,11 +199,9 @@ impl DataVgProxy {
                 .record(start_node.elapsed().as_nanos() as f64);
 
             (address, result)
-        }
+        })
     }
-}
 
-impl DataVgProxy {
     /// Create a new data blob GUID with a fresh UUID and selected volume
     pub fn create_data_blob_guid(&self) -> DataBlobGuid {
         let blob_id = Uuid::now_v7();
@@ -323,19 +316,18 @@ impl DataVgProxy {
         block_number: u32,
         body: Bytes,
         rpc_timeout: Duration,
-    ) -> impl std::future::Future<Output = (String, Result<(), RpcError>)> + Send + 'static {
+    ) -> BoxFuture<'static, (String, Result<(), RpcError>)> {
         let start_node = Instant::now();
         let address = bss_node.address.clone();
-        let pool_for_retry = BssNodePoolWrapper {
+        let wrapper = BssNodePoolWrapper {
             pool: bss_node.pool.clone(),
             address: address.clone(),
         };
 
-        async move {
-            let body_ref = &body;
+        Box::pin(async move {
             let result = bss_rpc_retry!(
-                pool_for_retry,
-                put_data_blob(blob_guid, block_number, body_ref.clone(), Some(rpc_timeout))
+                wrapper,
+                put_data_blob(blob_guid, block_number, body.clone(), Some(rpc_timeout))
             )
             .await;
 
@@ -344,9 +336,10 @@ impl DataVgProxy {
                 .record(start_node.elapsed().as_nanos() as f64);
 
             (address, result)
-        }
+        })
     }
 
+    /// Multi-BSS get_blob
     /// Multi-BSS get_blob with quorum-based reads
     pub async fn get_blob(
         &self,
@@ -420,21 +413,20 @@ impl DataVgProxy {
         let mut read_futures = FuturesUnordered::new();
         for bss_node in &volume.bss_nodes {
             let address = bss_node.address.clone();
-            let pool = bss_node.pool.clone();
-            let pool_for_retry = BssNodePoolWrapper {
-                pool,
+            let pool_wrapper = BssNodePoolWrapper {
+                pool: bss_node.pool.clone(),
                 address: address.clone(),
             };
 
             let read_task = tokio::spawn(async move {
                 let result = async {
-                    let mut body = Bytes::new();
+                    let mut local = Bytes::new();
                     bss_rpc_retry!(
-                        pool_for_retry,
-                        get_data_blob(blob_guid, block_number, &mut body, Some(rpc_timeout))
+                        pool_wrapper,
+                        get_data_blob(blob_guid, block_number, &mut local, Some(rpc_timeout))
                     )
                     .await?;
-                    Ok::<Bytes, RpcError>(body)
+                    Ok::<Bytes, RpcError>(local)
                 }
                 .await;
                 (address, result)
