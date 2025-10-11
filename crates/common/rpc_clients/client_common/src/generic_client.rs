@@ -98,6 +98,11 @@ where
     where
         Header: Default,
     {
+        let stream = Self::configure_tcp_socket(stream).map_err(|e| {
+            RpcError::IoError(io::Error::other(format!(
+                "failed to configure tcp stream: {e}"
+            )))
+        })?;
         let mut client = Self::new_internal(stream, 0).await?;
 
         // For new connections, perform handshake if needed based on RPC type
