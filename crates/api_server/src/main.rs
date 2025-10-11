@@ -176,8 +176,7 @@ async fn main() {
         Arc::new(CacheCoordinator::new());
     let az_status_coordinator: Arc<CacheCoordinator<String>> = Arc::new(CacheCoordinator::new());
 
-    let http_per_core = PerCoreBuilder::new(per_core_rings.clone(), per_core_reactors.clone());
-    let mgmt_per_core = PerCoreBuilder::new(per_core_rings.clone(), per_core_reactors.clone());
+    let per_core_builder = PerCoreBuilder::new(per_core_rings.clone(), per_core_reactors.clone());
 
     let http_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
     let mgmt_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), mgmt_port);
@@ -193,63 +192,83 @@ async fn main() {
 
     info!(
         port,
-        worker_count, "HTTP server started with reuseport listeners"
+        mgmt_port,
+        worker_count,
+        "Starting unified server with reuseport listeners (thread-per-core)"
     );
 
-    let make_api_app_factory = |per_core_builder: PerCoreBuilder| {
-        let config_clone = config.clone();
-        let cache_coordinator = cache_coordinator.clone();
-        let az_status_coordinator = az_status_coordinator.clone();
-        let web_root = web_root.clone();
-        move || {
-            let per_core_ctx = per_core_builder
-                .build_context()
-                .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
-            per_core_builder.pin_current_thread(per_core_ctx.worker_index());
-            set_current_transport(Some(Arc::new(reactor::ReactorTransport::new(
-                per_core_ctx.reactor(),
-            ))));
-            let app_state = Arc::new(AppState::new_per_core_sync(
-                config_clone.clone(),
-                per_core_ctx.ring(),
-                per_core_ctx.reactor(),
-                cache_coordinator.clone(),
-                az_status_coordinator.clone(),
-            ));
+    let config_clone = config.clone();
+    let cache_coordinator_clone = cache_coordinator.clone();
+    let az_status_coordinator_clone = az_status_coordinator.clone();
+    let web_root_clone = web_root.clone();
 
-            let mut app = App::new()
-                .app_data(web::Data::new(app_state))
-                .app_data(web::Data::new(per_core_ctx))
-                .app_data(web::PayloadConfig::default().limit(5_368_709_120))
-                .wrap(Logger::default())
-                .service(
-                    web::scope("/api_keys")
-                        .route("/", web::post().to(api_key_routes::create_api_key))
-                        .route("/", web::get().to(api_key_routes::list_api_keys))
-                        .route(
-                            "/{key_id}",
-                            web::delete().to(api_key_routes::delete_api_key),
-                        ),
-                );
+    let mut server = HttpServer::new(move || {
+        let per_core_ctx = per_core_builder
+            .build_context()
+            .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
+        per_core_builder.pin_current_thread(per_core_ctx.worker_index());
+        set_current_transport(Some(Arc::new(reactor::ReactorTransport::new(
+            per_core_ctx.reactor(),
+        ))));
+        let app_state = Arc::new(AppState::new_per_core_sync(
+            config_clone.clone(),
+            per_core_ctx.ring(),
+            per_core_ctx.reactor(),
+            cache_coordinator_clone.clone(),
+            az_status_coordinator_clone.clone(),
+        ));
 
-            if let Some(ref web_root) = web_root {
-                let static_dir = web_root.clone();
-                app = app.service(Files::new("/ui", static_dir).index_file("index.html"));
-            }
+        let mut app = App::new()
+            .app_data(web::Data::new(app_state))
+            .app_data(web::Data::new(per_core_ctx))
+            .app_data(web::PayloadConfig::default().limit(5_368_709_120))
+            .wrap(Logger::default())
+            .service(
+                web::scope("/mgmt")
+                    .route("/health", web::get().to(cache_mgmt::mgmt_health))
+                    .route(
+                        "/cache/invalidate/bucket/{name}",
+                        web::post().to(cache_mgmt::invalidate_bucket),
+                    )
+                    .route(
+                        "/cache/invalidate/api_key/{id}",
+                        web::post().to(cache_mgmt::invalidate_api_key),
+                    )
+                    .route(
+                        "/cache/update/az_status/{id}",
+                        web::post().to(cache_mgmt::update_az_status),
+                    )
+                    .route("/cache/clear", web::post().to(cache_mgmt::clear_cache)),
+            )
+            .service(
+                web::scope("/api_keys")
+                    .route("/", web::post().to(api_key_routes::create_api_key))
+                    .route("/", web::get().to(api_key_routes::list_api_keys))
+                    .route(
+                        "/{key_id}",
+                        web::delete().to(api_key_routes::delete_api_key),
+                    ),
+            );
 
-            app.default_service(web::route().to(any_handler))
+        if let Some(ref web_root) = web_root_clone {
+            let static_dir = web_root.clone();
+            app = app.service(Files::new("/ui", static_dir).index_file("index.html"));
         }
-    };
 
-    let http_app_factory = make_api_app_factory(http_per_core.clone());
-    let mut http_server = HttpServer::new(http_app_factory.clone());
-    http_server = http_server.workers(worker_count);
+        app.default_service(web::route().to(any_handler))
+    });
+
+    server = server.workers(worker_count);
+
     for listener in http_listeners {
-        http_server = http_server.listen(listener).unwrap();
+        server = server.listen(listener).unwrap();
     }
 
-    let https_server_future = if https_config.enabled {
-        let https_per_core = PerCoreBuilder::new(per_core_rings.clone(), per_core_reactors.clone());
+    for listener in mgmt_listeners {
+        server = server.listen(listener).unwrap();
+    }
+
+    if https_config.enabled {
         let https_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), https_config.port);
         let https_listeners =
             listeners::bind_reuseport(https_addr, worker_count).unwrap_or_else(|e| {
@@ -259,12 +278,9 @@ async fn main() {
 
         info!(
             https_port = https_config.port,
-            worker_count, "HTTPS server started with reuseport listeners"
+            "HTTPS enabled on unified server"
         );
 
-        let https_app_factory = make_api_app_factory(https_per_core.clone());
-        let mut https_server = HttpServer::new(https_app_factory);
-        https_server = https_server.workers(worker_count);
         let key_path = PathBuf::from(&https_config.key_file);
         let private_key = match load_private_key(&key_path) {
             Ok(private_key) => private_key,
@@ -301,108 +317,11 @@ async fn main() {
                 builder.set_alpn_protos(b"\x08http/1.1").unwrap();
             }
 
-            https_server = https_server.listen_openssl(listener, builder).unwrap();
+            server = server.listen_openssl(listener, builder).unwrap();
         }
-
-        Some(https_server.run())
     } else {
         info!("HTTPS is disabled");
-        None
-    };
-
-    info!(
-        mgmt_port,
-        worker_count, "Management server started with reuseport listeners"
-    );
-    let cache_coordinator_mgmt = cache_coordinator.clone();
-    let az_status_coordinator_mgmt = az_status_coordinator.clone();
-    let mut mgmt_server = HttpServer::new({
-        let per_core_builder = mgmt_per_core.clone();
-        let config_clone = config.clone();
-        let cache_coordinator = cache_coordinator_mgmt;
-        let az_status_coordinator = az_status_coordinator_mgmt;
-        move || {
-            let per_core_ctx = per_core_builder
-                .build_context()
-                .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
-            per_core_builder.pin_current_thread(per_core_ctx.worker_index());
-            set_current_transport(Some(Arc::new(reactor::ReactorTransport::new(
-                per_core_ctx.reactor(),
-            ))));
-            let app_state = Arc::new(AppState::new_per_core_sync(
-                config_clone.clone(),
-                per_core_ctx.ring(),
-                per_core_ctx.reactor(),
-                cache_coordinator.clone(),
-                az_status_coordinator.clone(),
-            ));
-
-            App::new()
-                .app_data(web::Data::new(app_state))
-                .app_data(web::Data::new(per_core_ctx))
-                .wrap(Logger::default())
-                .service(
-                    web::scope("/mgmt")
-                        .route("/health", web::get().to(cache_mgmt::mgmt_health))
-                        .route(
-                            "/cache/invalidate/bucket/{name}",
-                            web::post().to(cache_mgmt::invalidate_bucket),
-                        )
-                        .route(
-                            "/cache/invalidate/api_key/{id}",
-                            web::post().to(cache_mgmt::invalidate_api_key),
-                        )
-                        .route(
-                            "/cache/update/az_status/{id}",
-                            web::post().to(cache_mgmt::update_az_status),
-                        )
-                        .route("/cache/clear", web::post().to(cache_mgmt::clear_cache)),
-                )
-        }
-    });
-
-    mgmt_server = mgmt_server.workers(worker_count);
-
-    for listener in mgmt_listeners {
-        mgmt_server = mgmt_server.listen(listener).unwrap();
     }
 
-    let http_server_future = http_server.run();
-    let mgmt_server_future = mgmt_server.run();
-
-    match https_server_future {
-        Some(https_server_future) => {
-            tokio::select! {
-                result = http_server_future => {
-                    if let Err(e) = result {
-                        tracing::error!("HTTP server stopped: {e}");
-                    }
-                }
-                result = https_server_future => {
-                    if let Err(e) = result {
-                        tracing::error!("HTTPS server stopped: {e}");
-                    }
-                }
-                result = mgmt_server_future => {
-                    if let Err(e) = result {
-                        tracing::error!("Management server stopped: {e}");
-                    }
-                }
-            }
-        }
-        None => {
-            tokio::select! {
-                result = http_server_future => {
-                    if let Err(e) = result {
-                        tracing::error!("HTTP server stopped: {e}");
-                    }
-                }
-                result = mgmt_server_future => {
-                    if let Err(e) = result {
-                        tracing::error!("Management server stopped: {e}");
-                    }
-                }
-            }
-        }
-    }
+    server.run().await.unwrap()
 }
