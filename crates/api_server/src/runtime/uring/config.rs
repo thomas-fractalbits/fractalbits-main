@@ -10,8 +10,8 @@ pub struct UringConfig {
 impl Default for UringConfig {
     fn default() -> Self {
         Self {
-            queue_depth: 512,
-            enable_sqpoll: false,
+            queue_depth: 2048,
+            enable_sqpoll: true,
             sq_thread_idle: 2000,
         }
     }

@@ -302,48 +302,65 @@ where
         requests: &RequestMap<Header>,
         rpc_type: &'static str,
     ) -> Result<(), RpcError> {
-        const TRANSPORT_CHUNK_SIZE: usize = 64 * 1024;
-        let mut decoder = Codec::default();
-        let mut buffer = BytesMut::with_capacity(128 * 1024);
+        let header_size = Header::SIZE;
 
         loop {
-            debug!(
-                rpc_type = %rpc_type,
-                %socket_fd,
-                "transport recv waiting"
-            );
-            let chunk = transport
-                .recv(socket_fd, TRANSPORT_CHUNK_SIZE)
+            let header_bytes = transport
+                .recv(socket_fd, header_size)
                 .await
                 .map_err(RpcError::IoError)?;
-            debug!(
-                rpc_type = %rpc_type,
-                %socket_fd,
-                chunk_len = chunk.len(),
-                "transport recv completed"
-            );
 
-            if chunk.is_empty() {
-                if let Some(frame) = decoder
-                    .decode_eof(&mut buffer)
-                    .map_err(|e| RpcError::DecodeError(e.to_string()))?
-                {
-                    Self::handle_incoming_frame(frame, requests, socket_fd, rpc_type);
-                }
+            if header_bytes.is_empty() {
+                debug!(
+                    rpc_type = %rpc_type,
+                    %socket_fd,
+                    "connection closed during header read"
+                );
                 break;
             }
 
-            buffer.extend_from_slice(&chunk);
-
-            loop {
-                match decoder.decode(&mut buffer) {
-                    Ok(Some(frame)) => {
-                        Self::handle_incoming_frame(frame, requests, socket_fd, rpc_type);
-                    }
-                    Ok(None) => break,
-                    Err(e) => return Err(RpcError::DecodeError(e.to_string())),
-                }
+            if header_bytes.len() != header_size {
+                return Err(RpcError::DecodeError(format!(
+                    "incomplete header: expected {}, got {}",
+                    header_size,
+                    header_bytes.len()
+                )));
             }
+
+            let header = Header::decode(&header_bytes);
+            let body_size = header.get_body_size();
+            header_size.checked_add(body_size).ok_or_else(|| {
+                RpcError::DecodeError(format!(
+                    "invalid frame size: header {header_size}, body {body_size}"
+                ))
+            })?;
+
+            let body = if body_size == 0 {
+                bytes::Bytes::new()
+            } else {
+                let body_bytes = transport
+                    .recv(socket_fd, body_size)
+                    .await
+                    .map_err(RpcError::IoError)?;
+
+                if body_bytes.len() != body_size {
+                    if body_bytes.is_empty() {
+                        return Err(RpcError::DecodeError(
+                            "connection closed during body read".into(),
+                        ));
+                    }
+                    return Err(RpcError::DecodeError(format!(
+                        "incomplete body: expected {}, got {}",
+                        body_size,
+                        body_bytes.len()
+                    )));
+                }
+
+                body_bytes
+            };
+
+            let frame = MessageFrame { header, body };
+            Self::handle_incoming_frame(frame, requests, socket_fd, rpc_type);
         }
 
         warn!(%rpc_type, %socket_fd, "connection closed, receive message task quit");

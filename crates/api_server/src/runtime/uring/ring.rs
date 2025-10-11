@@ -14,7 +14,13 @@ pub struct PerCoreRing {
 impl PerCoreRing {
     pub fn new(worker_index: usize, config: &UringConfig) -> io::Result<Self> {
         config.validate()?;
-        let ring = io_uring::IoUring::new(config.queue_depth())?;
+        let ring = if config.enable_sqpoll() {
+            io_uring::IoUring::builder()
+                .setup_sqpoll(config.sq_thread_idle())
+                .build(config.queue_depth())?
+        } else {
+            io_uring::IoUring::new(config.queue_depth())?
+        };
         Ok(Self {
             worker_index,
             inner: Arc::new(Mutex::new(ring)),

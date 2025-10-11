@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, atomic::AtomicU64},
     time::{Duration, Instant},
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 struct InFlightGuard<'a> {
@@ -71,12 +71,8 @@ pub struct DataVgProxy {
 }
 
 impl DataVgProxy {
-    pub async fn new(
-        data_vg_info: DataVgInfo,
-        rpc_timeout: Duration,
-        _bss_conn_num: u16,
-    ) -> Result<Self, DataVgError> {
-        info!(
+    pub async fn new(data_vg_info: DataVgInfo, rpc_timeout: Duration) -> Result<Self, DataVgError> {
+        debug!(
             "Initializing DataVgProxy with {} volumes",
             data_vg_info.volumes.len()
         );
@@ -94,7 +90,7 @@ impl DataVgProxy {
 
             for bss_node in volume.bss_nodes {
                 let address = format!("{}:{}", bss_node.ip, bss_node.port);
-                info!(
+                debug!(
                     "Creating dedicated connection pool for BSS node {}: {}",
                     bss_node.node_id, address
                 );
@@ -127,7 +123,7 @@ impl DataVgProxy {
             });
         }
 
-        info!(
+        debug!(
             "DataVgProxy initialized successfully with {} volumes",
             volumes_with_pools.len()
         );

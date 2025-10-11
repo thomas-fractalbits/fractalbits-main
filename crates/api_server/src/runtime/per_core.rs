@@ -60,9 +60,18 @@ impl PerCoreBuilder {
         if self.core_ids.is_empty() {
             return;
         }
-        let core = self.core_ids[worker_index % self.core_ids.len()];
+        if self.core_ids.len() <= 1 {
+            warn!("insufficient cores for pinning (skipping core 0)");
+            return;
+        }
+        let core_index = (worker_index % (self.core_ids.len() - 1)) + 1;
+        let core = self.core_ids[core_index];
         if core_affinity::set_for_current(core) {
-            debug!(worker_index, core_id = core.id, "pinned worker to core");
+            debug!(
+                worker_index,
+                core_id = core.id,
+                "pinned worker to core (skipping core 0)"
+            );
         } else {
             warn!(
                 worker_index,

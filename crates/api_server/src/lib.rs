@@ -221,7 +221,6 @@ impl AppState {
                     &self.config.blob_storage,
                     rx,
                     self.config.rpc_timeout(),
-                    self.config.bss_conn_num,
                     Some(self.data_blob_tracker.clone()),
                     Some(Arc::new(self.rpc_clients_rss.clone())),
                     Some(self.config.rss_addr.clone()),

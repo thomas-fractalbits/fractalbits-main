@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::OnceCell;
-use tracing::{debug, info};
+use tracing::debug;
 use uuid::Uuid;
 
 pub struct S3HybridSingleAzStorage {
@@ -25,7 +25,6 @@ impl S3HybridSingleAzStorage {
         rss_client: Arc<rpc_client_rss::RpcClientRss>,
         s3_hybrid_config: &S3HybridSingleAzConfig,
         rpc_timeout: Duration,
-        bss_conn_num: u16,
     ) -> Result<Self, BlobStorageError> {
         let data_vg_info = DATA_VG_INFO
             .get_or_try_init(|| {
@@ -46,16 +45,9 @@ impl S3HybridSingleAzStorage {
             .await?
             .clone();
 
-        let volume_count = data_vg_info.volumes.len();
-        info!("Initializing DataVgProxy with {volume_count} volumes, bss_conn_num={bss_conn_num}");
-
-        let data_vg_proxy = Arc::new(
-            DataVgProxy::new(data_vg_info, rpc_timeout, bss_conn_num)
-                .await
-                .map_err(|e| {
-                    BlobStorageError::Config(format!("Failed to initialize DataVgProxy: {}", e))
-                })?,
-        );
+        let data_vg_proxy = Arc::new(DataVgProxy::new(data_vg_info, rpc_timeout).await.map_err(
+            |e| BlobStorageError::Config(format!("Failed to initialize DataVgProxy: {}", e)),
+        )?);
 
         let client_s3 = create_s3_client(
             &s3_hybrid_config.s3_host,

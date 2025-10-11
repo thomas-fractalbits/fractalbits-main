@@ -149,8 +149,8 @@ async fn main() {
     }
     let web_root = gui_web_root.clone();
     let worker_count = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(2);
+        .map(|n| n.get().saturating_sub(1).max(1))
+        .unwrap_or(1);
     let uring_config = UringConfig::default();
 
     let per_core_rings: Arc<Vec<Arc<PerCoreRing>>> = Arc::new(
