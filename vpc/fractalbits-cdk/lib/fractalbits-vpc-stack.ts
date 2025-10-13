@@ -26,6 +26,8 @@ export interface FractalbitsVpcStackProps extends cdk.StackProps {
   benchType?: "service_endpoint" | "external" | null;
   azPair: string;
   bssInstanceTypes: string;
+  apiServerInstanceType: string;
+  benchClientInstanceType: string;
   browserIp?: string;
   dataBlobStorage: "s3HybridSingleAz" | "s3ExpressMultiAz";
 }
@@ -253,7 +255,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
         subnet1,
         privateSg,
         ec2Role,
-        ["c8g.2xlarge"],
+        [props.benchClientInstanceType],
         benchClientBootstrapOptions,
         props.numBenchClients,
         props.numBenchClients,
@@ -372,7 +374,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       subnet1,
       privateSg,
       ec2Role,
-      ["c8g.xlarge"],
+      [props.apiServerInstanceType],
       apiServerBootstrapOptions,
       props.numApiServers,
       props.numApiServers,

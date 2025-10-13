@@ -15,6 +15,10 @@ const numBssNodes = app.node.tryGetContext("numBssNodes") ?? 6;
 const benchType = app.node.tryGetContext("benchType") ?? null;
 const bssInstanceTypes =
   app.node.tryGetContext("bssInstanceTypes") ?? "i8g.2xlarge";
+const apiServerInstanceType =
+  app.node.tryGetContext("apiServerInstanceType") ?? "c8g.xlarge";
+const benchClientInstanceType =
+  app.node.tryGetContext("benchClientInstanceType") ?? "c8g.2xlarge";
 const browserIp = app.node.tryGetContext("browserIp") ?? null;
 const dataBlobStorage =
   app.node.tryGetContext("dataBlobStorage") ?? "s3HybridSingleAz";
@@ -43,6 +47,8 @@ const vpcStack = new FractalbitsVpcStack(app, "FractalbitsVpcStack", {
   benchType: benchType,
   azPair: azPair,
   bssInstanceTypes: bssInstanceTypes,
+  apiServerInstanceType: apiServerInstanceType,
+  benchClientInstanceType: benchClientInstanceType,
   dataBlobStorage: dataBlobStorage,
 });
 
@@ -56,6 +62,7 @@ if (benchType === "service_endpoint") {
       env: env,
       serviceEndpoint: vpcStack.nlbLoadBalancerDnsName,
       benchClientCount: benchClientCount,
+      benchClientInstanceType: benchClientInstanceType,
       benchType: benchType,
     },
   );

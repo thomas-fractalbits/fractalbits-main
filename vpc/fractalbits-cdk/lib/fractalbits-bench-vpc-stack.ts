@@ -7,6 +7,7 @@ import { createInstance, createUserData, createEc2Asg } from "./ec2-utils";
 interface FractalbitsBenchVpcStackProps extends cdk.StackProps {
   serviceEndpoint: string;
   benchClientCount: number;
+  benchClientInstanceType: string;
   benchType?: "service_endpoint" | "internal" | "external" | null;
 }
 
@@ -97,7 +98,7 @@ export class FractalbitsBenchVpcStack extends cdk.Stack {
       this.vpc.isolatedSubnets[0], // Use first isolated subnet
       privateSg,
       ec2Role,
-      ["c7g.medium"],
+      [props.benchClientInstanceType],
       benchClientBootstrapOptions,
       props.benchClientCount,
       props.benchClientCount,
