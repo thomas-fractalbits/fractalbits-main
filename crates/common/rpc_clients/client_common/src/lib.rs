@@ -1,11 +1,10 @@
 use thiserror::Error;
 
 pub mod generic_client;
-pub mod io_uring_support;
-pub mod transport;
+#[cfg(feature = "io_uring")]
+pub mod io_uring;
 pub use generic_client::{RpcClient, RpcCodec};
 pub use rpc_codec_common::{MessageFrame, MessageHeaderTrait};
-pub use transport::IoUringTransport;
 
 pub trait ErrorRetryable {
     fn retryable(&self) -> bool;

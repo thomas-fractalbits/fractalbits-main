@@ -1,3 +1,5 @@
+#[cfg(feature = "io_uring")]
+use crate::io_uring;
 use bytes::BytesMut;
 use metrics::{counter, gauge};
 use parking_lot::Mutex;
@@ -14,6 +16,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 use strum::AsRefStr;
+#[cfg(not(feature = "io_uring"))]
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
@@ -215,6 +218,25 @@ where
     }
 
     async fn send_task(
+        writer: OwnedWriteHalf,
+        receiver: Receiver<MessageFrame<Header>>,
+        socket_fd: RawFd,
+        rpc_type: &'static str,
+    ) -> Result<(), RpcError> {
+        #[cfg(feature = "io_uring")]
+        {
+            drop(writer);
+            Self::send_task_io_uring(receiver, socket_fd, rpc_type).await
+        }
+
+        #[cfg(not(feature = "io_uring"))]
+        {
+            Self::send_task_tokio(writer, receiver, socket_fd, rpc_type).await
+        }
+    }
+
+    #[cfg(not(feature = "io_uring"))]
+    async fn send_task_tokio(
         mut writer: OwnedWriteHalf,
         mut receiver: Receiver<MessageFrame<Header>>,
         socket_fd: RawFd,
@@ -248,6 +270,53 @@ where
         Ok(())
     }
 
+    #[cfg(feature = "io_uring")]
+    async fn send_task_io_uring(
+        mut receiver: Receiver<MessageFrame<Header>>,
+        socket_fd: RawFd,
+        rpc_type: &'static str,
+    ) -> Result<(), RpcError> {
+        let transport = io_uring::get_current_reactor().expect("io_uring reactor missing");
+
+        let mut header_buf = BytesMut::with_capacity(Header::SIZE);
+
+        while let Some(frame) = receiver.recv().await {
+            gauge!("rpc_request_pending_in_send_queue", "type" => rpc_type).decrement(1.0);
+            let MessageFrame { header, body } = frame;
+            let request_id = header.get_id();
+            debug!(%rpc_type, %socket_fd, %request_id, "sending request via io_uring");
+
+            header_buf.clear();
+            header_buf.reserve(Header::SIZE);
+            header.encode(&mut header_buf);
+            let header_len = header_buf.len();
+            let header_bytes = header_buf.split_to(header_len).freeze();
+            let body_len = body.len();
+            let expected_total = header_len + body_len;
+
+            let written = transport
+                .send(socket_fd, header_bytes, body)
+                .await
+                .map_err(RpcError::IoError)?;
+
+            if written != expected_total {
+                warn!(
+                    %rpc_type,
+                    %socket_fd,
+                    %request_id,
+                    written,
+                    expected_total,
+                    "io_uring send wrote unexpected byte count"
+                );
+            }
+
+            counter!("rpc_request_sent", "type" => rpc_type, "name" => "all").increment(1);
+        }
+
+        warn!(%rpc_type, %socket_fd, "sender closed, send message task quit");
+        Ok(())
+    }
+
     async fn receive_task(
         receiver: OwnedReadHalf,
         requests: RequestMap<Header>,
@@ -271,51 +340,8 @@ where
         requests: &RequestMap<Header>,
         rpc_type: &'static str,
     ) -> Result<(), RpcError> {
-        use crate::io_uring_support::get_io_uring_recv_frame;
-
-        let recv_fn = get_io_uring_recv_frame().ok_or_else(|| {
-            RpcError::IoError(io::Error::other("no io_uring recv function available"))
-        })?;
-
-        let header_size = Header::SIZE;
-
-        loop {
-            let (header_bytes, body_bytes) = match recv_fn(socket_fd, header_size, 0).await {
-                Ok((h, b)) => (h, b),
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    debug!(
-                        rpc_type = %rpc_type,
-                        %socket_fd,
-                        "connection closed"
-                    );
-                    break;
-                }
-                Err(e) => return Err(RpcError::IoError(e)),
-            };
-
-            if header_bytes.is_empty() {
-                debug!(
-                    rpc_type = %rpc_type,
-                    %socket_fd,
-                    "connection closed (empty header)"
-                );
-                break;
-            }
-
-            let header = Header::decode(&header_bytes);
-            let body_size = header.get_body_size();
-
-            let body = if body_size > 0 {
-                let (_empty_header, body) = match recv_fn(socket_fd, 0, body_size).await {
-                    Ok((h, b)) => (h, b),
-                    Err(e) => return Err(RpcError::IoError(e)),
-                };
-                body
-            } else {
-                body_bytes
-            };
-
-            let frame = MessageFrame { header, body };
+        let transport = io_uring::get_current_reactor().expect("io_uring reactor missing");
+        while let Ok(frame) = transport.recv_frame(socket_fd).await {
             Self::handle_incoming_frame(frame, requests, socket_fd, rpc_type);
         }
 

@@ -8,7 +8,6 @@ mod cache_mgmt;
 
 use actix_files::Files;
 use actix_web::{App, HttpServer, middleware::Logger, web};
-use api_server::runtime::uring::{config::UringConfig, reactor, ring::PerCoreRing};
 use api_server::runtime::{listeners, per_core::PerCoreBuilder};
 use api_server::{AppState, CacheCoordinator, Config, handler::any_handler};
 use clap::Parser;
@@ -150,32 +149,12 @@ async fn main() {
     let worker_count = std::thread::available_parallelism()
         .map(|n| n.get().saturating_sub(1).max(1))
         .unwrap_or(1);
-    let uring_config = UringConfig::default();
-
-    let per_core_rings: Arc<Vec<Arc<PerCoreRing>>> = Arc::new(
-        (0..worker_count)
-            .map(|idx| {
-                Arc::new(
-                    PerCoreRing::new(idx, &uring_config)
-                        .expect("failed to create per-core io_uring ring"),
-                )
-            })
-            .collect(),
-    );
-
-    let per_core_reactors: Arc<Vec<Arc<reactor::RpcReactorHandle>>> = Arc::new(
-        per_core_rings
-            .iter()
-            .enumerate()
-            .map(|(idx, ring)| reactor::spawn_rpc_reactor(idx, ring.clone()))
-            .collect(),
-    );
 
     let cache_coordinator: Arc<CacheCoordinator<Versioned<String>>> =
         Arc::new(CacheCoordinator::new());
     let az_status_coordinator: Arc<CacheCoordinator<String>> = Arc::new(CacheCoordinator::new());
 
-    let per_core_builder = PerCoreBuilder::new(per_core_rings.clone(), per_core_reactors.clone());
+    let per_core_builder = PerCoreBuilder::new(); //per_core_rings.clone(), per_core_reactors.clone());
 
     let http_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
     let mgmt_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), mgmt_port);
@@ -206,11 +185,8 @@ async fn main() {
             .build_context()
             .unwrap_or_else(|e| panic!("failed to init per-core context: {e}"));
         per_core_builder.pin_current_thread(per_core_ctx.worker_index());
-        reactor::set_current_reactor(reactor::ReactorTransport::new(per_core_ctx.reactor()));
         let app_state = Arc::new(AppState::new_per_core_sync(
             config_clone.clone(),
-            per_core_ctx.ring(),
-            per_core_ctx.reactor(),
             cache_coordinator_clone.clone(),
             az_status_coordinator_clone.clone(),
         ));

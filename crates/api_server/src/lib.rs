@@ -16,8 +16,6 @@ use rpc_client_common::{RpcError, rss_rpc_retry};
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcClientRss;
 pub use runtime::per_core::PerCoreContext;
-use runtime::uring::reactor::RpcReactorHandle;
-pub use runtime::uring::ring::PerCoreRing;
 
 pub use cache_registry::CacheCoordinator;
 
@@ -49,8 +47,6 @@ pub struct AppState {
     blob_client: OnceCell<Arc<BlobClient>>,
     blob_deletion: Sender<BlobDeletionRequest>,
     pub data_blob_tracker: Arc<DataBlobTracker>,
-    pub per_core_ring: Arc<PerCoreRing>,
-    pub rpc_handle: Arc<RpcReactorHandle>,
 }
 
 impl AppState {
@@ -58,8 +54,6 @@ impl AppState {
 
     pub fn new_per_core_sync(
         config: Arc<Config>,
-        per_core_ring: Arc<PerCoreRing>,
-        rpc_handle: Arc<RpcReactorHandle>,
         cache_coordinator: Arc<CacheCoordinator<Versioned<String>>>,
         az_status_coordinator: Arc<CacheCoordinator<String>>,
     ) -> Self {
@@ -99,8 +93,6 @@ impl AppState {
             az_status_coordinator,
             az_status_enabled: AtomicBool::new(az_status_enabled),
             data_blob_tracker,
-            per_core_ring,
-            rpc_handle,
         }
     }
 
