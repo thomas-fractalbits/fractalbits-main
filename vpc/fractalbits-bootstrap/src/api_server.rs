@@ -192,7 +192,7 @@ fn configure_ena_interrupts() -> CmdResult {
         let irq = run_fun!(grep $pattern /proc/interrupts | awk -F: r"{print $1}" | tr -d " ")?;
 
         if !irq.is_empty() {
-            let cpu = (queue % (num_cpus - 1)) + 1;
+            let cpu = queue % num_cpus;
             let mask = format!("{:x}", 1u64 << cpu);
 
             run_cmd! {
