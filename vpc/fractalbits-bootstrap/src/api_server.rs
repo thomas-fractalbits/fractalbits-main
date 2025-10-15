@@ -187,19 +187,65 @@ fn configure_ena_interrupts() -> CmdResult {
     let num_cpus = num_cpus()?;
     info!("System has {} CPUs", num_cpus);
 
+    let rss_result = run_cmd! {
+        info "Attempting to configure RSS";
+        ethtool -X $iface equal $num_cpus 2>&1
+    };
+    match rss_result {
+        Ok(_) => info!("RSS configured successfully"),
+        Err(_) => info!("RSS configuration failed or not supported (using hardware default)"),
+    }
+
+    let cpus_per_queue = num_cpus / num_queues;
+    info!(
+        "Spreading {} queues across {} CPUs ({} CPUs per queue)",
+        num_queues, num_cpus, cpus_per_queue
+    );
+
     for queue in 0..num_queues {
         let pattern = format!("{}-Tx-Rx-{}", iface, queue);
         let irq = run_fun!(grep $pattern /proc/interrupts | awk -F: r"{print $1}" | tr -d " ")?;
 
         if !irq.is_empty() {
-            let cpu = queue % num_cpus;
-            let mask = format!("{:x}", 1u64 << cpu);
+            let start_cpu = queue * cpus_per_queue;
+            let end_cpu = ((queue + 1) * cpus_per_queue).min(num_cpus);
+
+            let mut mask_low: u32 = 0;
+            let mut mask_high: u32 = 0;
+            for cpu in start_cpu..end_cpu {
+                if cpu < 32 {
+                    mask_low |= 1u32 << cpu;
+                } else {
+                    mask_high |= 1u32 << (cpu - 32);
+                }
+            }
+
+            let mask_str = if mask_high > 0 {
+                format!("{:08x},{:08x}", mask_high, mask_low)
+            } else {
+                format!("{:x}", mask_low)
+            };
 
             run_cmd! {
-                echo $mask > /proc/irq/$irq/smp_affinity;
-                info "IRQ ${irq} (${iface}-Tx-Rx-${queue}) -> CPU ${cpu} (mask: 0x${mask})";
+                echo $mask_str > /proc/irq/$irq/smp_affinity;
+                info "IRQ ${irq} (${iface}-Tx-Rx-${queue}) -> CPUs ${start_cpu}-${end_cpu} (mask: ${mask_str})";
             }?;
+
+            let xps_path = format!("/sys/class/net/{}/queues/tx-{}/xps_cpus", iface, queue);
+            let _ = run_cmd! {
+                echo $mask_str > $xps_path 2>/dev/null
+            };
         }
+    }
+
+    let _ = run_cmd! {
+        echo 32768 > /proc/sys/net/core/rps_sock_flow_entries
+    };
+    for queue in 0..num_queues {
+        let rps_path = format!("/sys/class/net/{}/queues/rx-{}/rps_flow_cnt", iface, queue);
+        let _ = run_cmd! {
+            echo 4096 > $rps_path 2>/dev/null
+        };
     }
 
     let mgmt_irq = run_fun! {
@@ -225,9 +271,14 @@ fn configure_ena_interrupts() -> CmdResult {
         if !irq.is_empty() {
             let affinity_path = format!("/proc/irq/{}/smp_affinity", irq);
             let affinity = run_fun!(cat $affinity_path)?;
-            info!("Queue {queue} (IRQ {irq}): affinity mask = 0x{affinity}");
+            let start_cpu = queue * cpus_per_queue;
+            let end_cpu = ((queue + 1) * cpus_per_queue).min(num_cpus);
+            info!("Queue {queue} (IRQ {irq}): CPUs {start_cpu}-{end_cpu}, mask = 0x{affinity}");
         }
     }
+
+    info!("RFS configured: 32768 global flow entries, 4096 per queue");
+    info!("XPS configured for TX steering");
 
     Ok(())
 }
