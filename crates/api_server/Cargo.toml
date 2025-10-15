@@ -89,7 +89,7 @@ url.workspace = true
 reqwest.workspace = true
 
 [features]
-default = ["metrics_prometheus"]
+default = []
 io_uring = ["rpc_client_common/io_uring"]
-metrics_statsd = ["dep:metrics-exporter-statsd"]
-metrics_prometheus = ["dep:metrics-exporter-prometheus"]
+metrics_statsd = ["dep:metrics-exporter-statsd", "rpc_client_common/metrics"]
+metrics_prometheus = ["dep:metrics-exporter-prometheus", "rpc_client_common/metrics"]

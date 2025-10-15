@@ -95,6 +95,7 @@ where
     Ok(new_client)
 }
 
+#[cfg(feature = "metrics")]
 pub struct InflightRpcGuard {
     start: std::time::Instant,
     gauge: metrics::Gauge,
@@ -102,6 +103,10 @@ pub struct InflightRpcGuard {
     rpc_name: &'static str,
 }
 
+#[cfg(not(feature = "metrics"))]
+pub struct InflightRpcGuard;
+
+#[cfg(feature = "metrics")]
 impl InflightRpcGuard {
     pub fn new(rpc_type: &'static str, rpc_name: &'static str) -> Self {
         let gauge = metrics::gauge!("inflight_rpc", "type" => rpc_type, "name" => rpc_name);
@@ -117,6 +122,15 @@ impl InflightRpcGuard {
     }
 }
 
+#[cfg(not(feature = "metrics"))]
+impl InflightRpcGuard {
+    #[inline(always)]
+    pub fn new(_rpc_type: &'static str, _rpc_name: &'static str) -> Self {
+        Self
+    }
+}
+
+#[cfg(feature = "metrics")]
 impl Drop for InflightRpcGuard {
     fn drop(&mut self) {
         metrics::histogram!("rpc_duration_nanos", "type" => self.rpc_type, "name" => self.rpc_name)
