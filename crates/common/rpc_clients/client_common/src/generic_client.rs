@@ -62,7 +62,6 @@ pub struct RpcClient<Codec: RpcCodec<Header>, Header: MessageHeaderTrait> {
     tasks: Arc<parking_lot::Mutex<JoinSet<()>>>,
     socket_fd: RawFd,
     is_closed: Arc<AtomicBool>,
-    client_session_id: u64,
     #[cfg(feature = "io_uring")]
     #[allow(dead_code)]
     socket_owner: Arc<Socket>,
@@ -120,64 +119,7 @@ where
                 "failed to configure tcp stream: {e}"
             )))
         })?;
-        let mut client = Self::new_internal(stream, 0).await?;
-
-        // For new connections, perform handshake if needed based on RPC type
-        let rpc_type = Codec::RPC_TYPE;
-        if rpc_type == "rss" {
-            // RSS doesn't use handshake, just set session_id = 1
-            client.update_session_id(1);
-        } else {
-            // For NSS and BSS, perform handshake as first RPC call
-            let session_id = client.perform_handshake().await?;
-            client.update_session_id(session_id);
-        }
-
-        Ok(client)
-    }
-
-    #[cfg(not(feature = "io_uring"))]
-    pub async fn new_with_session_id(stream: TcpStream, session_id: u64) -> Result<Self, RpcError>
-    where
-        Header: Default,
-    {
-        let client = Self::new_internal(stream, session_id).await?;
-
-        // For reconnection with existing session_id, perform handshake with that session_id
-        let rpc_type = Codec::RPC_TYPE;
-        if rpc_type != "rss" {
-            // For NSS and BSS, perform handshake with existing session_id for routing
-            client.perform_handshake_with_session_id(session_id).await?;
-        }
-
-        Ok(client)
-    }
-
-    /// Create client with existing session state (performing handshake for reconnection)
-    #[cfg(not(feature = "io_uring"))]
-    pub async fn new_with_session_and_request_id(
-        stream: TcpStream,
-        session_id: u64,
-        next_request_id: u32,
-    ) -> Result<Self, RpcError>
-    where
-        Header: Default,
-    {
-        let client = Self::new_internal(stream, session_id).await?;
-        // Set the next request ID to continue from where we left off
-        client
-            .next_id
-            .as_ref()
-            .store(next_request_id, Ordering::SeqCst);
-
-        // For reconnection with existing session state, perform handshake with session_id
-        let rpc_type = Codec::RPC_TYPE;
-        if rpc_type != "rss" {
-            // For NSS and BSS, perform handshake with existing session_id for routing
-            client.perform_handshake_with_session_id(session_id).await?;
-        }
-
-        Ok(client)
+        Self::new_internal(stream).await
     }
 
     #[cfg(feature = "io_uring")]
@@ -212,7 +154,7 @@ where
     }
 
     #[cfg(not(feature = "io_uring"))]
-    async fn new_internal(stream: TcpStream, session_id: u64) -> Result<Self, RpcError> {
+    async fn new_internal(stream: TcpStream) -> Result<Self, RpcError> {
         let rpc_type = Codec::RPC_TYPE;
         let socket_fd = stream.as_raw_fd();
         let (reader, writer) = stream.into_split();
@@ -251,7 +193,7 @@ where
             });
         }
 
-        debug!(%rpc_type, %socket_fd, %session_id, "Creating RPC client with session ID");
+        debug!(%rpc_type, %socket_fd, "Creating RPC client");
 
         Ok(RpcClient {
             requests,
@@ -260,13 +202,12 @@ where
             tasks: Arc::new(parking_lot::Mutex::new(tasks)),
             socket_fd,
             is_closed,
-            client_session_id: session_id,
             _phantom: PhantomData,
         })
     }
 
     #[cfg(feature = "io_uring")]
-    async fn new_internal_io_uring(addr: SocketAddr, session_id: u64) -> Result<Self, RpcError> {
+    async fn new_internal_io_uring(addr: SocketAddr) -> Result<Self, RpcError> {
         let rpc_type = Codec::RPC_TYPE;
         let (socket_fd, socket) = Self::create_raw_socket_io_uring(addr)
             .await
@@ -307,7 +248,7 @@ where
             });
         }
 
-        debug!(%rpc_type, %socket_fd, %session_id, "Creating RPC client with session ID (io_uring)");
+        debug!(%rpc_type, %socket_fd, "Creating RPC client (io_uring)");
 
         Ok(RpcClient {
             requests,
@@ -316,7 +257,6 @@ where
             tasks: Arc::new(parking_lot::Mutex::new(tasks)),
             socket_fd,
             is_closed,
-            client_session_id: session_id,
             socket_owner: Arc::new(socket),
             _phantom: PhantomData,
         })
@@ -514,7 +454,6 @@ where
 
         let rpc_type = Codec::RPC_TYPE;
         frame.header.set_id(request_id);
-        frame.header.set_client_session_id(self.client_session_id);
         frame.header.set_retry_count(retry_count);
 
         let (tx, rx) = oneshot::channel();
@@ -544,82 +483,6 @@ where
 
     pub fn gen_request_id(&self) -> u32 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
-    }
-
-    pub fn get_client_session_id(&self) -> u64 {
-        self.client_session_id
-    }
-
-    /// Extract current session state for persistence across reconnections
-    pub fn get_session_state(&self) -> (u64, u32) {
-        (self.client_session_id, self.next_id.load(Ordering::SeqCst))
-    }
-
-    fn update_session_id(&mut self, session_id: u64) {
-        self.client_session_id = session_id;
-    }
-
-    async fn perform_handshake(&self) -> Result<u64, RpcError>
-    where
-        Header: Default,
-    {
-        let response = self.perform_handshake_internal(0).await?;
-
-        // Extract assigned session ID from response
-        let assigned_session_id = response.header.get_client_session_id();
-
-        if assigned_session_id == 0 {
-            return Err(RpcError::InternalResponseError(
-                "Server did not assign valid session ID".into(),
-            ));
-        }
-
-        debug!(rpc_type = %Codec::RPC_TYPE, socket_fd = %self.socket_fd, session_id = %assigned_session_id, "Received session ID from handshake");
-        Ok(assigned_session_id)
-    }
-
-    async fn perform_handshake_with_session_id(&self, session_id: u64) -> Result<(), RpcError>
-    where
-        Header: Default,
-    {
-        let response = self.perform_handshake_internal(session_id).await?;
-
-        // Verify the server acknowledged the session ID
-        let response_session_id = response.header.get_client_session_id();
-        if response_session_id != session_id {
-            return Err(RpcError::InternalResponseError(format!(
-                "Server returned different session ID: expected {}, got {}",
-                session_id, response_session_id
-            )));
-        }
-
-        debug!(rpc_type = %Codec::RPC_TYPE, socket_fd = %self.socket_fd, session_id = %session_id, "Handshake completed with existing session ID");
-        Ok(())
-    }
-
-    async fn perform_handshake_internal(
-        &self,
-        session_id: u64,
-    ) -> Result<MessageFrame<Header>, RpcError>
-    where
-        Header: Default,
-    {
-        // Create handshake request with command = 1 (HANDSHAKE)
-        let mut handshake_frame = MessageFrame {
-            header: Header::default(),
-            body: bytes::Bytes::new(),
-        };
-
-        // Set handshake command and session_id (0 for new, existing for reconnection)
-        handshake_frame.header.set_handshake_command();
-        handshake_frame.header.set_client_session_id(session_id);
-        // Set size to header size (no body for handshake)
-        handshake_frame.header.set_size(Header::SIZE as u32);
-
-        // Send handshake request and wait for response
-        let request_id = self.gen_request_id();
-        self.send_request_internal(request_id, 0, handshake_frame, None)
-            .await
     }
 
     pub async fn send_request(
@@ -687,28 +550,20 @@ where
     #[cfg(not(feature = "io_uring"))]
     pub async fn establish_connection(
         addr_key: String,
-        session_id: Option<u64>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>
     where
         Header: Default,
     {
         let stream = Self::connect_with_retry(&addr_key).await?;
         let configured_stream = Self::configure_tcp_socket(stream)?;
-
-        match session_id {
-            Some(id) => Self::new_with_session_id(configured_stream, id)
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-            None => Self::new(configured_stream)
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
-        }
+        Self::new(configured_stream)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
 
     #[cfg(feature = "io_uring")]
     pub async fn establish_connection(
         addr_key: String,
-        session_id: Option<u64>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>
     where
         Header: Default,
@@ -730,8 +585,7 @@ where
             Box::new(e) as Box<dyn std::error::Error + Send + Sync>
         })?;
 
-        let session_id_val = session_id.unwrap_or(0);
-        let mut client = Self::new_internal_io_uring(socket_addr, session_id_val)
+        let client = Self::new_internal_io_uring(socket_addr)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
@@ -750,20 +604,6 @@ where
                 duration_ms = %connect_duration.as_millis(),
                 "Connection established to RPC server"
             );
-        }
-
-        let rpc_type = Codec::RPC_TYPE;
-        if session_id.is_none() {
-            if rpc_type == "rss" {
-                client.update_session_id(1);
-            } else {
-                let new_session_id = client.perform_handshake().await?;
-                client.update_session_id(new_session_id);
-            }
-        } else if rpc_type != "rss" {
-            client
-                .perform_handshake_with_session_id(session_id_val)
-                .await?;
         }
 
         Ok(client)
@@ -809,80 +649,6 @@ where
         TcpStream::from_std(std_stream)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
     }
-
-    #[cfg(not(feature = "io_uring"))]
-    pub async fn establish_connection_with_session_state(
-        addr_key: String,
-        session_id: u64,
-        next_request_id: u32,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>
-    where
-        Header: Default,
-    {
-        let stream = Self::connect_with_retry(&addr_key).await?;
-        let configured_stream = Self::configure_tcp_socket(stream)?;
-
-        Self::new_with_session_and_request_id(configured_stream, session_id, next_request_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-    }
-
-    #[cfg(feature = "io_uring")]
-    pub async fn establish_connection_with_session_state(
-        addr_key: String,
-        session_id: u64,
-        next_request_id: u32,
-    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>>
-    where
-        Header: Default,
-    {
-        debug!("Trying to connect to {addr_key} with session state via io_uring");
-        const MAX_CONNECTION_RETRIES: usize = 100 * 3600;
-
-        let start = std::time::Instant::now();
-        let retry_strategy = FixedInterval::from_millis(10)
-            .map(jitter)
-            .take(MAX_CONNECTION_RETRIES);
-
-        let socket_addr = Retry::spawn(retry_strategy, || async {
-            Self::resolve_address(&addr_key).await
-        })
-        .await
-        .map_err(|e| {
-            warn!(rpc_type = %Codec::RPC_TYPE, addr = %addr_key, error = %e, "failed to resolve RPC server address");
-            Box::new(e) as Box<dyn std::error::Error + Send + Sync>
-        })?;
-
-        let client = Self::new_internal_io_uring(socket_addr, session_id)
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
-
-        client.next_id.store(next_request_id, Ordering::SeqCst);
-
-        let connect_duration = start.elapsed();
-        if connect_duration > Duration::from_secs(1) {
-            warn!(
-                rpc_type = %Codec::RPC_TYPE,
-                addr = %addr_key,
-                duration_ms = %connect_duration.as_millis(),
-                "Slow connection establishment to RPC server"
-            );
-        } else if connect_duration > Duration::from_millis(100) {
-            debug!(
-                rpc_type = %Codec::RPC_TYPE,
-                addr = %addr_key,
-                duration_ms = %connect_duration.as_millis(),
-                "Connection established to RPC server"
-            );
-        }
-
-        let rpc_type = Codec::RPC_TYPE;
-        if rpc_type != "rss" {
-            client.perform_handshake_with_session_id(session_id).await?;
-        }
-
-        Ok(client)
-    }
 }
 
 impl<Codec: RpcCodec<Header> + Unpin, Header: MessageHeaderTrait + Default> Poolable
@@ -892,29 +658,10 @@ impl<Codec: RpcCodec<Header> + Unpin, Header: MessageHeaderTrait + Default> Pool
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     async fn new(addr_key: Self::AddrKey) -> Result<Self, Self::Error> {
-        Self::establish_connection(addr_key, None).await
-    }
-
-    async fn new_with_session_id(
-        addr_key: Self::AddrKey,
-        session_id: u64,
-    ) -> Result<Self, Self::Error> {
-        Self::establish_connection(addr_key, Some(session_id)).await
-    }
-
-    async fn new_with_session_and_request_id(
-        addr_key: Self::AddrKey,
-        session_id: u64,
-        next_request_id: u32,
-    ) -> Result<Self, Self::Error> {
-        Self::establish_connection_with_session_state(addr_key, session_id, next_request_id).await
+        Self::establish_connection(addr_key).await
     }
 
     fn is_closed(&self) -> bool {
         self.is_closed()
-    }
-
-    fn get_session_state(&self) -> (u64, u32) {
-        self.get_session_state()
     }
 }

@@ -155,18 +155,6 @@ impl MessageHeaderTrait for MessageHeader {
         self.id = id;
     }
 
-    fn set_client_session_id(&mut self, session_id: u64) {
-        self.client_session_id = session_id;
-    }
-
-    fn get_client_session_id(&self) -> u64 {
-        self.client_session_id
-    }
-
-    fn set_handshake_command(&mut self) {
-        self.command = Command::Handshake;
-    }
-
     fn get_body_size(&self) -> usize {
         (self.size as usize).saturating_sub(Self::SIZE)
     }

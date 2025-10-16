@@ -2,7 +2,6 @@ use bytes::Bytes;
 use data_types::DataBlobGuid;
 use fake::Fake;
 use rpc_client_bss::*;
-use tokio::net::TcpStream;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -12,11 +11,7 @@ async fn test_basic_blob_io_with_fixed_bytes() {
     let url = "127.0.0.1:9225";
     tracing::debug!(%url);
     // Skip testing if blob storage server is not up
-    let stream = match TcpStream::connect(url).await {
-        Ok(stream) => stream,
-        Err(_) => return,
-    };
-    let rpc_client = match RpcClientBss::new(stream).await {
+    let rpc_client = match RpcClientBss::new_from_address(url.to_string()).await {
         Ok(client) => client,
         Err(_) => return,
     };
@@ -47,11 +42,7 @@ async fn test_basic_blob_io_with_random_bytes() {
     let url = "127.0.0.1:9225";
     tracing::debug!(%url);
     // Skip testing if blob storage server is not up
-    let stream = match TcpStream::connect(url).await {
-        Ok(stream) => stream,
-        Err(_) => return,
-    };
-    let rpc_client = match RpcClientBss::new(stream).await {
+    let rpc_client = match RpcClientBss::new_from_address(url.to_string()).await {
         Ok(client) => client,
         Err(_) => return,
     };

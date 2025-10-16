@@ -27,16 +27,14 @@ impl RpcClient {
     pub async fn new_from_address(
         address: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::new_internal(address, None).await
+        Self::new_internal(address).await
     }
 
     async fn new_internal(
         address: String,
-        session_id: Option<u64>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let inner = GenericRpcClient::<nss_codec::MessageCodec, nss_codec::MessageHeader>::establish_connection(
             address,
-            session_id,
         )
         .await?;
         Ok(RpcClient { inner })
@@ -44,11 +42,6 @@ impl RpcClient {
 
     pub fn is_closed(&self) -> bool {
         self.inner.is_closed()
-    }
-
-    #[allow(dead_code)]
-    fn get_session_state(&self) -> (u64, u32) {
-        self.inner.get_session_state()
     }
 }
 
@@ -63,35 +56,10 @@ impl Poolable for RpcClient {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     async fn new(address: Self::AddrKey) -> Result<Self, Self::Error> {
-        Self::new_internal(address, None).await
-    }
-
-    async fn new_with_session_id(
-        address: Self::AddrKey,
-        session_id: u64,
-    ) -> Result<Self, Self::Error> {
-        Self::new_internal(address, Some(session_id)).await
-    }
-
-    async fn new_with_session_and_request_id(
-        address: Self::AddrKey,
-        session_id: u64,
-        next_request_id: u32,
-    ) -> Result<Self, Self::Error> {
-        let inner = GenericRpcClient::establish_connection_with_session_state(
-            address,
-            session_id,
-            next_request_id,
-        )
-        .await?;
-        Ok(RpcClient { inner })
+        Self::new_internal(address).await
     }
 
     fn is_closed(&self) -> bool {
         self.inner.is_closed()
-    }
-
-    fn get_session_state(&self) -> (u64, u32) {
-        self.inner.get_session_state()
     }
 }
