@@ -4,7 +4,7 @@ use rpc_client_common::{RpcError, nss_rpc_retry, rss_rpc_retry};
 use rpc_client_nss::RpcClientNss;
 use rpc_client_rss::RpcClientRss;
 use rss_codec::AzStatusMap;
-use slotmap_conn_pool::ConnPool;
+use single_conn::ConnPool;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -55,17 +55,17 @@ impl DataBlobTracker {
         }
     }
 
-    pub fn with_clients(
+    pub async fn with_clients(
         rss_endpoint: String,
         rss_client: Arc<RpcClientRss>,
         nss_endpoint: String,
         nss_client: Arc<RpcClientNss>,
     ) -> Self {
         let rss_conn_pool = ConnPool::new();
-        rss_conn_pool.pooled(rss_endpoint.clone(), rss_client);
+        rss_conn_pool.pooled(rss_endpoint.clone(), rss_client).await;
 
         let nss_conn_pool = ConnPool::new();
-        nss_conn_pool.pooled(nss_endpoint.clone(), nss_client);
+        nss_conn_pool.pooled(nss_endpoint.clone(), nss_client).await;
 
         Self {
             rss_conn_pool,

@@ -19,7 +19,7 @@ exclude = [
     "crates/common/rpc_clients/client_common/src",
     "crates/common/rpc_clients/nss/src",
     "crates/common/rpc_clients/rss/src",
-    "crates/common/rpc_clients/slotmap_conn_pool/src",
+    "crates/common/rpc_clients/single_conn/src",
     "crates/common/rpc_codecs/bss_codec/src",
     "crates/common/rpc_codecs/codec_common/src",
     "crates/common/rpc_codecs/nss_codec/src",
@@ -46,7 +46,7 @@ rpc_client_common = { path = "crates/common/rpc_clients/client_common" }
 rpc_client_bss = { path = "crates/common/rpc_clients/bss" }
 rpc_client_nss = { path = "crates/common/rpc_clients/nss" }
 rpc_client_rss = { path = "crates/common/rpc_clients/rss" }
-slotmap_conn_pool = { path = "crates/common/rpc_clients/slotmap_conn_pool" }
+single_conn = { path = "crates/common/rpc_clients/single_conn" }
 rpc_codec_common = { path = "crates/common/rpc_codecs/codec_common" }
 bss_codec = { path = "crates/common/rpc_codecs/bss_codec" }
 nss_codec = { path = "crates/common/rpc_codecs/nss_codec" }
@@ -116,7 +116,6 @@ metrics-exporter-statsd = "0.9.0"
 metrics-exporter-prometheus = "0.17.2"
 tokio-retry = "0.3"
 moka = { version = "0.12", features = ["future"] }
-slotmap = "1.0"
 tikv-jemallocator = "0.6"
 parking_lot = "0.12"
 arrayvec = "0.7"

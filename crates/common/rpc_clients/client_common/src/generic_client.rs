@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use metrics::{counter, gauge};
 use parking_lot::Mutex;
 use rpc_codec_common::{MessageFrame, MessageHeaderTrait};
-use slotmap_conn_pool::Poolable;
+use single_conn::Poolable;
 use socket2::{Socket, TcpKeepalive};
 use std::collections::HashMap;
 use std::io;

@@ -1,6 +1,6 @@
 use rpc_client_common::{Closeable, RpcClient as GenericRpcClient, RpcError};
 use rpc_codec_common::MessageFrame;
-use slotmap_conn_pool::Poolable;
+use single_conn::Poolable;
 use std::time::Duration;
 
 // Create a wrapper struct to avoid orphan rule issues
