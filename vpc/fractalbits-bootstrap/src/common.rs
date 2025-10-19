@@ -690,3 +690,129 @@ pub fn num_cpus() -> Result<u64, Error> {
         .map_err(|_| Error::other(format!("invalid num_cores: {num_cpus_str}")))?;
     Ok(num_cpus)
 }
+
+pub fn create_ena_irq_affinity_service() -> CmdResult {
+    let script_path = format!("{BIN_PATH}configure-ena-irq-affinity.sh");
+    let systemd_unit_content = format!(
+        r##"[Unit]
+Description=ENA IRQ Affinity Configuration
+After=network-online.target
+Before=api_server.service bss.service nss.service mirrord.service
+
+[Service]
+Type=oneshot
+ExecStart={script_path}
+
+[Install]
+WantedBy=multi-user.target
+"##
+    );
+
+    let script_content = r##"#!/bin/bash
+set -e
+
+echo "Configuring ENA interrupt affinity" >&2
+
+echo "Disabling irqbalance" >&2
+systemctl disable --now irqbalance 2>/dev/null || true
+
+iface=$(grep -o "ens[0-9]*-Tx-Rx" /proc/interrupts | head -1 | sed "s/-Tx-Rx//")
+if [ -z "$iface" ]; then
+    echo "ERROR: Could not detect ENA interface" >&2
+    exit 1
+fi
+echo "Detected ENA interface: $iface" >&2
+
+num_queues=$(grep "$iface-Tx-Rx-" /proc/interrupts | wc -l)
+if [ "$num_queues" -eq 0 ]; then
+    echo "ERROR: Could not detect ENA queues" >&2
+    exit 1
+fi
+echo "Found $num_queues queues" >&2
+
+num_cpus=$(nproc)
+echo "System has $num_cpus CPUs" >&2
+
+echo "Attempting to configure RSS" >&2
+if ethtool -X $iface equal $num_cpus 2>&1; then
+    echo "RSS configured successfully" >&2
+else
+    echo "RSS configuration failed or not supported (using hardware default)" >&2
+fi
+
+cpus_per_queue=$((num_cpus / num_queues))
+echo "Spreading $num_queues queues across $num_cpus CPUs ($cpus_per_queue CPUs per queue)" >&2
+
+for queue in $(seq 0 $((num_queues - 1))); do
+    irq=$(grep "$iface-Tx-Rx-$queue" /proc/interrupts | awk -F: '{print $1}' | tr -d ' ')
+
+    if [ -n "$irq" ]; then
+        start_cpu=$((queue * cpus_per_queue))
+        end_cpu=$(((queue + 1) * cpus_per_queue))
+        if [ $end_cpu -gt $num_cpus ]; then
+            end_cpu=$num_cpus
+        fi
+
+        mask_low=0
+        mask_high=0
+        for cpu in $(seq $start_cpu $((end_cpu - 1))); do
+            if [ $cpu -lt 32 ]; then
+                mask_low=$((mask_low | (1 << cpu)))
+            else
+                mask_high=$((mask_high | (1 << (cpu - 32))))
+            fi
+        done
+
+        if [ $mask_high -gt 0 ]; then
+            mask_str=$(printf "%08x,%08x" $mask_high $mask_low)
+        else
+            mask_str=$(printf "%x" $mask_low)
+        fi
+
+        echo $mask_str > /proc/irq/$irq/smp_affinity
+        echo "IRQ $irq ($iface-Tx-Rx-$queue) -> CPUs $start_cpu-$end_cpu (mask: $mask_str)" >&2
+
+        xps_path="/sys/class/net/$iface/queues/tx-$queue/xps_cpus"
+        echo $mask_str > $xps_path 2>/dev/null || true
+    fi
+done
+
+echo 32768 > /proc/sys/net/core/rps_sock_flow_entries || true
+for queue in $(seq 0 $((num_queues - 1))); do
+    rps_path="/sys/class/net/$iface/queues/rx-$queue/rps_flow_cnt"
+    echo 4096 > $rps_path 2>/dev/null || true
+done
+
+mgmt_irq=$(grep -E "ena-mgmnt|$iface-mgmnt" /proc/interrupts | awk -F: '{print $1}' | tr -d ' ' | head -1)
+if [ -n "$mgmt_irq" ]; then
+    echo 1 > /proc/irq/$mgmt_irq/smp_affinity
+    echo "Management IRQ $mgmt_irq -> CPU 0" >&2
+fi
+
+echo "Done! Current ENA IRQ affinity:" >&2
+for queue in $(seq 0 $((num_queues - 1))); do
+    irq=$(grep "$iface-Tx-Rx-$queue" /proc/interrupts | awk -F: '{print $1}' | tr -d ' ')
+    if [ -n "$irq" ]; then
+        affinity=$(cat /proc/irq/$irq/smp_affinity)
+        start_cpu=$((queue * cpus_per_queue))
+        end_cpu=$(((queue + 1) * cpus_per_queue))
+        if [ $end_cpu -gt $num_cpus ]; then
+            end_cpu=$num_cpus
+        fi
+        echo "Queue $queue (IRQ $irq): CPUs $start_cpu-$end_cpu, mask = 0x$affinity" >&2
+    fi
+done
+
+echo "RFS configured: 32768 global flow entries, 4096 per queue" >&2
+echo "XPS configured for TX steering" >&2
+"##;
+
+    run_cmd! {
+        echo $script_content > $script_path;
+        chmod +x $script_path;
+
+        echo $systemd_unit_content > ${ETC_PATH}ena-irq-affinity.service;
+        systemctl enable --now ${ETC_PATH}ena-irq-affinity.service;
+    }?;
+    Ok(())
+}

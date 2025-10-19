@@ -18,6 +18,7 @@ pub fn bootstrap(meta_stack_testing: bool, for_bench: bool) -> CmdResult {
     }
 
     create_logrotate_for_stats()?;
+    create_ena_irq_affinity_service()?;
     setup_volume_directories()?;
     create_bss_config()?;
     create_systemd_unit_file("bss", true)?;

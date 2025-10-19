@@ -63,6 +63,7 @@ fn setup_configs(
     create_systemd_unit_file("mirrord", false)?;
     create_systemd_unit_file(service_name, false)?;
     create_logrotate_for_stats()?;
+    create_ena_irq_affinity_service()?;
     Ok(())
 }
 
@@ -81,7 +82,7 @@ fn create_nss_config(volume_dev: &str) -> CmdResult {
     let art_journal_segment_size = calculate_art_journal_segment_size(volume_dev)?;
 
     let num_cores = num_cpus()?;
-    let net_worker_thread_count = num_cores / 2;
+    let net_worker_thread_count = num_cores;
     let art_thread_dataop_count = num_cores / 2;
     let art_thread_count = art_thread_dataop_count + 4;
 
