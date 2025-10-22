@@ -2,7 +2,7 @@ use super::ring::PerCoreRing;
 use crate::{MessageFrame, MessageHeaderTrait};
 use bytes::Bytes;
 use core_affinity::{self, CoreId};
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, unbounded};
 use libc;
 use metrics::gauge;
 use std::cell::RefCell;
@@ -12,6 +12,7 @@ use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
@@ -257,16 +258,38 @@ fn reactor_thread(handle: Arc<RpcReactorHandle>, rx: Receiver<RpcCommand>) {
     const BATCH_SIZE: usize = 128;
 
     while running {
-        let mut batch_count = 0;
-
-        while let Ok(cmd) = rx.try_recv() {
-            if !process_command(&handle, cmd) {
-                running = false;
-                break;
+        let recv_result = if handle.io.has_pending_operations() {
+            match rx.recv_timeout(Duration::from_micros(100)) {
+                Ok(cmd) => Some(cmd),
+                Err(RecvTimeoutError::Timeout) => None,
+                Err(RecvTimeoutError::Disconnected) => {
+                    running = false;
+                    None
+                }
             }
-            batch_count += 1;
-            if batch_count >= BATCH_SIZE {
-                break;
+        } else {
+            match rx.recv() {
+                Ok(cmd) => Some(cmd),
+                Err(_) => {
+                    running = false;
+                    None
+                }
+            }
+        };
+
+        let mut batch_count = 0;
+        if let Some(first_cmd) = recv_result {
+            if !process_command(&handle, first_cmd) {
+                running = false;
+            } else {
+                batch_count = 1;
+                for cmd in rx.try_iter().take(BATCH_SIZE - 1) {
+                    if !process_command(&handle, cmd) {
+                        running = false;
+                        break;
+                    }
+                    batch_count += 1;
+                }
             }
         }
 
@@ -279,18 +302,14 @@ fn reactor_thread(handle: Arc<RpcReactorHandle>, rx: Receiver<RpcCommand>) {
             if let Err(err) = handle.io.flush_submissions() {
                 warn!(worker_index, error = %err, "failed to flush io_uring submissions");
             }
-        } else {
-            if let Err(err) = handle.io.submit_and_wait_with_timeout(100_000) {
-                warn!(worker_index, error = %err, "failed to wait on io_uring");
-            }
-
-            let shutdown_seen = handle.closed.load(Ordering::Acquire);
-            if shutdown_seen && !handle.io.has_pending_operations() {
-                running = false;
-            }
         }
 
         handle.io.poll_completions(worker_index);
+
+        let shutdown_seen = handle.closed.load(Ordering::Acquire);
+        if shutdown_seen && !handle.io.has_pending_operations() {
+            running = false;
+        }
     }
 
     handle.closed.store(true, Ordering::Release);
@@ -793,32 +812,6 @@ impl ReactorIo {
 
     fn flush_submissions(&self) -> io::Result<usize> {
         self.ring.with_lock(|ring| ring.submit())
-    }
-
-    fn submit_and_wait_with_timeout(&self, timeout_ns: u64) -> io::Result<()> {
-        self.ring.with_lock(|ring| {
-            let timeout_sec = timeout_ns / 1_000_000_000;
-            let timeout_nsec = (timeout_ns % 1_000_000_000) as u32;
-            let timeout_spec = io_uring::types::Timespec::new()
-                .sec(timeout_sec)
-                .nsec(timeout_nsec);
-
-            unsafe {
-                let timeout_sqe = io_uring::opcode::Timeout::new(&timeout_spec)
-                    .build()
-                    .user_data(0);
-
-                if ring.submission().push(&timeout_sqe).is_err() {
-                    ring.submit()?;
-                    ring.submission()
-                        .push(&timeout_sqe)
-                        .map_err(|_| io::Error::other("failed to push timeout"))?;
-                }
-            }
-
-            ring.submit_and_wait(1)?;
-            Ok(())
-        })
     }
 }
 
