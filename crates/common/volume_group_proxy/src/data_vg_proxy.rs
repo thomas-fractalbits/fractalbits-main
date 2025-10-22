@@ -13,39 +13,16 @@ use std::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-struct InFlightGuard<'a> {
-    counter: &'a AtomicU64,
-}
-
-impl<'a> InFlightGuard<'a> {
-    fn new(counter: &'a AtomicU64) -> Self {
-        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        Self { counter }
-    }
-}
-
-impl<'a> Drop for InFlightGuard<'a> {
-    fn drop(&mut self) {
-        self.counter
-            .fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
 struct BssNode {
     address: String,
     client: RpcClientBss,
-    in_flight_requests: AtomicU64,
 }
 
 impl BssNode {
     fn new(address: String) -> Self {
         debug!("Creating BSS RPC client for {}", address);
         let client = RpcClientBss::new_from_address(address.clone());
-        Self {
-            address,
-            client,
-            in_flight_requests: AtomicU64::new(0),
-        }
+        Self { address, client }
     }
 
     fn get_client(&self) -> &RpcClientBss {
@@ -384,24 +361,13 @@ impl DataVgProxy {
                 DataVgError::InitializationError(format!("Volume {} not found", volume_id))
             })?;
 
-        // Fast path: try reading from the node with least in-flight requests
+        // Fast path: try reading from a randomly selected node
         if !volume.bss_nodes.is_empty() {
-            let selected_node = volume
-                .bss_nodes
-                .iter()
-                .min_by_key(|node| {
-                    node.in_flight_requests
-                        .load(std::sync::atomic::Ordering::Relaxed)
-                })
-                .unwrap();
+            let selected_node = volume.bss_nodes.choose(&mut rand::thread_rng()).unwrap();
             debug!(
-                "Attempting fast path read from BSS node: {} (in_flight: {})",
-                selected_node.address,
-                selected_node
-                    .in_flight_requests
-                    .load(std::sync::atomic::Ordering::Relaxed)
+                "Attempting fast path read from BSS node: {}",
+                selected_node.address
             );
-            let _guard = InFlightGuard::new(&selected_node.in_flight_requests);
             match self
                 .get_blob_from_node_instance(selected_node, blob_guid, block_number)
                 .await
