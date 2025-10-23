@@ -150,6 +150,10 @@ BindsTo={requires}
 {restart_settings}
 
 [Service]
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=50
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
 {auto_restart}
 LimitNOFILE=1000000
 LimitCORE=infinity
