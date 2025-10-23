@@ -7,13 +7,15 @@ mod head;
 mod post;
 mod put;
 
-use crate::AppState;
+use crate::{
+    AppState,
+    bump_pool::{RequestBumpGuard, acquire_bump},
+};
 use actix_web::{
     HttpRequest, HttpResponse, ResponseError,
     web::{self, Payload},
 };
 use bucket::BucketEndpoint;
-use bumpalo::Bump;
 use common::{
     authorization::Authorization, checksum::ChecksumValue, request::extract::*, s3_error::S3Error,
     signature::check_signature,
@@ -26,9 +28,10 @@ use head::HeadEndpoint;
 use metrics::{Gauge, counter, gauge, histogram};
 use post::PostEndpoint;
 use put::PutEndpoint;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tracing::{debug, error, warn};
 
 pub struct BucketRequestContext {
@@ -104,27 +107,6 @@ impl ObjectRequestContext {
 
     pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
         bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone()).await
-    }
-}
-
-struct RequestBumpGuard {
-    trace_id: u64,
-    _bump: Rc<Bump>,
-}
-
-impl RequestBumpGuard {
-    fn new(trace_id: u64, bump: Rc<Bump>) -> Self {
-        rpc_client_common::register_request_bump(trace_id, bump.clone());
-        Self {
-            trace_id,
-            _bump: bump,
-        }
-    }
-}
-
-impl Drop for RequestBumpGuard {
-    fn drop(&mut self) {
-        rpc_client_common::unregister_request_bump(self.trace_id);
     }
 }
 
@@ -241,7 +223,7 @@ async fn any_handler_inner(
     endpoint: Endpoint,
 ) -> Result<HttpResponse, S3Error> {
     let endpoint_name = endpoint.as_str();
-    let bump = Rc::new(Bump::with_capacity(128 * 1024));
+    let bump = acquire_bump();
 
     // Generate trace ID and register bump for RPC calls
     let trace_id = app.generate_trace_id();
@@ -269,7 +251,7 @@ async fn any_handler_inner(
         return Err(S3Error::AccessDenied);
     }
 
-    let res = match endpoint {
+    match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
             let bucket_ctx =
                 BucketRequestContext::new(app, request.clone(), api_key, bucket, payload, trace_id);
@@ -298,16 +280,7 @@ async fn any_handler_inner(
                 Endpoint::Bucket(_) => unreachable!(),
             }
         }
-    };
-
-    debug!(
-        trace_id,
-        endpoint = %endpoint_name,
-        allocated_bytes = %bump.allocated_bytes(),
-        "bump allocator stats"
-    );
-
-    res
+    }
 }
 
 async fn bucket_handler(

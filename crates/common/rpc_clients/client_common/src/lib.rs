@@ -245,11 +245,11 @@ macro_rules! rss_rpc_retry {
 pub enum EncodeBuffer {
     Bump {
         buf: BumpBuf<'static>,
-        /// Holds the Rc<Bump> to keep the bump allocator alive.
+        /// Holds the Rc to keep the bump allocator alive.
         /// The BumpBuf borrows from the bump with a 'static lifetime (via unsafe transmute),
         /// so we must store the Rc here to prevent the allocator from being freed while
         /// the buffer still references it.
-        _bump: std::rc::Rc<bumpalo::Bump>,
+        _bump: std::rc::Rc<dyn std::ops::Deref<Target = bumpalo::Bump>>,
     },
     Heap(BytesMut),
 }
@@ -263,7 +263,7 @@ impl EncodeBuffer {
             // BumpBuf's lifetime requirement. This is safe because we store bump_rc
             // in the _bump field, ensuring the allocator lives as long as the BumpBuf.
             let buf = unsafe {
-                let bump_ref: &bumpalo::Bump = &*bump_rc;
+                let bump_ref: &bumpalo::Bump = &bump_rc;
                 let bump_ref_static: &'static bumpalo::Bump = std::mem::transmute(bump_ref);
                 BumpBuf::with_capacity_in(512, bump_ref_static)
             };

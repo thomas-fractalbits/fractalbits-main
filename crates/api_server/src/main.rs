@@ -1,7 +1,7 @@
 use actix_files::Files;
 use actix_web::{App, HttpServer, middleware::Logger, rt::System, web};
 use api_server::{
-    AppState, CacheCoordinator, Config, api_key_routes, cache_mgmt, handler::any_handler,
+    AppState, CacheCoordinator, Config, api_key_routes, cache_mgmt, handler, init_bump_pool,
 };
 use clap::Parser;
 use data_types::Versioned;
@@ -186,6 +186,7 @@ fn main() -> std::io::Result<()> {
 
                     let mut server = HttpServer::new(move || {
                         core_affinity::set_for_current(core_id);
+                        init_bump_pool();
 
                         let app_state = app_state.clone();
                         let mut app = App::new()
@@ -225,7 +226,7 @@ fn main() -> std::io::Result<()> {
                                 app.service(Files::new("/ui", static_dir).index_file("index.html"));
                         }
 
-                        app.default_service(web::route().to(any_handler))
+                        app.default_service(web::route().to(handler::any_handler))
                     });
 
                     server = server

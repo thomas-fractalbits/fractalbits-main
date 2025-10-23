@@ -1,7 +1,7 @@
 use crate::RpcError;
 use bytes::BytesMut;
 use metrics::{counter, gauge};
-use rpc_codec_common::{MessageFrame, MessageHeaderTrait};
+use rpc_codec_common::{BumpBuf, MessageFrame, MessageHeaderTrait};
 use socket2::{Socket, TcpKeepalive};
 use std::collections::HashMap;
 use std::io;
@@ -24,14 +24,15 @@ use tracing::{debug, warn};
 
 use bumpalo::Bump;
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 
 thread_local! {
-    static REQUEST_BUMPS: RefCell<HashMap<u64, Rc<Bump>>> =
-        RefCell::new(HashMap::new());
+    static REQUEST_BUMPS: RefCell<HashMap<u64, Rc<dyn Deref<Target = Bump>>>> =
+        RefCell::new(HashMap::with_capacity(8192));
 }
 
-pub fn register_request_bump(trace_id: u64, bump: Rc<Bump>) {
+pub fn register_request_bump<T: Deref<Target = Bump> + 'static>(trace_id: u64, bump: Rc<T>) {
     REQUEST_BUMPS.with(|map| {
         map.borrow_mut().insert(trace_id, bump);
     });
@@ -41,7 +42,7 @@ pub fn unregister_request_bump(trace_id: u64) {
     REQUEST_BUMPS.with(|map| map.borrow_mut().remove(&trace_id));
 }
 
-pub fn get_request_bump(trace_id: u64) -> Option<Rc<Bump>> {
+pub fn get_request_bump(trace_id: u64) -> Option<Rc<dyn Deref<Target = Bump>>> {
     REQUEST_BUMPS.with(|map| map.borrow().get(&trace_id).cloned())
 }
 
@@ -163,7 +164,6 @@ where
                     && let Some(bump_rc) = get_request_bump(trace_id)
                 {
                     // Use bump allocator for body - read directly into bump buffer
-                    use rpc_codec_common::BumpBuf;
                     let bump_ref: &Bump = &bump_rc;
                     let mut bump_buf = BumpBuf::with_capacity_in(body_size, bump_ref);
 
