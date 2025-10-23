@@ -74,12 +74,19 @@ impl<'bump> BumpBuf<'bump> {
         self.data
     }
 
-    /// Converts the `BumpBuf` into `Bytes` by copying the data.
+    /// Converts the `BumpBuf` into `Bytes` without copying.
     ///
-    /// Note: This creates a copy because `Bytes` requires owned data.
+    /// # Safety
+    ///
+    /// This method creates a `Bytes` view directly into the bump-allocated memory.
+    /// The caller must ensure that the `Bump` allocator outlives the returned `Bytes`.
+    /// When used with `register_request_bump`, the bump allocator is already transmuted
+    /// to 'static lifetime, so this is safe as long as the `RequestBumpGuard` ensures
+    /// proper lifecycle management.
     #[inline]
     pub fn freeze(self) -> Bytes {
-        Bytes::copy_from_slice(&self.data)
+        let slice = self.data.into_bump_slice();
+        unsafe { Bytes::from_static(std::mem::transmute::<&[u8], &'static [u8]>(slice)) }
     }
 
     /// Clears the buffer, removing all data.

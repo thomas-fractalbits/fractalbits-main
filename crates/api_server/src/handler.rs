@@ -235,7 +235,8 @@ async fn any_handler_inner(
     payload: actix_web::dev::Payload,
     endpoint: Endpoint,
 ) -> Result<HttpResponse, S3Error> {
-    let bump = Bump::with_capacity(64 * 1024);
+    let endpoint_name = endpoint.as_str();
+    let bump = Bump::with_capacity(128 * 1024);
 
     // Generate trace ID and register bump for RPC calls
     let trace_id = app.generate_trace_id();
@@ -244,7 +245,7 @@ async fn any_handler_inner(
     let start = Instant::now();
 
     let api_key = check_signature(app.clone(), request, auth.as_ref()).await?;
-    histogram!("verify_request_duration_nanos", "endpoint" => endpoint.as_str())
+    histogram!("verify_request_duration_nanos", "endpoint" => endpoint_name)
         .record(start.elapsed().as_nanos() as f64);
 
     // Check authorization
@@ -257,16 +258,13 @@ async fn any_handler_inner(
     };
     debug!(
         "Authorization check: endpoint={:?}, bucket={}, required={:?}, allowed={}",
-        endpoint.as_str(),
-        bucket,
-        authorization_type,
-        allowed
+        endpoint_name, bucket, authorization_type, allowed
     );
     if !allowed {
         return Err(S3Error::AccessDenied);
     }
 
-    match endpoint {
+    let res = match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
             let bucket_ctx =
                 BucketRequestContext::new(app, request.clone(), api_key, bucket, payload, trace_id);
@@ -295,7 +293,16 @@ async fn any_handler_inner(
                 Endpoint::Bucket(_) => unreachable!(),
             }
         }
-    }
+    };
+
+    debug!(
+        trace_id,
+        endpoint = %endpoint_name,
+        allocated_bytes = %bump.allocated_bytes(),
+        "bump allocator stats"
+    );
+
+    res
 }
 
 async fn bucket_handler(

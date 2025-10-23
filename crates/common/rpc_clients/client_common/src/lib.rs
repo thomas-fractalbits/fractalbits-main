@@ -1,3 +1,6 @@
+use bytes::{BufMut, Bytes, BytesMut};
+use prost::Message as PbMessage;
+use rpc_codec_common::BumpBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
@@ -239,4 +242,71 @@ macro_rules! rss_rpc_retry {
     ($client:expr, $method:ident($($args:expr),*)) => {
         $crate::rpc_retry!("rss", $client, $method($($args),*))
     };
+}
+
+pub enum EncodeBuffer<'bump> {
+    Bump(BumpBuf<'bump>),
+    Heap(BytesMut),
+}
+
+impl<'bump> EncodeBuffer<'bump> {
+    pub fn new(trace_id: Option<u64>) -> Self {
+        if let Some(tid) = trace_id
+            && let Some(bump) = get_request_bump(tid)
+        {
+            return Self::Bump(BumpBuf::with_capacity_in(512, bump));
+        }
+        Self::Heap(BytesMut::new())
+    }
+
+    pub fn freeze(self) -> Bytes {
+        match self {
+            Self::Bump(buf) => buf.freeze(),
+            Self::Heap(buf) => buf.freeze(),
+        }
+    }
+}
+
+unsafe impl<'bump> BufMut for EncodeBuffer<'bump> {
+    fn remaining_mut(&self) -> usize {
+        match self {
+            Self::Bump(buf) => buf.remaining_mut(),
+            Self::Heap(buf) => buf.remaining_mut(),
+        }
+    }
+
+    fn chunk_mut(&mut self) -> &mut bytes::buf::UninitSlice {
+        match self {
+            Self::Bump(buf) => buf.chunk_mut(),
+            Self::Heap(buf) => buf.chunk_mut(),
+        }
+    }
+
+    unsafe fn advance_mut(&mut self, cnt: usize) {
+        match self {
+            Self::Bump(buf) => unsafe { buf.advance_mut(cnt) },
+            Self::Heap(buf) => unsafe { buf.advance_mut(cnt) },
+        }
+    }
+
+    fn put_slice(&mut self, src: &[u8]) {
+        match self {
+            Self::Bump(buf) => buf.put_slice(src),
+            Self::Heap(buf) => buf.put_slice(src),
+        }
+    }
+
+    fn put_u8(&mut self, n: u8) {
+        match self {
+            Self::Bump(buf) => buf.put_u8(n),
+            Self::Heap(buf) => buf.put_u8(n),
+        }
+    }
+}
+
+pub fn encode_protobuf<M: PbMessage>(msg: M, trace_id: Option<u64>) -> Result<Bytes, RpcError> {
+    let mut body_bytes = EncodeBuffer::new(trace_id);
+    msg.encode(&mut body_bytes)
+        .map_err(|e| RpcError::EncodeError(e.to_string()))?;
+    Ok(body_bytes.freeze())
 }

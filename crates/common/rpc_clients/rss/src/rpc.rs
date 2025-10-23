@@ -1,81 +1,14 @@
 use std::time::{Duration, Instant};
 
 use crate::client::RpcClient;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::Bytes;
 use data_types::DataVgInfo;
 use metrics::histogram;
 use prost::Message as PbMessage;
-use rpc_client_common::{InflightRpcGuard, RpcError, get_request_bump};
-use rpc_codec_common::{BumpBuf, MessageFrame};
+use rpc_client_common::{InflightRpcGuard, RpcError, encode_protobuf};
+use rpc_codec_common::MessageFrame;
 use rss_codec::*;
 use tracing::{error, warn};
-
-enum EncodeBuffer<'bump> {
-    Bump(BumpBuf<'bump>),
-    Heap(BytesMut),
-}
-
-impl<'bump> EncodeBuffer<'bump> {
-    fn new(trace_id: Option<u64>) -> Self {
-        if let Some(tid) = trace_id
-            && let Some(bump) = get_request_bump(tid)
-        {
-            return Self::Bump(BumpBuf::with_capacity_in(512, bump));
-        }
-        Self::Heap(BytesMut::new())
-    }
-
-    fn freeze(self) -> Bytes {
-        match self {
-            Self::Bump(buf) => buf.freeze(),
-            Self::Heap(buf) => buf.freeze(),
-        }
-    }
-}
-
-unsafe impl<'bump> BufMut for EncodeBuffer<'bump> {
-    fn remaining_mut(&self) -> usize {
-        match self {
-            Self::Bump(buf) => buf.remaining_mut(),
-            Self::Heap(buf) => buf.remaining_mut(),
-        }
-    }
-
-    fn chunk_mut(&mut self) -> &mut bytes::buf::UninitSlice {
-        match self {
-            Self::Bump(buf) => buf.chunk_mut(),
-            Self::Heap(buf) => buf.chunk_mut(),
-        }
-    }
-
-    unsafe fn advance_mut(&mut self, cnt: usize) {
-        match self {
-            Self::Bump(buf) => unsafe { buf.advance_mut(cnt) },
-            Self::Heap(buf) => unsafe { buf.advance_mut(cnt) },
-        }
-    }
-
-    fn put_slice(&mut self, src: &[u8]) {
-        match self {
-            Self::Bump(buf) => buf.put_slice(src),
-            Self::Heap(buf) => buf.put_slice(src),
-        }
-    }
-
-    fn put_u8(&mut self, n: u8) {
-        match self {
-            Self::Bump(buf) => buf.put_u8(n),
-            Self::Heap(buf) => buf.put_u8(n),
-        }
-    }
-}
-
-fn encode_protobuf<M: PbMessage>(msg: M, trace_id: Option<u64>) -> Result<Bytes, RpcError> {
-    let mut body_bytes = EncodeBuffer::new(trace_id);
-    msg.encode(&mut body_bytes)
-        .map_err(|e| RpcError::EncodeError(e.to_string()))?;
-    Ok(body_bytes.freeze())
-}
 
 impl RpcClient {
     pub async fn put(
@@ -661,10 +594,9 @@ impl RpcClient {
         header.command = Command::GetMetadataVgInfo;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
         header.retry_count = retry_count;
-        let mut body_bytes = BytesMut::new();
-        body.encode(&mut body_bytes)
-            .map_err(|e| RpcError::EncodeError(e.to_string()))?;
-        let frame = MessageFrame::new(header, body_bytes.freeze());
+        header.trace_id = trace_id.unwrap_or(0);
+        let body_bytes = encode_protobuf(body, trace_id)?;
+        let frame = MessageFrame::new(header, body_bytes);
         let resp_frame = self
             .send_request(request_id, frame, timeout, trace_id)
             .await

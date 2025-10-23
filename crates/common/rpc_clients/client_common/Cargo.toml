@@ -15,6 +15,7 @@ metrics = []
 [dependencies]
 bytes.workspace = true
 bumpalo.workspace = true
+prost.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true

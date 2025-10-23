@@ -1,79 +1,12 @@
 use std::time::Duration;
 
 use crate::client::RpcClient;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::Bytes;
 use nss_codec::*;
 use prost::Message as PbMessage;
-use rpc_client_common::{InflightRpcGuard, RpcError, get_request_bump};
-use rpc_codec_common::{BumpBuf, MessageFrame};
+use rpc_client_common::{InflightRpcGuard, RpcError, encode_protobuf};
+use rpc_codec_common::MessageFrame;
 use tracing::error;
-
-enum EncodeBuffer<'bump> {
-    Bump(BumpBuf<'bump>),
-    Heap(BytesMut),
-}
-
-impl<'bump> EncodeBuffer<'bump> {
-    fn new(trace_id: Option<u64>) -> Self {
-        if let Some(tid) = trace_id
-            && let Some(bump) = get_request_bump(tid)
-        {
-            return Self::Bump(BumpBuf::with_capacity_in(512, bump));
-        }
-        Self::Heap(BytesMut::new())
-    }
-
-    fn freeze(self) -> Bytes {
-        match self {
-            Self::Bump(buf) => buf.freeze(),
-            Self::Heap(buf) => buf.freeze(),
-        }
-    }
-}
-
-unsafe impl<'bump> BufMut for EncodeBuffer<'bump> {
-    fn remaining_mut(&self) -> usize {
-        match self {
-            Self::Bump(buf) => buf.remaining_mut(),
-            Self::Heap(buf) => buf.remaining_mut(),
-        }
-    }
-
-    fn chunk_mut(&mut self) -> &mut bytes::buf::UninitSlice {
-        match self {
-            Self::Bump(buf) => buf.chunk_mut(),
-            Self::Heap(buf) => buf.chunk_mut(),
-        }
-    }
-
-    unsafe fn advance_mut(&mut self, cnt: usize) {
-        match self {
-            Self::Bump(buf) => unsafe { buf.advance_mut(cnt) },
-            Self::Heap(buf) => unsafe { buf.advance_mut(cnt) },
-        }
-    }
-
-    fn put_slice(&mut self, src: &[u8]) {
-        match self {
-            Self::Bump(buf) => buf.put_slice(src),
-            Self::Heap(buf) => buf.put_slice(src),
-        }
-    }
-
-    fn put_u8(&mut self, n: u8) {
-        match self {
-            Self::Bump(buf) => buf.put_u8(n),
-            Self::Heap(buf) => buf.put_u8(n),
-        }
-    }
-}
-
-fn encode_protobuf<M: PbMessage>(msg: M, trace_id: Option<u64>) -> Result<Bytes, RpcError> {
-    let mut body_bytes = EncodeBuffer::new(trace_id);
-    msg.encode(&mut body_bytes)
-        .map_err(|e| RpcError::EncodeError(e.to_string()))?;
-    Ok(body_bytes.freeze())
-}
 
 impl RpcClient {
     pub async fn put_inode(
@@ -83,29 +16,6 @@ impl RpcClient {
         value: Bytes,
         timeout: Option<Duration>,
         trace_id: Option<u64>,
-        retry_count: u32,
-    ) -> Result<PutInodeResponse, RpcError> {
-        self.put_inode_with_stable_request_id_and_retry(
-            root_blob_name,
-            key,
-            value,
-            timeout,
-            trace_id,
-            None,
-            retry_count,
-        )
-        .await
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub async fn put_inode_with_stable_request_id_and_retry(
-        &self,
-        root_blob_name: &str,
-        key: &str,
-        value: Bytes,
-        timeout: Option<Duration>,
-        trace_id: Option<u64>,
-        stable_request_id: Option<u32>,
         retry_count: u32,
     ) -> Result<PutInodeResponse, RpcError> {
         let _guard = InflightRpcGuard::new("nss", "put_inode");
@@ -118,7 +28,7 @@ impl RpcClient {
         };
 
         let mut header = MessageHeader::default();
-        let request_id = stable_request_id.unwrap_or_else(|| self.gen_request_id());
+        let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::PutInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
@@ -138,27 +48,6 @@ impl RpcClient {
         let resp: PutInodeResponse =
             PbMessage::decode(resp_frame.body).map_err(|e| RpcError::DecodeError(e.to_string()))?;
         Ok(resp)
-    }
-
-    pub async fn put_inode_with_stable_request_id(
-        &self,
-        root_blob_name: &str,
-        key: &str,
-        value: Bytes,
-        timeout: Option<Duration>,
-        trace_id: Option<u64>,
-        stable_request_id: Option<u32>,
-    ) -> Result<PutInodeResponse, RpcError> {
-        self.put_inode_with_stable_request_id_and_retry(
-            root_blob_name,
-            key,
-            value,
-            timeout,
-            trace_id,
-            stable_request_id,
-            0,
-        )
-        .await
     }
 
     pub async fn get_inode(
