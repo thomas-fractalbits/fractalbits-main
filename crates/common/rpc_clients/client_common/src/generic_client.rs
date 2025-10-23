@@ -50,14 +50,7 @@ pub fn get_request_bump(trace_id: u64) -> Option<Rc<Bump>> {
 type RequestMap<Header> =
     Arc<parking_lot::Mutex<HashMap<u32, oneshot::Sender<MessageFrame<Header>>>>>;
 
-pub trait RpcCodec<Header: MessageHeaderTrait>:
-    Default
-    + tokio_util::codec::Decoder<Item = MessageFrame<Header>, Error = io::Error>
-    + Clone
-    + Send
-    + Sync
-    + 'static
-{
+pub trait RpcCodec<Header: MessageHeaderTrait>: Default + Clone + Send + Sync + 'static {
     const RPC_TYPE: &'static str;
 }
 
@@ -148,7 +141,7 @@ where
         let recv_handle = {
             let receiver_requests = requests.clone();
             let is_closed = is_closed.clone();
-            tokio::spawn(async move {
+            tokio::task::spawn_local(async move {
                 if let Err(e) =
                     Self::receive_task_tokio(reader, &receiver_requests, socket_fd, rpc_type).await
                 {
@@ -186,7 +179,7 @@ where
         let recv_handle = {
             let receiver_requests = requests.clone();
             let is_closed = is_closed.clone();
-            tokio::spawn(async move {
+            tokio::task::spawn_local(async move {
                 if let Err(e) =
                     Self::receive_task_io_uring(socket_fd, &receiver_requests, rpc_type).await
                 {
@@ -228,20 +221,65 @@ where
 
     #[cfg(not(feature = "io_uring"))]
     async fn receive_task_tokio(
-        receiver: tokio::net::tcp::OwnedReadHalf,
+        mut receiver: tokio::net::tcp::OwnedReadHalf,
         requests: &RequestMap<Header>,
         socket_fd: RawFd,
         rpc_type: &'static str,
     ) -> Result<(), RpcError> {
-        use tokio_stream::StreamExt;
-        let decoder = Codec::default();
-        let mut reader = tokio_util::codec::FramedRead::new(receiver, decoder);
-        while let Some(frame) = reader.next().await {
-            let frame = frame?;
+        use tokio::io::AsyncReadExt;
+
+        let header_size = Header::SIZE;
+
+        loop {
+            // Read fixed-size header into stack buffer
+            let mut header_buf = [0u8; 256];
+            let header = match receiver.read_exact(&mut header_buf[..header_size]).await {
+                Ok(_) => Header::decode(&header_buf[..header_size]),
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                    warn!(%rpc_type, %socket_fd, "connection closed, receive message task quit");
+                    return Ok(());
+                }
+                Err(e) => return Err(RpcError::IoError(e)),
+            };
+
+            // Read body using bump allocator if available
+            let body_size = header.get_body_size();
+            let body = if body_size > 0 {
+                let trace_id = header.get_trace_id();
+                if trace_id != 0
+                    && let Some(bump_rc) = get_request_bump(trace_id)
+                {
+                    // Use bump allocator for body - read directly into bump buffer
+                    use rpc_codec_common::BumpBuf;
+                    let bump_ref: &Bump = &bump_rc;
+                    let mut bump_buf = BumpBuf::with_capacity_in(body_size, bump_ref);
+
+                    // Read directly into BumpBuf using read_buf (zero-copy)
+                    while bump_buf.len() < body_size {
+                        let n = receiver.read_buf(&mut bump_buf).await?;
+                        if n == 0 {
+                            return Err(RpcError::IoError(std::io::Error::new(
+                                std::io::ErrorKind::UnexpectedEof,
+                                "connection closed while reading body",
+                            )));
+                        }
+                    }
+
+                    bump_buf.freeze()
+                } else {
+                    // No bump allocator, use ByteMut
+                    let mut body_buf = bytes::BytesMut::with_capacity(body_size);
+                    body_buf.resize(body_size, 0);
+                    receiver.read_exact(&mut body_buf).await?;
+                    body_buf.freeze()
+                }
+            } else {
+                bytes::Bytes::new()
+            };
+
+            let frame = MessageFrame::new(header, body);
             Self::handle_incoming_frame(frame, requests, socket_fd, rpc_type);
         }
-        warn!(%rpc_type, %socket_fd, "connection closed, receive message task quit");
-        Ok(())
     }
 
     fn handle_incoming_frame(
