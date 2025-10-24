@@ -10,7 +10,7 @@ import { S3ExpressCrossAzTestStack } from "../lib/s3express-cross-az-test-stack"
 const app = new cdk.App();
 
 const numApiServers = app.node.tryGetContext("numApiServers") ?? 1;
-const numBenchClients = app.node.tryGetContext("numBenchClients") ?? 1;
+const numBenchClients = app.node.tryGetContext("numBenchClients") ?? 2;
 const numBssNodes = app.node.tryGetContext("numBssNodes") ?? 6;
 const benchType = app.node.tryGetContext("benchType") ?? null;
 const bssInstanceTypes =
@@ -18,7 +18,7 @@ const bssInstanceTypes =
 const apiServerInstanceType =
   app.node.tryGetContext("apiServerInstanceType") ?? "c8g.xlarge";
 const benchClientInstanceType =
-  app.node.tryGetContext("benchClientInstanceType") ?? "c8g.2xlarge";
+  app.node.tryGetContext("benchClientInstanceType") ?? "c8g.xlarge";
 const browserIp = app.node.tryGetContext("browserIp") ?? null;
 const dataBlobStorage =
   app.node.tryGetContext("dataBlobStorage") ?? "s3HybridSingleAz";
