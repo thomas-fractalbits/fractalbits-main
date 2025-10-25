@@ -1,22 +1,39 @@
 use rpc_client_common::AutoReconnectRpcClient;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-#[derive(Clone)]
+const CONNS_PER_CORE: usize = 8;
+
 pub struct RpcClient {
-    inner: Arc<AutoReconnectRpcClient<bss_codec::MessageCodec, bss_codec::MessageHeader>>,
+    connections:
+        Vec<Arc<AutoReconnectRpcClient<bss_codec::MessageCodec, bss_codec::MessageHeader>>>,
+    next_conn: AtomicUsize,
 }
 
 impl RpcClient {
     pub fn new_from_address(address: String) -> Self {
-        let inner = Arc::new(AutoReconnectRpcClient::<
-            bss_codec::MessageCodec,
-            bss_codec::MessageHeader,
-        >::new_from_address(address));
-        RpcClient { inner }
+        let mut connections = Vec::with_capacity(CONNS_PER_CORE);
+
+        for _ in 0..CONNS_PER_CORE {
+            let inner = AutoReconnectRpcClient::new_from_address(address.clone());
+            connections.push(Arc::new(inner));
+        }
+
+        Self {
+            connections,
+            next_conn: AtomicUsize::new(0),
+        }
+    }
+
+    fn get_connection(
+        &self,
+    ) -> &Arc<AutoReconnectRpcClient<bss_codec::MessageCodec, bss_codec::MessageHeader>> {
+        let idx = self.next_conn.fetch_add(1, Ordering::Relaxed) % self.connections.len();
+        &self.connections[idx]
     }
 
     pub fn gen_request_id(&self) -> u32 {
-        self.inner.gen_request_id()
+        self.get_connection().gen_request_id()
     }
 
     pub async fn send_request(
@@ -27,7 +44,7 @@ impl RpcClient {
         trace_id: Option<u64>,
     ) -> Result<rpc_codec_common::MessageFrame<bss_codec::MessageHeader>, rpc_client_common::RpcError>
     {
-        self.inner
+        self.get_connection()
             .send_request(request_id, frame, timeout, trace_id)
             .await
     }
@@ -40,7 +57,7 @@ impl RpcClient {
         trace_id: Option<u64>,
     ) -> Result<rpc_codec_common::MessageFrame<bss_codec::MessageHeader>, rpc_client_common::RpcError>
     {
-        self.inner
+        self.get_connection()
             .send_request_vectored(request_id, frame, timeout, trace_id)
             .await
     }

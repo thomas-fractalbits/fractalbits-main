@@ -2,7 +2,7 @@ use rpc_client_common::AutoReconnectRpcClient;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const CONNS_PER_CORE: usize = 3;
+const CONNS_PER_CORE: usize = 8;
 
 pub struct RpcClient {
     connections:
