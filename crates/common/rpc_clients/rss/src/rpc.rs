@@ -33,7 +33,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Put;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -88,7 +88,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Get;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -143,7 +143,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Delete;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -190,7 +190,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::GetNssRole;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -239,7 +239,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::List;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -290,7 +290,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Heartbeat;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -335,7 +335,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::GetAzStatus;
         header.size = MessageHeader::SIZE as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let frame = MessageFrame::new(header, Bytes::new());
         let resp_frame = self
@@ -385,7 +385,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::SetAzStatus;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -439,7 +439,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::CreateBucket;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -490,7 +490,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::DeleteBucket;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -593,7 +593,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::GetMetadataVgInfo;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
         header.trace_id = trace_id.unwrap_or(0);
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);

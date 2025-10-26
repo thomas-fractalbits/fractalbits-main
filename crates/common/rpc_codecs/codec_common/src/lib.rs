@@ -14,6 +14,8 @@ pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
     fn set_retry_count(&mut self, retry_count: u32);
     fn get_trace_id(&self) -> u64;
     fn set_trace_id(&mut self, trace_id: u64);
+    fn set_checksum(&mut self);
+    fn verify_checksum(&self) -> bool;
 }
 
 pub struct MessageFrame<H: MessageHeaderTrait, B = Bytes> {

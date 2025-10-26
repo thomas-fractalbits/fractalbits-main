@@ -2,10 +2,23 @@ use crate::Command;
 use bytemuck::{Pod, Zeroable};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rpc_codec_common::MessageHeaderTrait;
+use xxhash_rust::xxh64::xxh64;
 
 #[repr(C)]
 #[derive(Pod, Debug, Default, Clone, Copy, Zeroable)]
 pub struct MessageHeader {
+    /// Trace ID for distributed tracing
+    pub trace_id: u64,
+
+    /// A checksum covering only the remainder of this header.
+    /// This allows the header to be trusted without having to fetch the associated body.
+    /// Using xxhash64 & UINT32_MAX.
+    pub checksum: u32,
+
+    /// A checksum covering only the associated body after this header.
+    /// Using xxhash64 & UINT32_MAX.
+    pub checksum_body: u32,
+
     /// The size of the Header structure (always), plus any associated body.
     pub size: u32,
 
@@ -17,19 +30,10 @@ pub struct MessageHeader {
     pub command: Command,
 
     /// Number of retry attempts for this request (0 = first attempt)
-    pub retry_count: u32,
-
-    /// Trace ID for distributed tracing and bump allocator lookup
-    pub trace_id: u64,
-
-    /// The message type: Request=0, Response=1, Notify=2
-    message_type: u16,
-
-    /// The version of the protocol implementation that originated this message.
-    protocol: u16,
+    pub retry_count: u8,
 
     /// Reserved for future use
-    reserved: [u8; 4],
+    reserved: [u8; 3],
 }
 
 // Safety: Command is defined as protobuf enum type (i32), and 0 as Invalid. There is also no padding
@@ -49,7 +53,6 @@ impl MessageHeader {
 
     pub fn decode_bytes(src: &Bytes) -> Self {
         let header_bytes = &src.chunk()[0..Self::SIZE];
-        // TODO: verify header checksum
         bytemuck::pod_read_unaligned::<Self>(header_bytes)
     }
 
@@ -58,6 +61,28 @@ impl MessageHeader {
         let mut bytes = [0u8; 4];
         bytes.copy_from_slice(&src[offset..offset + 4]);
         u32::from_le_bytes(bytes) as usize
+    }
+
+    /// Calculate and set the checksum field for this header.
+    /// The checksum covers all header fields after the checksum field itself.
+    /// Using xxhash64 & UINT32_MAX.
+    pub fn set_checksum(&mut self) {
+        let checksum_offset = std::mem::offset_of!(MessageHeader, checksum);
+        let bytes: &[u8] = bytemuck::bytes_of(self);
+        let bytes_to_hash = &bytes[checksum_offset + size_of::<u32>()..Self::SIZE];
+        let hash = xxh64(bytes_to_hash, 0);
+        self.checksum = (hash & 0xFFFFFFFF) as u32;
+    }
+
+    /// Verify that the checksum field matches the calculated checksum.
+    /// Returns true if valid, false if invalid.
+    pub fn verify_checksum(&self) -> bool {
+        let checksum_offset = std::mem::offset_of!(MessageHeader, checksum);
+        let bytes: &[u8] = bytemuck::bytes_of(self);
+        let bytes_to_hash = &bytes[checksum_offset + size_of::<u32>()..Self::SIZE];
+        let hash = xxh64(bytes_to_hash, 0);
+        let calculated = (hash & 0xFFFFFFFF) as u32;
+        self.checksum == calculated
     }
 }
 
@@ -69,7 +94,6 @@ impl MessageHeaderTrait for MessageHeader {
     }
 
     fn decode(src: &[u8]) -> Self {
-        // TODO: verify header checksum
         bytemuck::pod_read_unaligned::<Self>(&src[..Self::SIZE])
     }
 
@@ -97,11 +121,11 @@ impl MessageHeaderTrait for MessageHeader {
     }
 
     fn get_retry_count(&self) -> u32 {
-        self.retry_count
+        self.retry_count.into()
     }
 
     fn set_retry_count(&mut self, retry_count: u32) {
-        self.retry_count = retry_count;
+        self.retry_count = retry_count as u8;
     }
 
     fn get_trace_id(&self) -> u64 {
@@ -110,5 +134,13 @@ impl MessageHeaderTrait for MessageHeader {
 
     fn set_trace_id(&mut self, trace_id: u64) {
         self.trace_id = trace_id;
+    }
+
+    fn set_checksum(&mut self) {
+        self.set_checksum()
+    }
+
+    fn verify_checksum(&self) -> bool {
+        self.verify_checksum()
     }
 }

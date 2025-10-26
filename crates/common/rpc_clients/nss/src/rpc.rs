@@ -32,7 +32,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::PutInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -71,7 +71,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::GetInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -121,7 +121,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::ListInodes;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -160,7 +160,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::DeleteInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -197,7 +197,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::CreateRootInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -232,7 +232,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::DeleteRootInode;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -271,7 +271,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Rename;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);
@@ -322,7 +322,7 @@ impl RpcClient {
         header.id = request_id;
         header.command = Command::Rename;
         header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
-        header.retry_count = retry_count;
+        header.retry_count = retry_count as u8;
 
         let body_bytes = encode_protobuf(body, trace_id)?;
         let frame = MessageFrame::new(header, body_bytes);

@@ -156,10 +156,11 @@ where
             counter!("rpc_send_batch_size", "type" => rpc_type).increment(count as u64);
 
             encoded_frames.clear();
-            for frame in batch.drain(..) {
+            for mut frame in batch.drain(..) {
                 let request_id = frame.header.get_id();
                 debug!(%rpc_type, %socket_fd, %request_id, "sending request");
 
+                frame.header.set_checksum();
                 let mut header_buf = BytesMut::with_capacity(Header::SIZE);
                 frame.header.encode(&mut header_buf);
 
@@ -240,7 +241,14 @@ where
             // Read fixed-size header into stack buffer
             let mut header_buf = [0u8; 256];
             let header = match receiver.read_exact(&mut header_buf[..header_size]).await {
-                Ok(_) => Header::decode(&header_buf[..header_size]),
+                Ok(_) => {
+                    let header = Header::decode(&header_buf[..header_size]);
+                    if !header.verify_checksum() {
+                        warn!(%rpc_type, %socket_fd, "header checksum verification failed");
+                        return Err(RpcError::ChecksumMismatch);
+                    }
+                    header
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                     warn!(%rpc_type, %socket_fd, "connection closed, receive message task quit");
                     return Ok(());

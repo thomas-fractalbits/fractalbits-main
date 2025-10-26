@@ -37,6 +37,8 @@ pub enum RpcError {
     Retry,
     #[error("Connection closed")]
     ConnectionClosed,
+    #[error("Checksum mismatch")]
+    ChecksumMismatch,
 }
 
 impl<T> From<tokio::sync::mpsc::error::SendError<T>> for RpcError {
