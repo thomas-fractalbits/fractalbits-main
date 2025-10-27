@@ -60,6 +60,22 @@ fn setup_volume_directories() -> CmdResult {
 
 fn create_bss_config() -> CmdResult {
     let num_threads = run_fun!(nproc)?;
+    let num_threads_val: u64 = num_threads
+        .trim()
+        .parse()
+        .map_err(|_| Error::other(format!("invalid num_threads: {num_threads}")))?;
+
+    let total_mem_kb_str = run_fun!(cat /proc/meminfo | grep MemTotal | awk r"{print $2}")?;
+    let total_mem_kb = total_mem_kb_str
+        .trim()
+        .parse::<u64>()
+        .map_err(|_| Error::other(format!("invalid total_mem_kb: {total_mem_kb_str}")))?;
+
+    let buffer_pool_size = 1024 * 1024;
+    let total_mem_bytes = total_mem_kb * 1024;
+    let usable_mem_bytes = (total_mem_bytes as f64 * 0.8) as u64;
+    let buffer_pool_count = usable_mem_bytes / (num_threads_val * buffer_pool_size);
+
     let config_content = format!(
         r##"working_dir = "/data"
 server_port = 8088
@@ -67,6 +83,10 @@ num_threads = {num_threads}
 log_level = "warn"
 use_direct_io = true
 io_concurrency = 256
+use_sqpoll = false
+sqpoll_idle_ms = 2
+buffer_pool_count = {buffer_pool_count}
+buffer_pool_size = {buffer_pool_size}
 "##
     );
     run_cmd! {
