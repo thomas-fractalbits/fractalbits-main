@@ -9,19 +9,19 @@ use rpc_codec_common::MessageHeaderTrait;
 pub struct MessageHeader {
     /// A checksum covering only the remainder of this header.
     /// This allows the header to be trusted without having to recv() or read() the associated body.
-    /// This checksum is enough to uniquely identify a network message or prepare.
-    checksum: u128,
+    checksum: u64,
+    /// The current protocol version, note all the members until here should never be changed so
+    /// that we can upgrade proto version in the future.
+    pub proto_version: u32,
+    /// The size of the Header structure (always), plus any associated body.
+    pub size: u32,
 
     /// A checksum covering only the associated body after this header.
-    checksum_body: u128,
-
-    /// The cluster number binds intention into the header, so that a nss or api_server can indicate
-    /// the cluster it believes it is speaking to, instead of accidentally talking to the wrong
-    /// cluster (for example, staging vs production).
-    cluster: u128,
-
-    /// Version number for quorum protocol
-    pub version: u64,
+    checksum_body: u64,
+    /// The protocol command (method) for this message. i32 size, defined as enum type
+    pub command: Command,
+    /// Every request would be sent with a unique id, so the client can get the right response
+    pub id: u32,
 
     /// Bucket Id
     pub bucket_id: [u8; 16],
@@ -29,39 +29,21 @@ pub struct MessageHeader {
     /// Blob Id
     pub blob_id: [u8; 16],
 
-    /// The size of the Header structure (always), plus any associated body.
-    pub size: u32,
+    /// Trace ID for distributed tracing
+    pub trace_id: u64,
+    /// Version number for quorum protocol
+    pub version: u64,
 
     /// The bss block number
     pub block_number: u32,
-
     /// Errno which can be converted into `std::io::Error`(`from_raw_os_error()`)
     pub errno: i32,
-
-    /// Every request would be sent with a unique id, so the client can get the right response
-    pub id: u32,
-
-    /// The protocol command (method) for this message.
-    /// u32 size, defined as enum type
-    pub command: Command,
-
     /// 4k aligned size (header included), to use for direct-io
     pub aligned_size: u32,
-
-    /// Number of retry attempts for this request (0 = first attempt)
-    pub retry_count: u32,
-
     /// Volume ID for multi-BSS support
     pub volume_id: u16,
-
-    /// The version of the protocol implementation that originated this message.
-    pub protocol: u16,
-
-    /// Trace ID for distributed tracing and bump allocator lookup
-    pub trace_id: u64,
-
-    pub checksum_algo: u8,
-
+    /// Number of retry attempts for this request (0 = first attempt)
+    pub retry_count: u8,
     /// Flag to indicate if this is a new metadata blob (vs update)
     pub is_new: u8,
 
@@ -69,15 +51,11 @@ pub struct MessageHeader {
     // Note rust arrays of sizes from 0 to 32 (inclusive) implement the Default trait if the element
     // type allows it. As a stopgap, trait implementations are statically generated up to size 32.
     // See [doc](https://doc.rust-lang.org/std/primitive.array.html) for more details.
-    reserved1: [u8; 24],
-    reserved2: [u8; 32],
-    reserved3: [u8; 32],
-    reserved4: [u8; 32],
-    reserved5: [u8; 6],
+    reserved1: [u8; 32],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-#[repr(u32)]
+#[repr(i32)]
 pub enum Command {
     Invalid = 0,
     Handshake = 1, // Reserved for RPC handshake
@@ -97,14 +75,14 @@ impl Default for Command {
     }
 }
 
-// Safety: Command is defined as enum type (u32), and 0 as Invalid. There is also no padding
+// Safety: Command is defined as enum type (i32), and 0 as Invalid. There is also no padding
 // as verified from the zig side. With header checksum validation, we can also be sure no invalid
 // enum value being interpreted.
 unsafe impl Pod for Command {}
 unsafe impl Zeroable for Command {}
 
 impl MessageHeader {
-    const _SIZE_OK: () = assert!(size_of::<Self>() == 256);
+    const _SIZE_OK: () = assert!(size_of::<Self>() == 128);
     pub const SIZE: usize = size_of::<Self>();
 
     pub fn encode(&self, dst: &mut BytesMut) {
@@ -127,7 +105,7 @@ impl MessageHeader {
 }
 
 impl MessageHeaderTrait for MessageHeader {
-    const SIZE: usize = 256;
+    const SIZE: usize = 128;
 
     fn encode(&self, dst: &mut BytesMut) {
         self.encode(dst)
@@ -162,11 +140,11 @@ impl MessageHeaderTrait for MessageHeader {
     }
 
     fn get_retry_count(&self) -> u32 {
-        self.retry_count
+        self.retry_count.into()
     }
 
     fn set_retry_count(&mut self, retry_count: u32) {
-        self.retry_count = retry_count;
+        self.retry_count = retry_count as u8;
     }
 
     fn get_trace_id(&self) -> u64 {
@@ -176,7 +154,6 @@ impl MessageHeaderTrait for MessageHeader {
     fn set_trace_id(&mut self, trace_id: u64) {
         self.trace_id = trace_id;
     }
-
     fn set_checksum(&mut self) {}
 
     fn verify_checksum(&self) -> bool {
