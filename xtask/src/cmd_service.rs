@@ -904,7 +904,7 @@ fn create_nss_dirs(dir_name: &str) -> CmdResult {
         mkdir -p data/$dir_name/local/meta_cache/blobs;
     }?;
     for i in 0..256 {
-        run_cmd!(mkdir -p data/$dir_name/local/meta_cache/blobs/dir$i)?;
+        run_cmd!(mkdir -p data/$dir_name/local/meta_cache/blobs/$i)?;
     }
     Ok(())
 }
@@ -923,7 +923,7 @@ fn create_dirs_for_bss_server(bss_count: u32, bss_id: u32) -> CmdResult {
     };
     run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$data_volume_id)?;
     for i in 0..256 {
-        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$data_volume_id/dir$i)?;
+        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/data_volume$data_volume_id/$i)?;
     }
 
     // Metadata volume - calculate based on metadata VG quorum N
@@ -933,7 +933,7 @@ fn create_dirs_for_bss_server(bss_count: u32, bss_id: u32) -> CmdResult {
     };
     run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id)?;
     for i in 0..256 {
-        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id/dir$i)?;
+        run_cmd!(mkdir -p data/bss$bss_id/local/blobs/metadata_volume$metadata_volume_id/$i)?;
     }
 
     Ok(())

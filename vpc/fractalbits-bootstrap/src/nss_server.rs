@@ -7,6 +7,8 @@ const BLOB_DRAM_MEM_PERCENT: f64 = 0.8;
 // space for 10K IOPS. but journal size is much smaller.
 const EBS_SPACE_PERCENT: f64 = 0.2;
 
+const NSS_META_CACHE_SHARDS: usize = 256;
+
 /// Calculate art_journal_segment_size based on EBS volume size
 fn calculate_art_journal_segment_size(volume_dev: &str) -> Result<u64, Error> {
     // Get total size of volume_dev in bytes
@@ -64,6 +66,7 @@ fn setup_configs(
     create_systemd_unit_file(service_name, false)?;
     create_logrotate_for_stats()?;
     create_ena_irq_affinity_service()?;
+    create_nvme_tuning_service()?;
     Ok(())
 }
 
@@ -97,6 +100,7 @@ blob_dram_kilo_bytes = {blob_dram_kilo_bytes}
 art_journal_segment_size = {art_journal_segment_size}
 log_level = "info"
 mirrord_port = 9999
+meta_cache_shards = {NSS_META_CACHE_SHARDS}
 "##
     );
     run_cmd! {
@@ -202,8 +206,8 @@ pub fn format_nss(ebs_dev: String) -> CmdResult {
         mkdir -p /data/local/stats
     }?;
 
-    for i in 0..256 {
-        run_cmd!(mkdir -p /data/local/meta_cache/blobs/dir$i)?;
+    for i in 0..NSS_META_CACHE_SHARDS {
+        run_cmd!(mkdir -p /data/local/meta_cache/blobs/$i)?;
     }
     run_cmd! {
         info "Syncing file system changes";

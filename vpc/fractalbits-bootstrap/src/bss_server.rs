@@ -2,6 +2,31 @@ use super::common::*;
 use cmd_lib::*;
 use std::io::Error;
 
+const BSS_DATA_VOLUME_SHARDS: usize = 65536;
+const BSS_METADATA_VOLUME_SHARDS: usize = 256;
+
+#[derive(Debug, Clone, Copy)]
+enum VolumeType {
+    Data,
+    Metadata,
+}
+
+impl VolumeType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            VolumeType::Data => "data",
+            VolumeType::Metadata => "metadata",
+        }
+    }
+
+    fn shard_count(&self) -> usize {
+        match self {
+            VolumeType::Data => BSS_DATA_VOLUME_SHARDS,
+            VolumeType::Metadata => BSS_METADATA_VOLUME_SHARDS,
+        }
+    }
+}
+
 pub fn bootstrap(meta_stack_testing: bool, for_bench: bool) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm"])?;
     format_local_nvme_disks(false)?; // no twp support since experiment is done
@@ -19,6 +44,7 @@ pub fn bootstrap(meta_stack_testing: bool, for_bench: bool) -> CmdResult {
 
     create_logrotate_for_stats()?;
     create_ena_irq_affinity_service()?;
+    create_nvme_tuning_service()?;
     setup_volume_directories()?;
     create_bss_config()?;
     create_systemd_unit_file("bss", true)?;
@@ -87,6 +113,8 @@ use_sqpoll = false
 sqpoll_idle_ms = 2
 buffer_pool_count = {buffer_pool_count}
 buffer_pool_size = {buffer_pool_size}
+data_volume_shards = {BSS_DATA_VOLUME_SHARDS}
+metadata_volume_shards = {BSS_METADATA_VOLUME_SHARDS}
 "##
     );
     run_cmd! {
@@ -190,13 +218,13 @@ fn find_volume_for_instance(config_json: &str, instance_id: &str) -> Result<Opti
 
 fn create_assigned_volume_directories(assignments: &VolumeAssignments) -> CmdResult {
     if let Some(vol_id) = assignments.data_volume {
-        create_volume_directories("data", vol_id)?;
+        create_volume_directories(VolumeType::Data, vol_id)?;
     } else {
         info!("No data volume assigned");
     }
 
     if let Some(vol_id) = assignments.metadata_volume {
-        create_volume_directories("metadata", vol_id)?;
+        create_volume_directories(VolumeType::Metadata, vol_id)?;
     } else {
         info!("No metadata volume assigned");
     }
@@ -204,14 +232,15 @@ fn create_assigned_volume_directories(assignments: &VolumeAssignments) -> CmdRes
     Ok(())
 }
 
-fn create_volume_directories(volume_type: &str, volume_id: usize) -> CmdResult {
-    info!("Creating {} volume {} directories", volume_type, volume_id);
+fn create_volume_directories(volume_type: VolumeType, volume_id: usize) -> CmdResult {
+    let type_str = volume_type.as_str();
+    info!("Creating {type_str} volume {volume_id} directories");
 
-    let base_dir = format!("/data/local/blobs/{}_volume{}", volume_type, volume_id);
+    let base_dir = format!("/data/local/blobs/{type_str}_volume{volume_id}");
     run_cmd!(mkdir -p $base_dir)?;
 
-    for i in 0..256 {
-        run_cmd!(mkdir -p $base_dir/dir$i)?;
+    for i in 0..volume_type.shard_count() {
+        run_cmd!(mkdir -p $base_dir/$i)?;
     }
 
     Ok(())

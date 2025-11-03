@@ -16,6 +16,7 @@ pub const BOOTSTRAP_DONE_FILE: &str = "/opt/fractalbits/.bootstrap_done";
 pub const STATS_LOGROTATE_CONFIG: &str = "/etc/logrotate.d/stats_logs";
 pub const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
 pub const NETWORK_TUNING_SYS_CONFIG: &str = "99-network-tuning.conf";
+pub const STORAGE_TUNING_SYS_CONFIG: &str = "99-storage-tuning.conf";
 
 // DDB Service Discovery Keys
 pub const BSS_DATA_VG_CONFIG_KEY: &str = "bss-data-vg-config";
@@ -32,6 +33,7 @@ pub const S3EXPRESS_REMOTE_BUCKET_CONFIG: &str = "s3express-remote-bucket-config
 
 pub fn common_setup() -> CmdResult {
     create_network_tuning_sysctl_file()?;
+    create_storage_tuning_sysctl_file()?;
     install_rpms(&["amazon-cloudwatch-agent", "nmap-ncat", "perf", "lldb"])?;
     setup_serial_console_password()?;
     Ok(())
@@ -340,8 +342,8 @@ pub fn format_local_nvme_disks(support_storage_twp: bool) -> CmdResult {
         match fs_type.as_str() {
             "ext4" => {
                 run_cmd! {
-                    info "Creating ext4 on local nvme disks: ${nvme_disks:?} with bigalloc and 8K clusters";
-                    mkfs.ext4 -q -I 128 -m 0 -i 16384 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0 -O dir_index,extent,flex_bg,fast_commit $[nvme_disks];
+                    info "Creating ext4 on local nvme disks: ${nvme_disks:?}";
+                    mkfs.ext4 -q -I 128 -m 0 -i 8192 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0 -O dir_index,extent,flex_bg,fast_commit $[nvme_disks];
                 }?;
             }
             "xfs" => {
@@ -392,8 +394,8 @@ pub fn format_local_nvme_disks(support_storage_twp: bool) -> CmdResult {
         "ext4" => {
             let stripe_width = num_nvme_disks * 128;
             run_cmd! {
-                info "Creating ext4 on /dev/md0 with bigalloc and 8K clusters";
-                mkfs.ext4 -q -I 128 -m 0 -i 16384 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0,stride=128,stripe_width=${stripe_width} -O dir_index,extent,flex_bg,fast_commit /dev/md0;
+                info "Creating ext4 on /dev/md0";
+                mkfs.ext4 -q -I 128 -m 0 -i 8192 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0,stride=128,stripe_width=${stripe_width} -O dir_index,extent,flex_bg,fast_commit /dev/md0;
             }?;
         }
         "xfs" => {
@@ -744,6 +746,106 @@ net.core.default_qdisc = fq
         ln -nsf $ETC_PATH/$NETWORK_TUNING_SYS_CONFIG /etc/sysctl.d/;
         sysctl --system --quiet &> /dev/null;
 
+    }?;
+    Ok(())
+}
+
+fn create_storage_tuning_sysctl_file() -> CmdResult {
+    let content = r##"# Should be a symlink file in /etc/sysctl.d
+# VFS cache tuning for directory-heavy blob storage workloads
+# Keep directory/inode caches longer (default: 100, lower = keep longer)
+vm.vfs_cache_pressure = 10
+# Start async writeback earlier for predictable write latency (default: 10)
+vm.dirty_background_ratio = 5
+# Limit max dirty pages to prevent large flush stalls (default: 20)
+vm.dirty_ratio = 10
+# Reduce swapping to keep more file cache in memory (default: 60)
+vm.swappiness = 10
+"##;
+
+    run_cmd! {
+        info "Applying storage tuning configs";
+        mkdir -p $ETC_PATH;
+        echo $content > $ETC_PATH/$STORAGE_TUNING_SYS_CONFIG;
+        ln -nsf $ETC_PATH/$STORAGE_TUNING_SYS_CONFIG /etc/sysctl.d/;
+        sysctl --system --quiet &> /dev/null;
+
+    }?;
+    Ok(())
+}
+
+pub fn create_nvme_tuning_service() -> CmdResult {
+    let script_path = format!("{BIN_PATH}tune-nvme-directio.sh");
+    let systemd_unit_content = format!(
+        r##"[Unit]
+Description=NVMe Direct I/O Tuning
+After=local-fs.target
+Before=api_server.service bss.service nss.service mirrord.service bench_client.service
+
+[Service]
+Type=oneshot
+ExecStart={script_path}
+
+[Install]
+WantedBy=multi-user.target
+"##
+    );
+
+    let script_content = r##"#!/bin/bash
+
+echo "Tuning NVMe devices for Direct I/O workloads" >&2
+
+nvme_devices=$(nvme list | grep -v "Amazon Elastic Block Store" \
+    | awk '/nvme[0-9]n[0-9]/ {print $1}' \
+    | sed 's|/dev/||' || true)
+
+if [ -z "$nvme_devices" ]; then
+    echo "No local NVMe devices found, skipping Direct I/O tuning" >&2
+    exit 0
+fi
+
+echo "Found NVMe devices: $nvme_devices" >&2
+
+for device in $nvme_devices; do
+    if [ ! -d "/sys/block/$device" ]; then
+        echo "Device $device not found in /sys/block, skipping" >&2
+        continue
+    fi
+
+    echo "Tuning $device for Direct I/O workloads" >&2
+
+    # I/O scheduler - set to none for Direct I/O
+    echo none > /sys/block/$device/queue/scheduler 2>/dev/null || \
+        echo "  Warning: Could not set scheduler for $device" >&2
+
+    # Read-ahead - minimal for Direct I/O
+    echo 64 > /sys/block/$device/queue/read_ahead_kb 2>/dev/null || \
+        echo "  Warning: Could not set read_ahead_kb for $device" >&2
+
+    # Rotational flag (read-only on most NVMe, skip if fails)
+    echo 0 > /sys/block/$device/queue/rotational 2>/dev/null || true
+
+    # Don't use block I/O for entropy
+    echo 0 > /sys/block/$device/queue/add_random 2>/dev/null || \
+        echo "  Warning: Could not disable add_random for $device" >&2
+
+    # Complete I/O on same CPU socket (may not be supported on all kernels)
+    echo 2 > /sys/block/$device/queue/rq_affinity 2>/dev/null || \
+        echo "  Warning: Could not set rq_affinity for $device" >&2
+
+    echo "Successfully tuned $device" >&2
+done
+
+echo "NVMe Direct I/O tuning completed" >&2
+"##;
+
+    run_cmd! {
+        echo $script_content > $script_path;
+        chmod +x $script_path;
+
+        mkdir -p $ETC_PATH;
+        echo $systemd_unit_content > ${ETC_PATH}nvme-directio-tuning.service;
+        systemctl enable --now ${ETC_PATH}nvme-directio-tuning.service;
     }?;
     Ok(())
 }
