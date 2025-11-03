@@ -19,7 +19,7 @@ pub struct MessageHeader {
     pub size: u32,
 
     /// A checksum covering only the associated body after this header.
-    checksum_body: u64,
+    pub checksum_body: u64,
     /// The protocol command (method) for this message. i32 size, defined as enum type
     pub command: Command,
     /// Every request would be sent with a unique id, so the client can get the right response

@@ -212,6 +212,7 @@ async fn benchmark_bss_write(
         if let Some(uuid) = uuids.pop_front() {
             let rpc_client = rpc_client.clone();
             let content = Bytes::from(vec![0; BLOB_SIZE - 256]);
+            let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
             let blob_guid = DataBlobGuid {
                 blob_id: Uuid::parse_str(&uuid).unwrap(),
                 volume_id: 1,
@@ -219,7 +220,7 @@ async fn benchmark_bss_write(
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
                 let result = rpc_client
-                    .put_data_blob(blob_guid, 0, content, None, None, 0)
+                    .put_data_blob(blob_guid, 0, content, body_checksum, None, None, 0)
                     .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error
@@ -252,6 +253,7 @@ async fn benchmark_bss_write(
         if let Some(uuid) = uuids.pop_front() {
             let rpc_client = rpc_client.clone();
             let content = Bytes::from(vec![0; BLOB_SIZE - 256]);
+            let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
             let blob_guid = DataBlobGuid {
                 blob_id: Uuid::parse_str(&uuid).unwrap(),
                 volume_id: 1,
@@ -259,7 +261,7 @@ async fn benchmark_bss_write(
             in_flight_requests.push(Box::pin(async move {
                 let request_start = Instant::now();
                 let result = rpc_client
-                    .put_data_blob(blob_guid, 0, content, None, None, 0)
+                    .put_data_blob(blob_guid, 0, content, body_checksum, None, None, 0)
                     .await
                     .map(|_| ()) // Map Ok(usize) to Ok(())
                     .map_err(|e| anyhow::anyhow!(e)); // Convert RpcErrorBss to anyhow::Error

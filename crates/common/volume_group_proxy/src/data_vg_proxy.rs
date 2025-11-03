@@ -223,6 +223,9 @@ impl DataVgProxy {
         let rpc_timeout = self.rpc_timeout;
         let write_quorum = self.quorum_config.w as usize;
 
+        // Compute checksum once for all replicas
+        let body_checksum = xxhash_rust::xxh3::xxh3_64(&body);
+
         let mut bss_node_indices: Vec<usize> = (0..selected_volume.bss_nodes.len()).collect();
         bss_node_indices.shuffle(&mut rand::thread_rng());
 
@@ -234,6 +237,7 @@ impl DataVgProxy {
                 blob_guid,
                 block_number,
                 body.clone(),
+                body_checksum,
                 rpc_timeout,
             ));
         }
@@ -326,6 +330,13 @@ impl DataVgProxy {
         let rpc_timeout = self.rpc_timeout;
         let write_quorum = self.quorum_config.w as usize;
 
+        // Compute checksum once for all replicas
+        let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+        for chunk in &chunks {
+            hasher.update(chunk);
+        }
+        let body_checksum = hasher.digest();
+
         let mut bss_node_indices: Vec<usize> = (0..selected_volume.bss_nodes.len()).collect();
         bss_node_indices.shuffle(&mut rand::thread_rng());
 
@@ -337,6 +348,7 @@ impl DataVgProxy {
                 blob_guid,
                 block_number,
                 chunks.clone(),
+                body_checksum,
                 rpc_timeout,
             ));
         }
@@ -406,6 +418,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         body: Bytes,
+        body_checksum: u64,
         rpc_timeout: Duration,
     ) -> (String, Result<(), RpcError>) {
         let start_node = Instant::now();
@@ -413,7 +426,15 @@ impl DataVgProxy {
 
         let bss_client = bss_node.get_client();
         let result = bss_client
-            .put_data_blob(blob_guid, block_number, body, Some(rpc_timeout), None, 0)
+            .put_data_blob(
+                blob_guid,
+                block_number,
+                body,
+                body_checksum,
+                Some(rpc_timeout),
+                None,
+                0,
+            )
             .await;
 
         let result_label = if result.is_ok() { "success" } else { "failure" };
@@ -428,6 +449,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         chunks: Vec<Bytes>,
+        body_checksum: u64,
         rpc_timeout: Duration,
     ) -> (String, Result<(), RpcError>) {
         let start_node = Instant::now();
@@ -435,7 +457,15 @@ impl DataVgProxy {
 
         let bss_client = bss_node.get_client();
         let result = bss_client
-            .put_data_blob_vectored(blob_guid, block_number, chunks, Some(rpc_timeout), None, 0)
+            .put_data_blob_vectored(
+                blob_guid,
+                block_number,
+                chunks,
+                body_checksum,
+                Some(rpc_timeout),
+                None,
+                0,
+            )
             .await;
 
         let result_label = if result.is_ok() { "success" } else { "failure" };

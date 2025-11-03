@@ -28,9 +28,10 @@ async fn test_basic_blob_io_with_fixed_bytes() {
             volume_id: 1,
         };
         let content: Bytes = vec![0xff; 1024 * 1024 - 256].into();
+        let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
         let mut readback_content = Bytes::new();
         rpc_client
-            .put_data_blob(blob_guid, 0, content.clone(), None, None, 0)
+            .put_data_blob(blob_guid, 0, content.clone(), body_checksum, None, None, 0)
             .await
             .unwrap();
 
@@ -69,9 +70,10 @@ async fn test_basic_blob_io_with_random_bytes() {
             volume_id: 1,
         };
         let content = Bytes::from((4096..1024 * 1024 - 256).fake::<String>());
+        let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
         let mut readback_content = Bytes::new();
         rpc_client
-            .put_data_blob(blob_guid, 0, content.clone(), None, None, 0)
+            .put_data_blob(blob_guid, 0, content.clone(), body_checksum, None, None, 0)
             .await
             .unwrap();
 

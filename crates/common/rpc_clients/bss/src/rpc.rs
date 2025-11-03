@@ -27,11 +27,13 @@ fn check_response_errno(header: &MessageHeader) -> Result<(), RpcError> {
 }
 
 impl RpcClient {
+    #[allow(clippy::too_many_arguments)]
     pub async fn put_data_blob(
         &self,
         blob_guid: DataBlobGuid,
         block_number: u32,
         body: Bytes,
+        body_checksum: u64,
         timeout: Option<Duration>,
         trace_id: Option<u64>,
         retry_count: u32,
@@ -46,7 +48,7 @@ impl RpcClient {
         header.command = Command::PutDataBlob;
         header.size = (MessageHeader::SIZE + body.len()) as u32;
         header.retry_count = retry_count as u8;
-        header.set_body_checksum(&body);
+        header.checksum_body = body_checksum;
         header.set_checksum();
 
         let msg_frame = MessageFrame::new(header, body);
@@ -63,11 +65,13 @@ impl RpcClient {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn put_data_blob_vectored(
         &self,
         blob_guid: DataBlobGuid,
         block_number: u32,
         chunks: Vec<Bytes>,
+        body_checksum: u64,
         timeout: Option<Duration>,
         trace_id: Option<u64>,
         retry_count: u32,
@@ -83,7 +87,7 @@ impl RpcClient {
         let total_size: usize = chunks.iter().map(|c| c.len()).sum();
         header.size = (MessageHeader::SIZE + total_size) as u32;
         header.retry_count = retry_count as u8;
-        header.set_body_checksum_vectored(&chunks);
+        header.checksum_body = body_checksum;
         header.set_checksum();
 
         let msg_frame = MessageFrame::new(header, chunks);
