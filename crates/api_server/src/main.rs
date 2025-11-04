@@ -12,10 +12,14 @@ use socket2::{Domain, Protocol, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::{fs::File, io::BufReader};
+use tokio::signal::unix::{SignalKind, signal};
 use tracing::{error, info};
 use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
+
+static SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 #[derive(Parser)]
 #[clap(name = "api_server", about = "API server")]
@@ -177,6 +181,8 @@ fn main() -> std::io::Result<()> {
     });
 
     let mut handles = Vec::with_capacity(worker_count);
+    let mut server_handles = Vec::new();
+    let (handle_tx, handle_rx) = std::sync::mpsc::channel();
 
     for (worker_idx, core_id) in core_ids.iter().enumerate() {
         let http_listener = make_reuseport_listener(http_addr)?;
@@ -189,6 +195,7 @@ fn main() -> std::io::Result<()> {
         let web_root = gui_web_root.clone();
         let https_config = https_config.clone();
         let core_id = *core_id;
+        let handle_tx = handle_tx.clone();
 
         let handle = thread::Builder::new()
             .name(format!("actix-core-{worker_idx}"))
@@ -255,7 +262,8 @@ fn main() -> std::io::Result<()> {
                     server = server
                         .workers(1)
                         .max_connections(65536)
-                        .max_connection_rate(65536);
+                        .max_connection_rate(65536)
+                        .disable_signals();
 
                     server = server.listen(http_listener).unwrap();
                     server = server.listen(mgmt_listener).unwrap();
@@ -305,17 +313,60 @@ fn main() -> std::io::Result<()> {
                             .unwrap();
                     }
 
-                    server.run().await
+                    let server = server.run();
+                    let server_handle = server.handle();
+                    let _ = handle_tx.send(server_handle);
+
+                    server.await
                 })
             })?;
 
         handles.push(handle);
     }
 
+    drop(handle_tx);
+
+    for server_handle in handle_rx {
+        server_handles.push(server_handle);
+    }
+    let signal_handle = thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build signal handler runtime");
+
+        rt.block_on(async {
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("Failed to register SIGTERM handler");
+            let mut sigint =
+                signal(SignalKind::interrupt()).expect("Failed to register SIGINT handler");
+
+            tokio::select! {
+                _ = sigterm.recv() => {
+                    info!("Received SIGTERM, shutting down gracefully");
+                }
+                _ = sigint.recv() => {
+                    info!("Received SIGINT, shutting down gracefully");
+                }
+            }
+
+            SHUTDOWN.store(true, Ordering::Release);
+
+            for server_handle in server_handles {
+                server_handle.stop(true).await;
+            }
+            info!("All servers stopped");
+        });
+    });
+
     for (idx, handle) in handles.into_iter().enumerate() {
         if let Err(e) = handle.join() {
             error!("Worker thread {idx} panicked: {e:?}");
         }
+    }
+
+    if let Err(e) = signal_handle.join() {
+        error!("Signal handler thread panicked: {e:?}");
     }
 
     info!("All worker threads exited, shutting down stats writer");
