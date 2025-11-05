@@ -1,7 +1,6 @@
 pub mod message;
 
 pub use message::MessageHeader;
-pub use rpc_codec_common::verify_header_checksum_raw;
 
 // Type alias for shared codec implementation
 pub type MessageCodec = rpc_codec_common::MessageCodec<MessageHeader>;

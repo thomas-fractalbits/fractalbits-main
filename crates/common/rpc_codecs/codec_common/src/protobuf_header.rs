@@ -8,31 +8,6 @@ use crate::MessageHeaderTrait;
 /// This is the correct checksum value for empty message bodies
 pub const EMPTY_BODY_CHECKSUM: u64 = 0x2d06800538d394c2;
 
-/// Verify header checksum on raw bytes before decoding.
-/// This is critical for security: verifying BEFORE decode prevents UB from corrupted enum values.
-///
-/// # Safety
-/// This function verifies the checksum field matches the hash of the remaining header bytes.
-/// Only after this returns true is it safe to decode/cast the bytes into a typed header struct.
-pub fn verify_header_checksum_raw(header_bytes: &[u8], header_size: usize) -> bool {
-    if header_bytes.len() < header_size {
-        return false;
-    }
-
-    // Read stored checksum (first 8 bytes, little-endian u64)
-    let stored_checksum = u64::from_le_bytes(
-        header_bytes[0..8]
-            .try_into()
-            .expect("slice is exactly 8 bytes"),
-    );
-
-    // Hash everything after the checksum field (bytes 8..header_size)
-    let bytes_to_hash = &header_bytes[8..header_size];
-    let calculated = xxh3_64(bytes_to_hash);
-
-    stored_checksum == calculated
-}
-
 /// Generic protobuf-based message header implementation
 ///
 /// This provides a common implementation for protobuf-based RPC protocols.

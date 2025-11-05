@@ -252,10 +252,7 @@ where
                 Ok(_) => {
                     // Verify checksum on raw bytes BEFORE decoding
                     // This prevents UB from corrupted enum values in the Command field
-                    if !rpc_codec_common::verify_header_checksum_raw(
-                        &header_buf[..header_size],
-                        header_size,
-                    ) {
+                    if !Header::verify_header_checksum_raw(&header_buf[..header_size]) {
                         warn!(%rpc_type, %socket_fd, "header checksum verification failed");
                         return Err(RpcError::ChecksumMismatch);
                     }

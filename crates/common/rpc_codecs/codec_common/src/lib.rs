@@ -1,10 +1,13 @@
 use bytes::{Bytes, BytesMut};
+use std::mem::size_of;
+use xxhash_rust::xxh3::xxh3_64;
 
 pub mod protobuf_header;
-pub use protobuf_header::{EMPTY_BODY_CHECKSUM, ProtobufMessageHeader, verify_header_checksum_raw};
+pub use protobuf_header::{EMPTY_BODY_CHECKSUM, ProtobufMessageHeader};
 
 pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
     const SIZE: usize;
+    const CHECKSUM_OFFSET: usize = 0;
 
     fn encode(&self, dst: &mut BytesMut);
     fn decode(src: &[u8]) -> Self;
@@ -21,6 +24,24 @@ pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
     fn set_body_checksum(&mut self, body: &[u8]);
     fn verify_body_checksum(&self, body: &[u8]) -> bool;
     fn set_body_checksum_vectored(&mut self, chunks: &[impl AsRef<[u8]>]);
+
+    fn verify_header_checksum_raw(header_bytes: &[u8]) -> bool {
+        if header_bytes.len() < Self::SIZE {
+            return false;
+        }
+
+        let checksum_offset = Self::CHECKSUM_OFFSET;
+        let stored_checksum = u64::from_le_bytes(
+            header_bytes[checksum_offset..checksum_offset + size_of::<u64>()]
+                .try_into()
+                .expect("slice is exactly 8 bytes"),
+        );
+
+        let bytes_to_hash = &header_bytes[checksum_offset + size_of::<u64>()..Self::SIZE];
+        let calculated = xxh3_64(bytes_to_hash);
+
+        stored_checksum == calculated
+    }
 }
 
 pub struct MessageFrame<H: MessageHeaderTrait, B = Bytes> {
@@ -89,6 +110,12 @@ macro_rules! impl_protobuf_message_header {
 
             pub fn set_body_checksum_vectored(&mut self, chunks: &[impl AsRef<[u8]>]) {
                 self.0.set_body_checksum_vectored(chunks)
+            }
+
+            pub fn verify_header_checksum_raw(header_bytes: &[u8]) -> bool {
+                <$header_type as $crate::MessageHeaderTrait>::verify_header_checksum_raw(
+                    header_bytes,
+                )
             }
         }
 
