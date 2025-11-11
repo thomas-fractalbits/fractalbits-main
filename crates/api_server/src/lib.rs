@@ -177,7 +177,6 @@ impl AppState {
 impl AppState {
     pub async fn get_api_key(&self, key_id: String) -> Result<Versioned<ApiKey>, RpcError> {
         let full_key = format!("api_key:{key_id}");
-
         if let Some(json) = self.cache.get(&full_key).await {
             counter!("api_key_cache_hit").increment(1);
             tracing::debug!("get cached data with full_key: {full_key}");
@@ -186,26 +185,18 @@ impl AppState {
                 serde_json::from_slice(json.data.as_bytes()).unwrap(),
             )
                 .into());
+        } else {
+            counter!("api_key_cache_miss").increment(1);
         }
 
-        counter!("api_key_cache_miss").increment(1);
-
-        let full_key_clone = full_key.clone();
         let rss_client = self.get_rss_rpc_client();
-        let timeout = self.config.rpc_timeout();
-
-        let json = self
-            .cache
-            .optionally_get_with(full_key.clone(), async move {
-                let (version, data) =
-                    rss_rpc_retry!(rss_client, get(&full_key_clone, Some(timeout), None))
-                        .await
-                        .ok()?;
-                Some(Versioned::new(version, data))
-            })
-            .await
-            .ok_or(RpcError::NotFound)?;
-
+        let (version, data) = rss_rpc_retry!(
+            rss_client,
+            get(&full_key, Some(self.config.rpc_timeout()), None)
+        )
+        .await?;
+        let json = Versioned::new(version, data);
+        self.cache.insert(full_key, json.clone()).await;
         Ok((
             json.version,
             serde_json::from_slice(json.data.as_bytes()).unwrap(),
@@ -271,7 +262,6 @@ impl AppState {
 impl AppState {
     pub async fn get_bucket(&self, bucket_name: String) -> Result<Versioned<Bucket>, RpcError> {
         let full_key = format!("bucket:{bucket_name}");
-
         if let Some(json) = self.cache.get(&full_key).await {
             counter!("bucket_cache_hit").increment(1);
             tracing::debug!("get cached data with full_key: {full_key}");
@@ -280,26 +270,18 @@ impl AppState {
                 serde_json::from_slice(json.data.as_bytes()).unwrap(),
             )
                 .into());
+        } else {
+            counter!("bucket_cache_miss").increment(1);
         }
 
-        counter!("bucket_cache_miss").increment(1);
-
-        let full_key_clone = full_key.clone();
         let rss_client = self.get_rss_rpc_client();
-        let timeout = self.config.rpc_timeout();
-
-        let json = self
-            .cache
-            .optionally_get_with(full_key.clone(), async move {
-                let (version, data) =
-                    rss_rpc_retry!(rss_client, get(&full_key_clone, Some(timeout), None))
-                        .await
-                        .ok()?;
-                Some(Versioned::new(version, data))
-            })
-            .await
-            .ok_or(RpcError::NotFound)?;
-
+        let (version, data) = rss_rpc_retry!(
+            rss_client,
+            get(&full_key, Some(self.config.rpc_timeout()), None)
+        )
+        .await?;
+        let json = Versioned::new(version, data);
+        self.cache.insert(full_key, json.clone()).await;
         Ok((
             json.version,
             serde_json::from_slice(json.data.as_bytes()).unwrap(),
