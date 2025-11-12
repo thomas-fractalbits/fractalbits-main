@@ -100,7 +100,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<HttpResp
                         "",
                         "",
                         false,
-                        ctx.trace_id,
+                        &ctx.trace_id,
                     )
                     .await?;
                     for (mpu_key, mpu_obj) in mpus.iter() {

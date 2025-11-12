@@ -24,7 +24,11 @@ where
     checksum: u64,
     /// The current protocol version, note the position should never be changed
     /// so that we can upgrade proto version in the future.
-    pub proto_version: u32,
+    pub proto_version: u8,
+    /// Number of retry attempts for this request (0 = first attempt)
+    pub retry_count: u8,
+    /// Reserved for future use
+    reserved: u16,
     /// The size of the Header structure, plus any associated body.
     pub size: u32,
 
@@ -38,11 +42,6 @@ where
 
     /// Trace ID for distributed tracing
     pub trace_id: u128,
-
-    /// Number of retry attempts for this request (0 = first attempt)
-    pub retry_count: u8,
-    /// Reserved for future use
-    reserved: [u8; 15],
 }
 
 // Safety: ProtobufMessageHeader has the same layout requirements as its fields.
@@ -64,8 +63,7 @@ impl<Command> ProtobufMessageHeader<Command>
 where
     Command: Pod + Zeroable + Default + Clone + Copy + Send + Sync + 'static,
 {
-    const _SIZE_OK: () = assert!(size_of::<Self>() == 64);
-    pub const SIZE: usize = size_of::<Self>();
+    const _SIZE_OK: () = assert!(size_of::<Self>() == 48);
 
     pub fn encode(&self, dst: &mut BytesMut) {
         let bytes: &[u8] = bytemuck::bytes_of(self);
@@ -73,7 +71,7 @@ where
     }
 
     pub fn decode_bytes(src: &Bytes) -> Self {
-        let header_bytes = &src.chunk()[0..Self::SIZE];
+        let header_bytes = &src.chunk()[0..size_of::<Self>()];
         bytemuck::pod_read_unaligned::<Self>(header_bytes)
     }
 
@@ -89,7 +87,7 @@ where
     pub fn set_checksum(&mut self) {
         let checksum_offset = std::mem::offset_of!(Self, checksum);
         let bytes: &[u8] = bytemuck::bytes_of(self);
-        let bytes_to_hash = &bytes[checksum_offset + size_of::<u64>()..Self::SIZE];
+        let bytes_to_hash = &bytes[checksum_offset + size_of::<u64>()..size_of::<Self>()];
         self.checksum = xxh3_64(bytes_to_hash);
     }
 
@@ -130,14 +128,12 @@ impl<Command> MessageHeaderTrait for ProtobufMessageHeader<Command>
 where
     Command: Pod + Zeroable + Default + Clone + Copy + Send + Sync + 'static,
 {
-    const SIZE: usize = 32;
-
     fn encode(&self, dst: &mut BytesMut) {
         self.encode(dst)
     }
 
     fn decode(src: &[u8]) -> Self {
-        bytemuck::pod_read_unaligned::<Self>(&src[..Self::SIZE])
+        bytemuck::pod_read_unaligned::<Self>(&src[..size_of::<Self>()])
     }
 
     fn get_size(src: &[u8]) -> usize {
@@ -160,7 +156,7 @@ where
     }
 
     fn get_body_size(&self) -> usize {
-        (self.size as usize).saturating_sub(Self::SIZE)
+        (self.size as usize).saturating_sub(size_of::<Self>())
     }
 
     fn get_retry_count(&self) -> u32 {

@@ -163,7 +163,7 @@ where
 
                 frame.header.set_checksum();
 
-                let mut header_buf = BytesMut::with_capacity(Header::SIZE);
+                let mut header_buf = BytesMut::with_capacity(size_of::<Header>());
                 frame.header.encode(&mut header_buf);
 
                 let mut all_chunks = vec![header_buf.freeze()];
@@ -237,7 +237,7 @@ where
     ) -> Result<(), RpcError> {
         use tokio::io::AsyncReadExt;
 
-        let header_size = Header::SIZE;
+        let header_size = size_of::<Header>();
 
         loop {
             // Read fixed-size header into stack buffer

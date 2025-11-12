@@ -149,7 +149,7 @@ impl BlobClient {
                     request.blob_guid,
                     request.block_number,
                     request.location,
-                    TraceId::new(),
+                    &TraceId::new(),
                 )
                 .await;
             match res {
@@ -179,7 +179,7 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         body: Bytes,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .put_blob(
@@ -199,7 +199,7 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         chunks: Vec<actix_web::web::Bytes>,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .put_blob_vectored(
@@ -220,7 +220,7 @@ impl BlobClient {
         content_len: usize,
         location: BlobLocation,
         body: &mut Bytes,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .get_blob(
@@ -240,7 +240,7 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         location: BlobLocation,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .delete_blob(

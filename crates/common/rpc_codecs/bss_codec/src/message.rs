@@ -19,7 +19,11 @@ pub struct MessageHeader {
     checksum: u64,
     /// The current protocol version, note the position should never be changed
     /// so that we can upgrade proto version in the future.
-    pub proto_version: u32,
+    pub proto_version: u8,
+    /// Number of retry attempts for this request (0 = first attempt)
+    pub retry_count: u8,
+    /// Volume ID for multi-BSS support
+    pub volume_id: u16,
     /// The size of the Header structure, plus any associated body.
     pub size: u32,
 
@@ -41,22 +45,17 @@ pub struct MessageHeader {
 
     /// Version number for quorum protocol
     pub version: u64,
-
     /// The bss block number
     pub block_number: u32,
     /// Errno which can be converted into `std::io::Error`(`from_raw_os_error()`)
     pub errno: i32,
+
     /// Content length (body)
     pub content_len: u32,
-    /// Volume ID for multi-BSS support
-    pub volume_id: u16,
-    /// Number of retry attempts for this request (0 = first attempt)
-    pub retry_count: u8,
     /// Flag to indicate if this is a new metadata blob (vs update)
     pub is_new: u8,
-
     /// Reserved parts for padding
-    reserved: [u8; 24],
+    reserved: [u8; 27],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -105,7 +104,7 @@ impl Default for MessageHeader {
             volume_id: 0,
             retry_count: 0,
             is_new: 0,
-            reserved: [0u8; 24],
+            reserved: [0u8; 27],
         }
     }
 }
@@ -158,14 +157,12 @@ impl MessageHeader {
 }
 
 impl MessageHeaderTrait for MessageHeader {
-    const SIZE: usize = 128;
-
     fn encode(&self, dst: &mut BytesMut) {
         self.encode(dst)
     }
 
     fn decode(src: &[u8]) -> Self {
-        bytemuck::pod_read_unaligned::<Self>(&src[..Self::SIZE]).to_owned()
+        bytemuck::pod_read_unaligned::<Self>(&src[..size_of::<Self>()]).to_owned()
     }
 
     fn get_size(src: &[u8]) -> usize {

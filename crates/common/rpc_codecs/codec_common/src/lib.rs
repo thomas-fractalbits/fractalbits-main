@@ -7,7 +7,6 @@ pub mod protobuf_header;
 pub use protobuf_header::{EMPTY_BODY_CHECKSUM, ProtobufMessageHeader};
 
 pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
-    const SIZE: usize;
     const CHECKSUM_OFFSET: usize = 0;
 
     fn encode(&self, dst: &mut BytesMut);
@@ -27,7 +26,7 @@ pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
     fn set_body_checksum_vectored(&mut self, chunks: &[impl AsRef<[u8]>]);
 
     fn verify_header_checksum_raw(header_bytes: &[u8]) -> bool {
-        if header_bytes.len() < Self::SIZE {
+        if header_bytes.len() < size_of::<Self>() {
             return false;
         }
 
@@ -38,7 +37,7 @@ pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
                 .expect("slice is exactly 8 bytes"),
         );
 
-        let bytes_to_hash = &header_bytes[checksum_offset + size_of::<u64>()..Self::SIZE];
+        let bytes_to_hash = &header_bytes[checksum_offset + size_of::<u64>()..size_of::<Self>()];
         let calculated = xxh3_64(bytes_to_hash);
 
         stored_checksum == calculated
@@ -83,8 +82,6 @@ macro_rules! impl_protobuf_message_header {
         unsafe impl bytemuck::Zeroable for $command_type {}
 
         impl $header_type {
-            pub const SIZE: usize = $crate::ProtobufMessageHeader::<$command_type>::SIZE;
-
             pub fn encode(&self, dst: &mut bytes::BytesMut) {
                 self.0.encode(dst)
             }
@@ -135,8 +132,6 @@ macro_rules! impl_protobuf_message_header {
         }
 
         impl $crate::MessageHeaderTrait for $header_type {
-            const SIZE: usize = $crate::ProtobufMessageHeader::<$command_type>::SIZE;
-
             fn encode(&self, dst: &mut bytes::BytesMut) {
                 self.0.encode(dst)
             }

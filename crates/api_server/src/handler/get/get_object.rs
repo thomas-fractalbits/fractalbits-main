@@ -93,7 +93,7 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
 
     // Get the raw object
-    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key, ctx.trace_id).await?;
+    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key, &ctx.trace_id).await?;
     let total_size = object.size()?;
     histogram!("object_size", "operation" => "get").record(total_size as f64);
 
@@ -109,7 +109,7 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
                 &object,
                 ctx.key,
                 query_opts.part_number,
-                ctx.trace_id,
+                &ctx.trace_id,
             )
             .await?;
 
@@ -133,7 +133,7 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
         (None, Some(range)) => {
             // Range request with streaming
             let body_stream =
-                get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range, ctx.trace_id)
+                get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range, &ctx.trace_id)
                     .await?;
 
             let range_length = range.end - range.start;
@@ -199,7 +199,7 @@ pub async fn get_object_content(
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
-    trace_id: TraceId,
+    trace_id: &TraceId,
 ) -> Result<
     (
         std::pin::Pin<Box<dyn stream::Stream<Item = Result<Bytes, S3Error>> + Send>>,
@@ -225,7 +225,7 @@ pub async fn get_object_content(
                 size,
                 block_size,
                 blob_location,
-                trace_id,
+                *trace_id,
             )
             .await?;
             Ok((Box::pin(body_stream), size))
@@ -264,6 +264,7 @@ pub async fn get_object_content(
 
                 // Create a stream that concatenates all multipart streams
                 // Following the axum pattern for multipart streaming
+                let trace_id = *trace_id;
                 let mpu_stream = stream::iter(mpus_vec)
                     .then(move |(_key, mpu_obj)| {
                         let blob_client = blob_client.clone();
@@ -299,7 +300,7 @@ async fn get_object_range_content(
     object: &ObjectLayout,
     key: String,
     range: &std::ops::Range<usize>,
-    trace_id: TraceId,
+    trace_id: &TraceId,
 ) -> Result<std::pin::Pin<Box<dyn stream::Stream<Item = Result<Bytes, S3Error>> + Send>>, S3Error> {
     let blob_client = app
         .get_blob_client()
@@ -321,7 +322,7 @@ async fn get_object_range_content(
                 range.start,
                 range.end,
                 blob_location,
-                trace_id,
+                *trace_id,
             );
             Ok(Box::pin(body_stream))
         }
@@ -376,6 +377,7 @@ async fn get_object_range_content(
                     obj_offset += mpu_size;
                 }
 
+                let trace_id = *trace_id;
                 let body_stream = stream::iter(mpu_blobs.into_iter())
                     .then(
                         move |(blob_guid, part_size, part_num_blocks, blob_start, blob_end)| {
@@ -432,7 +434,7 @@ async fn get_full_blob_stream(
             first_block_len,
             blob_location,
             &mut first_block,
-            trace_id,
+            &trace_id,
         )
         .await
         .map_err(|e| {
@@ -463,7 +465,7 @@ async fn get_full_blob_stream(
                     content_len,
                     blob_location,
                     &mut block,
-                    trace_id,
+                    &trace_id,
                 )
                 .await
             {
@@ -516,7 +518,7 @@ fn get_range_blob_stream(
                         content_len,
                         blob_location,
                         &mut block,
-                        trace_id,
+                        &trace_id,
                     )
                     .await
                 {
@@ -568,7 +570,7 @@ pub async fn get_object_content_as_bytes(
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
-    trace_id: TraceId,
+    trace_id: &TraceId,
 ) -> Result<(Bytes, u64), S3Error> {
     let (stream, size) =
         get_object_content(app, bucket, object, key, part_number, trace_id).await?;

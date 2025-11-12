@@ -348,7 +348,7 @@ impl BlobStorageImpl {
         volume_id: u16,
         block_number: u32,
         body: Bytes,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
@@ -371,7 +371,7 @@ impl BlobStorageImpl {
         volume_id: u16,
         block_number: u32,
         chunks: Vec<actix_web::web::Bytes>,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
@@ -394,7 +394,7 @@ impl BlobStorageImpl {
         content_len: usize,
         location: BlobLocation,
         body: &mut Bytes,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
@@ -421,7 +421,7 @@ impl BlobStorageImpl {
         blob_guid: DataBlobGuid,
         block_number: u32,
         location: BlobLocation,
-        trace_id: TraceId,
+        trace_id: &TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {

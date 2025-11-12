@@ -65,7 +65,7 @@ pub async fn get_raw_object(
     app: &AppState,
     root_blob_name: &str,
     key: &str,
-    trace_id: TraceId,
+    trace_id: &TraceId,
 ) -> Result<ObjectLayout, S3Error> {
     let nss_client = app.get_nss_rpc_client();
     let resp = nss_rpc_retry!(
@@ -74,7 +74,7 @@ pub async fn get_raw_object(
             root_blob_name,
             key,
             Some(app.config.rpc_timeout()),
-            &trace_id
+            trace_id
         )
     )
     .await?;
@@ -103,7 +103,7 @@ pub async fn list_raw_objects(
     delimiter: &str,
     start_after: &str,
     skip_mpu_parts: bool,
-    trace_id: TraceId,
+    trace_id: &TraceId,
 ) -> Result<Vec<(String, ObjectLayout)>, S3Error> {
     let nss_client = app.get_nss_rpc_client();
     let resp = nss_rpc_retry!(
@@ -116,7 +116,7 @@ pub async fn list_raw_objects(
             &start_after,
             skip_mpu_parts,
             Some(app.config.rpc_timeout()),
-            &trace_id
+            trace_id
         )
     )
     .await?;

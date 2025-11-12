@@ -32,7 +32,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::PutInode;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -73,7 +73,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::GetInode;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -125,7 +125,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::ListInodes;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -166,7 +166,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::DeleteInode;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -205,7 +205,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::CreateRootInode;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -242,7 +242,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::DeleteRootInode;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -283,7 +283,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::Rename;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 
@@ -336,7 +336,7 @@ impl RpcClient {
         let request_id = self.gen_request_id();
         header.id = request_id;
         header.command = Command::Rename;
-        header.size = (MessageHeader::SIZE + body.encoded_len()) as u32;
+        header.size = (size_of::<MessageHeader>() + body.encoded_len()) as u32;
         header.retry_count = retry_count as u8;
         header.set_trace_id(trace_id);
 

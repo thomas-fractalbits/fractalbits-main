@@ -255,8 +255,14 @@ async fn any_handler_inner(
 
     match endpoint {
         Endpoint::Bucket(bucket_endpoint) => {
-            let bucket_ctx =
-                BucketRequestContext::new(app, request.clone(), api_key, bucket, payload, *trace_id);
+            let bucket_ctx = BucketRequestContext::new(
+                app,
+                request.clone(),
+                api_key,
+                bucket,
+                payload,
+                *trace_id,
+            );
             bucket_handler(bucket_ctx, bucket_endpoint).await
         }
         ref _object_endpoints => {
