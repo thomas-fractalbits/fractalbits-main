@@ -192,7 +192,7 @@ pub async fn get_object_attributes_handler(
         &ctx.app,
         &bucket.root_blob_name,
         &ctx.key,
-        Some(ctx.trace_id),
+        ctx.trace_id,
     )
     .await?;
     let last_modified = time::format_http_date(obj.timestamp);

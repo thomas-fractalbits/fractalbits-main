@@ -13,7 +13,7 @@ use crate::handler::common::{
 use crate::object_layout::{MpuState, ObjectState};
 use actix_web::web::Query;
 use base64::prelude::*;
-use data_types::Bucket;
+use data_types::{Bucket, TraceId};
 use serde::{Deserialize, Serialize};
 
 #[allow(dead_code)]
@@ -99,13 +99,7 @@ pub async fn list_parts_handler(
         .into_inner();
 
     let max_parts = query_opts.max_parts.unwrap_or(1000);
-    let object = get_raw_object(
-        &ctx.app,
-        &bucket.root_blob_name,
-        &ctx.key,
-        Some(ctx.trace_id),
-    )
-    .await?;
+    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key, ctx.trace_id).await?;
     if object.version_id.simple().to_string() != query_opts.upload_id {
         return Err(S3Error::NoSuchUpload);
     }
@@ -113,8 +107,15 @@ pub async fn list_parts_handler(
         return Err(S3Error::InvalidObjectState);
     }
 
-    let (parts, next_part_number_marker) =
-        fetch_mpu_parts(ctx.app, &bucket, ctx.key.clone(), &query_opts, max_parts).await?;
+    let (parts, next_part_number_marker) = fetch_mpu_parts(
+        ctx.app,
+        &bucket,
+        ctx.key.clone(),
+        &query_opts,
+        max_parts,
+        ctx.trace_id,
+    )
+    .await?;
 
     let resp = ListPartsResult {
         bucket: bucket.bucket_name.to_string(),
@@ -141,6 +142,7 @@ async fn fetch_mpu_parts(
     key: String,
     query_opts: &QueryOpts,
     max_parts: u32,
+    trace_id: TraceId,
 ) -> Result<(Vec<Part>, Option<u32>), S3Error> {
     let mpu_prefix = mpu_get_part_prefix(key.clone(), 0);
     let mpus = list_raw_objects(
@@ -151,7 +153,7 @@ async fn fetch_mpu_parts(
         "",
         "",
         false,
-        None,
+        trace_id,
     )
     .await?;
     let mut parts = Vec::with_capacity(mpus.len());

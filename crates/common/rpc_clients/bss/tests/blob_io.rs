@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use data_types::DataBlobGuid;
+use data_types::{DataBlobGuid, TraceId};
 use fake::Fake;
 use rpc_client_bss::*;
 use tracing_test::traced_test;
@@ -31,7 +31,15 @@ async fn test_basic_blob_io_with_fixed_bytes() {
         let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
         let mut readback_content = Bytes::new();
         rpc_client
-            .put_data_blob(blob_guid, 0, content.clone(), body_checksum, None, None, 0)
+            .put_data_blob(
+                blob_guid,
+                0,
+                content.clone(),
+                body_checksum,
+                None,
+                TraceId::new(),
+                0,
+            )
             .await
             .unwrap();
 
@@ -42,7 +50,7 @@ async fn test_basic_blob_io_with_fixed_bytes() {
                 &mut readback_content,
                 content.len(),
                 None,
-                None,
+                TraceId::new(),
                 0,
             )
             .await
@@ -73,7 +81,15 @@ async fn test_basic_blob_io_with_random_bytes() {
         let body_checksum = xxhash_rust::xxh3::xxh3_64(&content);
         let mut readback_content = Bytes::new();
         rpc_client
-            .put_data_blob(blob_guid, 0, content.clone(), body_checksum, None, None, 0)
+            .put_data_blob(
+                blob_guid,
+                0,
+                content.clone(),
+                body_checksum,
+                None,
+                TraceId::new(),
+                0,
+            )
             .await
             .unwrap();
 
@@ -84,7 +100,7 @@ async fn test_basic_blob_io_with_random_bytes() {
                 &mut readback_content,
                 content.len(),
                 None,
-                None,
+                TraceId::new(),
                 0,
             )
             .await

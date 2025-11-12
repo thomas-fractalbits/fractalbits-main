@@ -7,21 +7,23 @@ use crate::{
 };
 use actix_web::{HttpRequest, http::header::HOST, web::Query};
 use aws_signature::{create_canonical_request, get_signing_key, string_to_sign, verify_signature};
-use data_types::{ApiKey, Versioned};
+use data_types::{ApiKey, TraceId, Versioned};
 
 pub async fn check_signature_impl(
     app: Arc<AppState>,
     auth: &Authentication,
     request: &HttpRequest,
+    trace_id: TraceId,
 ) -> Result<Versioned<ApiKey>, SignatureError> {
     // Support HTTP Authorization header based signature only for now
-    check_header_based_signature(app, auth, request).await
+    check_header_based_signature(app, auth, request, trace_id).await
 }
 
 async fn check_header_based_signature(
     app: Arc<AppState>,
     authentication: &Authentication,
     request: &HttpRequest,
+    trace_id: TraceId,
 ) -> Result<Versioned<ApiKey>, SignatureError> {
     let query_params = Query::<BTreeMap<String, String>>::from_query(request.query_string())
         .unwrap_or_else(|_| Query(Default::default()))
@@ -42,7 +44,7 @@ async fn check_header_based_signature(
 
     tracing::trace!(?authentication, %canonical_request, %string_to_sign);
 
-    let key = verify_v4(app, authentication, &string_to_sign).await?;
+    let key = verify_v4(app, authentication, &string_to_sign, trace_id).await?;
     Ok(key)
 }
 
@@ -93,8 +95,9 @@ async fn verify_v4(
     app: Arc<AppState>,
     auth: &Authentication,
     string_to_sign: &str,
+    trace_id: TraceId,
 ) -> Result<Versioned<ApiKey>, SignatureError> {
-    let key = app.get_api_key(auth.key_id.clone()).await?;
+    let key = app.get_api_key(auth.key_id.clone(), trace_id).await?;
 
     let signing_key = get_signing_key(auth.date, &key.data.secret_key, &app.config.region)
         .map_err(|e| SignatureError::Other(format!("Unable to build signing key: {}", e)))?;

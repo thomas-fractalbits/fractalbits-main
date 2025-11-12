@@ -3,6 +3,7 @@ mod blob_guid;
 mod bucket;
 pub mod hash;
 mod permission;
+mod trace_id;
 mod volume;
 
 // Re-export the main types for convenience
@@ -10,6 +11,7 @@ pub use api_key::ApiKey;
 pub use blob_guid::{DataBlobGuid, MetaBlobGuid};
 pub use bucket::Bucket;
 pub use permission::BucketKeyPerm;
+pub use trace_id::TraceId;
 pub use volume::{BssNode, DataVgInfo, DataVolume, QuorumConfig};
 
 #[derive(Clone)]

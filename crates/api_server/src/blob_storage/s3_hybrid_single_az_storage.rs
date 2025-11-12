@@ -4,7 +4,7 @@ use super::{
 use crate::{config::S3HybridSingleAzConfig, object_layout::ObjectLayout};
 use aws_sdk_s3::Client as S3Client;
 use bytes::Bytes;
-use data_types::{DataBlobGuid, DataVgInfo};
+use data_types::{DataBlobGuid, DataVgInfo, TraceId};
 use metrics::histogram;
 use std::{
     sync::Arc,
@@ -58,6 +58,7 @@ impl S3HybridSingleAzStorage {
         volume_id: u16,
         block_number: u32,
         body: Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         histogram!("blob_size", "operation" => "put").record(body.len() as f64);
         let start = Instant::now();
@@ -69,7 +70,7 @@ impl S3HybridSingleAzStorage {
             // Small blob - store in DataVgProxy with original volume_id
             let blob_guid = DataBlobGuid { blob_id, volume_id };
             self.data_vg_proxy
-                .put_blob(blob_guid, block_number, body)
+                .put_blob(blob_guid, block_number, body, trace_id)
                 .await?;
         } else {
             // Large blob - store in S3 (volume_id doesn't matter for S3 storage, but we'll use S3_VOLUME for metadata consistency)
@@ -96,6 +97,7 @@ impl S3HybridSingleAzStorage {
         volume_id: u16,
         block_number: u32,
         chunks: Vec<actix_web::web::Bytes>,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         let total_size: usize = chunks.iter().map(|c| c.len()).sum();
         histogram!("blob_size", "operation" => "put").record(total_size as f64);
@@ -106,7 +108,7 @@ impl S3HybridSingleAzStorage {
         if is_small {
             let blob_guid = DataBlobGuid { blob_id, volume_id };
             self.data_vg_proxy
-                .put_blob_vectored(blob_guid, block_number, chunks)
+                .put_blob_vectored(blob_guid, block_number, chunks, trace_id)
                 .await?;
         } else {
             let s3_key = blob_key(blob_id, block_number);
@@ -133,12 +135,13 @@ impl S3HybridSingleAzStorage {
         content_len: usize,
         location: BlobLocation,
         body: &mut Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match location {
             BlobLocation::DataVgProxy => {
                 // Small blob - get from DataVgProxy
                 self.data_vg_proxy
-                    .get_blob(blob_guid, block_number, content_len, body)
+                    .get_blob(blob_guid, block_number, content_len, body, trace_id)
                     .await?;
             }
             BlobLocation::S3 => {
@@ -173,12 +176,13 @@ impl S3HybridSingleAzStorage {
         blob_guid: DataBlobGuid,
         block_number: u32,
         location: BlobLocation,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match location {
             BlobLocation::DataVgProxy => {
                 // Small blob - delete from DataVgProxy
                 self.data_vg_proxy
-                    .delete_blob(blob_guid, block_number)
+                    .delete_blob(blob_guid, block_number, trace_id)
                     .await?;
             }
             BlobLocation::S3 => {

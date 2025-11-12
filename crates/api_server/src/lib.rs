@@ -13,7 +13,7 @@ pub use blob_client::BlobClient;
 use blob_client::BlobDeletionRequest;
 pub use config::{BlobStorageBackend, BlobStorageConfig, Config, S3HybridSingleAzConfig};
 pub use data_blob_tracking::{DataBlobTracker, DataBlobTrackingError};
-use data_types::{ApiKey, Bucket, Versioned};
+use data_types::{ApiKey, Bucket, TraceId, Versioned};
 use metrics::counter;
 use moka::future::Cache;
 use rpc_client_common::{RpcError, rss_rpc_retry};
@@ -94,10 +94,6 @@ impl AppState {
         }
     }
 
-    pub fn generate_trace_id(&self) -> u128 {
-        uuid::Uuid::now_v7().as_u128()
-    }
-
     pub fn get_nss_rpc_client(&self) -> &RpcClientNss {
         &self.rpc_client_nss
     }
@@ -122,7 +118,7 @@ impl AppState {
                 let rss_client = self.get_rss_rpc_client();
 
                 let data_vg_info = rss_client
-                    .get_data_vg_info(Some(self.config.rpc_timeout()), None)
+                    .get_data_vg_info(Some(self.config.rpc_timeout()), TraceId::new())
                     .await
                     .map_err(|e| format!("Failed to fetch DataVgInfo from RSS: {}", e))?;
 
@@ -159,7 +155,11 @@ impl AppState {
 
 // API Key operations
 impl AppState {
-    pub async fn get_api_key(&self, key_id: String) -> Result<Versioned<ApiKey>, RpcError> {
+    pub async fn get_api_key(
+        &self,
+        key_id: String,
+        trace_id: TraceId,
+    ) -> Result<Versioned<ApiKey>, RpcError> {
         let full_key = format!("api_key:{key_id}");
         if let Some(json) = self.cache.get(&full_key).await {
             counter!("api_key_cache_hit").increment(1);
@@ -176,7 +176,7 @@ impl AppState {
         let rss_client = self.get_rss_rpc_client();
         let (version, data) = rss_rpc_retry!(
             rss_client,
-            get(&full_key, Some(self.config.rpc_timeout()), None)
+            get(&full_key, Some(self.config.rpc_timeout()), trace_id)
         )
         .await?;
         let json = Versioned::new(version, data);
@@ -188,11 +188,15 @@ impl AppState {
             .into())
     }
 
-    pub async fn get_test_api_key(&self) -> Result<Versioned<ApiKey>, RpcError> {
-        self.get_api_key("test_api_key".into()).await
+    pub async fn get_test_api_key(&self, trace_id: TraceId) -> Result<Versioned<ApiKey>, RpcError> {
+        self.get_api_key("test_api_key".into(), trace_id).await
     }
 
-    pub async fn put_api_key(&self, api_key: &Versioned<ApiKey>) -> Result<(), RpcError> {
+    pub async fn put_api_key(
+        &self,
+        api_key: &Versioned<ApiKey>,
+        trace_id: TraceId,
+    ) -> Result<(), RpcError> {
         let full_key = format!("api_key:{}", api_key.data.key_id);
         let data: String = serde_json::to_string(&api_key.data).unwrap();
         let versioned_data: Versioned<String> = (api_key.version, data).into();
@@ -205,7 +209,7 @@ impl AppState {
                 &full_key,
                 &versioned_data.data,
                 Some(self.config.rpc_timeout()),
-                None
+                trace_id
             )
         )
         .await?;
@@ -215,24 +219,28 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn delete_api_key(&self, api_key: &ApiKey) -> Result<(), RpcError> {
+    pub async fn delete_api_key(
+        &self,
+        api_key: &ApiKey,
+        trace_id: TraceId,
+    ) -> Result<(), RpcError> {
         let full_key = format!("api_key:{}", api_key.key_id);
         let rss_client = self.get_rss_rpc_client();
         rss_rpc_retry!(
             rss_client,
-            delete(&full_key, Some(self.config.rpc_timeout()), None)
+            delete(&full_key, Some(self.config.rpc_timeout()), trace_id)
         )
         .await?;
         self.cache_coordinator.invalidate_entry(&full_key).await;
         Ok(())
     }
 
-    pub async fn list_api_keys(&self) -> Result<Vec<ApiKey>, RpcError> {
+    pub async fn list_api_keys(&self, trace_id: TraceId) -> Result<Vec<ApiKey>, RpcError> {
         let prefix = "api_key:".to_string();
         let rss_client = self.get_rss_rpc_client();
         let kvs = rss_rpc_retry!(
             rss_client,
-            list(&prefix, Some(self.config.rpc_timeout()), None)
+            list(&prefix, Some(self.config.rpc_timeout()), trace_id)
         )
         .await?;
         Ok(kvs
@@ -244,7 +252,11 @@ impl AppState {
 
 // Bucket operations
 impl AppState {
-    pub async fn get_bucket(&self, bucket_name: String) -> Result<Versioned<Bucket>, RpcError> {
+    pub async fn get_bucket(
+        &self,
+        bucket_name: String,
+        trace_id: TraceId,
+    ) -> Result<Versioned<Bucket>, RpcError> {
         let full_key = format!("bucket:{bucket_name}");
         if let Some(json) = self.cache.get(&full_key).await {
             counter!("bucket_cache_hit").increment(1);
@@ -261,7 +273,7 @@ impl AppState {
         let rss_client = self.get_rss_rpc_client();
         let (version, data) = rss_rpc_retry!(
             rss_client,
-            get(&full_key, Some(self.config.rpc_timeout()), None)
+            get(&full_key, Some(self.config.rpc_timeout()), trace_id)
         )
         .await?;
         let json = Versioned::new(version, data);
@@ -278,6 +290,7 @@ impl AppState {
         bucket_name: &str,
         api_key_id: &str,
         is_multi_az: bool,
+        trace_id: TraceId,
     ) -> Result<(), RpcError> {
         let rss_client = self.get_rss_rpc_client();
         rss_rpc_retry!(
@@ -287,7 +300,7 @@ impl AppState {
                 api_key_id,
                 is_multi_az,
                 Some(self.config.rpc_timeout()),
-                None
+                trace_id
             )
         )
         .await?;
@@ -299,7 +312,12 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn delete_bucket(&self, bucket_name: &str, api_key_id: &str) -> Result<(), RpcError> {
+    pub async fn delete_bucket(
+        &self,
+        bucket_name: &str,
+        api_key_id: &str,
+        trace_id: TraceId,
+    ) -> Result<(), RpcError> {
         let rss_client = self.get_rss_rpc_client();
         rss_rpc_retry!(
             rss_client,
@@ -307,7 +325,7 @@ impl AppState {
                 bucket_name,
                 api_key_id,
                 Some(self.config.rpc_timeout()),
-                None
+                trace_id
             )
         )
         .await?;
@@ -322,12 +340,12 @@ impl AppState {
         Ok(())
     }
 
-    pub async fn list_buckets(&self) -> Result<Vec<Bucket>, RpcError> {
+    pub async fn list_buckets(&self, trace_id: TraceId) -> Result<Vec<Bucket>, RpcError> {
         let prefix = "bucket:".to_string();
         let rss_client = self.get_rss_rpc_client();
         let kvs = rss_rpc_retry!(
             rss_client,
-            list(&prefix, Some(self.config.rpc_timeout()), None)
+            list(&prefix, Some(self.config.rpc_timeout()), trace_id)
         )
         .await?;
         Ok(kvs

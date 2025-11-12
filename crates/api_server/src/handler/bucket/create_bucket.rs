@@ -79,7 +79,7 @@ pub async fn create_bucket_handler(ctx: BucketRequestContext) -> Result<HttpResp
 
     let result = ctx
         .app
-        .create_bucket(&ctx.bucket_name, &api_key_id, is_multi_az)
+        .create_bucket(&ctx.bucket_name, &api_key_id, is_multi_az, ctx.trace_id)
         .await;
     match result {
         Ok(_) => {

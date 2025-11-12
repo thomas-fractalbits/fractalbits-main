@@ -20,7 +20,7 @@ use crate::{
 use actix_web::http::header::{self, HeaderMap, HeaderValue};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use bytes::Bytes;
-use data_types::{ApiKey, Versioned};
+use data_types::{ApiKey, TraceId, Versioned};
 use serde::Serialize;
 
 #[allow(dead_code)]
@@ -214,6 +214,7 @@ pub async fn copy_object_handler(
         ctx.app.clone(),
         &source_api_key,
         &header_opts.x_amz_copy_source,
+        ctx.trace_id,
     )
     .await?;
 
@@ -255,6 +256,7 @@ async fn get_copy_source_object(
     app: Arc<AppState>,
     api_key: &Versioned<ApiKey>,
     copy_source: &str,
+    trace_id: TraceId,
 ) -> Result<(ObjectLayout, Bytes), S3Error> {
     let copy_source = percent_encoding::percent_decode_str(copy_source).decode_utf8()?;
 
@@ -265,9 +267,12 @@ async fn get_copy_source_object(
         return Err(S3Error::AccessDenied);
     }
 
-    let source_bucket = bucket::resolve_bucket(app.clone(), source_bucket_name.clone()).await?;
-    let source_obj = get_raw_object(&app, &source_bucket.root_blob_name, &source_key, None).await?;
+    let source_bucket =
+        bucket::resolve_bucket(app.clone(), source_bucket_name.clone(), trace_id).await?;
+    let source_obj =
+        get_raw_object(&app, &source_bucket.root_blob_name, &source_key, trace_id).await?;
     let (source_obj_content, _) =
-        get_object_content_as_bytes(app, &source_bucket, &source_obj, source_key, None).await?;
+        get_object_content_as_bytes(app, &source_bucket, &source_obj, source_key, None, trace_id)
+            .await?;
     Ok((source_obj, source_obj_content))
 }

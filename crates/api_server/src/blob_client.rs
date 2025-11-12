@@ -7,7 +7,7 @@ use crate::{
 };
 use bytes::Bytes;
 use data_blob_tracking::DataBlobTracker;
-use data_types::DataBlobGuid;
+use data_types::{DataBlobGuid, TraceId};
 use moka::future::Cache;
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc::Receiver, task::JoinHandle};
@@ -149,6 +149,7 @@ impl BlobClient {
                     request.blob_guid,
                     request.block_number,
                     request.location,
+                    TraceId::new(),
                 )
                 .await;
             match res {
@@ -178,6 +179,7 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         body: Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .put_blob(
@@ -186,6 +188,7 @@ impl BlobClient {
                 blob_guid.volume_id,
                 block_number,
                 body,
+                trace_id,
             )
             .await
     }
@@ -196,6 +199,7 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         chunks: Vec<actix_web::web::Bytes>,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
             .put_blob_vectored(
@@ -204,6 +208,7 @@ impl BlobClient {
                 blob_guid.volume_id,
                 block_number,
                 chunks,
+                trace_id,
             )
             .await
     }
@@ -215,9 +220,17 @@ impl BlobClient {
         content_len: usize,
         location: BlobLocation,
         body: &mut Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
-            .get_blob(blob_guid, block_number, content_len, location, body)
+            .get_blob(
+                blob_guid,
+                block_number,
+                content_len,
+                location,
+                body,
+                trace_id,
+            )
             .await
     }
 
@@ -227,9 +240,16 @@ impl BlobClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         location: BlobLocation,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         self.storage
-            .delete_blob(tracking_root_blob_name, blob_guid, block_number, location)
+            .delete_blob(
+                tracking_root_blob_name,
+                blob_guid,
+                block_number,
+                location,
+                trace_id,
+            )
             .await
     }
 }

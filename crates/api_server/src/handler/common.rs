@@ -12,6 +12,7 @@ use crate::{
     object_layout::{HeaderList, ObjectLayout},
 };
 use actix_web::http::header::{self, HeaderMap};
+use data_types::TraceId;
 use futures::StreamExt;
 use rand::Rng;
 use rkyv::{self, rancor::Error};
@@ -64,7 +65,7 @@ pub async fn get_raw_object(
     app: &AppState,
     root_blob_name: &str,
     key: &str,
-    trace_id: Option<u128>,
+    trace_id: TraceId,
 ) -> Result<ObjectLayout, S3Error> {
     let nss_client = app.get_nss_rpc_client();
     let resp = nss_rpc_retry!(
@@ -102,7 +103,7 @@ pub async fn list_raw_objects(
     delimiter: &str,
     start_after: &str,
     skip_mpu_parts: bool,
-    trace_id: Option<u128>,
+    trace_id: TraceId,
 ) -> Result<Vec<(String, ObjectLayout)>, S3Error> {
     let nss_client = app.get_nss_rpc_client();
     let resp = nss_rpc_retry!(

@@ -1,4 +1,5 @@
 use bytes::{Bytes, BytesMut};
+use data_types::TraceId;
 use std::mem::size_of;
 use xxhash_rust::xxh3::xxh3_64;
 
@@ -18,8 +19,8 @@ pub trait MessageHeaderTrait: Sized + Clone + Copy + Send + Sync + 'static {
     fn get_body_size(&self) -> usize;
     fn get_retry_count(&self) -> u32;
     fn set_retry_count(&mut self, retry_count: u32);
-    fn get_trace_id(&self) -> u128;
-    fn set_trace_id(&mut self, trace_id: u128);
+    fn get_trace_id(&self) -> TraceId;
+    fn set_trace_id(&mut self, trace_id: TraceId);
     fn set_checksum(&mut self);
     fn set_body_checksum(&mut self, body: &[u8]);
     fn verify_body_checksum(&self, body: &[u8]) -> bool;
@@ -172,11 +173,11 @@ macro_rules! impl_protobuf_message_header {
                 self.0.set_retry_count(retry_count)
             }
 
-            fn get_trace_id(&self) -> u128 {
+            fn get_trace_id(&self) -> data_types::TraceId {
                 self.0.get_trace_id()
             }
 
-            fn set_trace_id(&mut self, trace_id: u128) {
+            fn set_trace_id(&mut self, trace_id: data_types::TraceId) {
                 self.0.set_trace_id(trace_id)
             }
 

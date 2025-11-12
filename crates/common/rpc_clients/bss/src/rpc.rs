@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::client::RpcClient;
 use bss_codec::{Command, MessageHeader};
 use bytes::Bytes;
-use data_types::{DataBlobGuid, MetaBlobGuid};
+use data_types::{DataBlobGuid, MetaBlobGuid, TraceId};
 use rpc_client_common::{InflightRpcGuard, RpcError};
 use rpc_codec_common::MessageFrame;
 use tracing::error;
@@ -35,7 +35,7 @@ impl RpcClient {
         body: Bytes,
         body_checksum: u64,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "put_data_blob");
@@ -73,7 +73,7 @@ impl RpcClient {
         chunks: Vec<Bytes>,
         body_checksum: u64,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "put_data_blob_vectored");
@@ -112,7 +112,7 @@ impl RpcClient {
         body: &mut Bytes,
         content_len: usize,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "get_data_blob");
@@ -148,7 +148,7 @@ impl RpcClient {
         blob_guid: DataBlobGuid,
         block_number: u32,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "delete_data_blob");
@@ -186,7 +186,7 @@ impl RpcClient {
         is_new: bool,
         body: Bytes,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "put_metadata_blob");
@@ -226,7 +226,7 @@ impl RpcClient {
         version: u64,
         body: &mut Bytes,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<u64, RpcError> {
         let _guard = InflightRpcGuard::new("bss", "get_metadata_blob");
@@ -261,7 +261,7 @@ impl RpcClient {
         blob_guid: MetaBlobGuid,
         block_number: u32,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         retry_count: u32,
     ) -> Result<(), RpcError> {
         let _guard = InflightRpcGuard::new("bss", "delete_metadata_blob");

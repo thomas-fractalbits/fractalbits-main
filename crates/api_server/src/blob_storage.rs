@@ -11,6 +11,24 @@ pub use s3_express_multi_az_storage::S3ExpressMultiAzStorage;
 pub use s3_hybrid_single_az_storage::S3HybridSingleAzStorage;
 pub use volume_group_proxy::DataVgProxy;
 
+use aws_config::{BehaviorVersion, retry::RetryConfig};
+use aws_sdk_s3::{
+    Client as S3Client, Config as S3Config,
+    config::{Credentials, Region},
+    error::SdkError,
+    operation::{
+        delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
+    },
+};
+use bytes::Bytes;
+use data_types::TraceId;
+use governor::{Quota, RateLimiter};
+use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::time::Duration;
+use tracing::info;
+use uuid::Uuid;
+
 /// Specifies where a blob should be stored/retrieved from
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BlobLocation {
@@ -25,23 +43,6 @@ pub enum BlobStorageImpl {
     HybridSingleAz(S3HybridSingleAzStorage),
     S3ExpressMultiAz(S3ExpressMultiAzStorage),
 }
-
-use aws_config::{BehaviorVersion, retry::RetryConfig};
-use aws_sdk_s3::{
-    Client as S3Client, Config as S3Config,
-    config::{Credentials, Region},
-    error::SdkError,
-    operation::{
-        delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
-    },
-};
-use bytes::Bytes;
-use governor::{Quota, RateLimiter};
-use std::num::NonZeroU32;
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::info;
-use uuid::Uuid;
 
 /// S3 operation retry macro - similar to rpc_retry but for S3 operations
 #[macro_export]
@@ -347,11 +348,12 @@ impl BlobStorageImpl {
         volume_id: u16,
         block_number: u32,
         body: Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
                 storage
-                    .put_blob(blob_id, volume_id, block_number, body)
+                    .put_blob(blob_id, volume_id, block_number, body, trace_id)
                     .await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
@@ -369,11 +371,12 @@ impl BlobStorageImpl {
         volume_id: u16,
         block_number: u32,
         chunks: Vec<actix_web::web::Bytes>,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
                 storage
-                    .put_blob_vectored(blob_id, volume_id, block_number, chunks)
+                    .put_blob_vectored(blob_id, volume_id, block_number, chunks, trace_id)
                     .await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
@@ -391,11 +394,19 @@ impl BlobStorageImpl {
         content_len: usize,
         location: BlobLocation,
         body: &mut Bytes,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
                 storage
-                    .get_blob(blob_guid, block_number, content_len, location, body)
+                    .get_blob(
+                        blob_guid,
+                        block_number,
+                        content_len,
+                        location,
+                        body,
+                        trace_id,
+                    )
                     .await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
@@ -410,10 +421,13 @@ impl BlobStorageImpl {
         blob_guid: DataBlobGuid,
         block_number: u32,
         location: BlobLocation,
+        trace_id: TraceId,
     ) -> Result<(), BlobStorageError> {
         match self {
             BlobStorageImpl::HybridSingleAz(storage) => {
-                storage.delete_blob(blob_guid, block_number, location).await
+                storage
+                    .delete_blob(blob_guid, block_number, location, trace_id)
+                    .await
             }
             BlobStorageImpl::S3ExpressMultiAz(storage) => {
                 storage

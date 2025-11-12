@@ -8,6 +8,7 @@ metrics = []
 
 [dependencies]
 bytes.workspace = true
+data_types.workspace = true
 prost.workspace = true
 thiserror.workspace = true
 tracing.workspace = true

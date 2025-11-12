@@ -1,6 +1,6 @@
 use crate::DataVgError;
 use bytes::Bytes;
-use data_types::{DataBlobGuid, DataVgInfo, QuorumConfig};
+use data_types::{DataBlobGuid, DataVgInfo, QuorumConfig, TraceId};
 use futures::stream::{FuturesUnordered, StreamExt};
 use metrics::histogram;
 use rand::seq::SliceRandom;
@@ -104,6 +104,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         content_len: usize,
+        trace_id: TraceId,
     ) -> Result<Bytes, RpcError> {
         tracing::debug!(%blob_guid, bss_address=%bss_node.address, block_number, content_len, "get_blob_from_node_instance calling BSS");
 
@@ -122,7 +123,7 @@ impl DataVgProxy {
                     &mut body,
                     content_len,
                     Some(self.rpc_timeout),
-                    None,
+                    trace_id,
                     retry_count,
                 )
                 .await
@@ -148,6 +149,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         rpc_timeout: Duration,
+        trace_id: TraceId,
     ) -> (String, Result<(), RpcError>) {
         let start_node = Instant::now();
         let address = bss_node.address.clone();
@@ -165,7 +167,7 @@ impl DataVgProxy {
                         blob_guid,
                         block_number,
                         Some(rpc_timeout),
-                        None,
+                        trace_id,
                         retry_count,
                     )
                     .await
@@ -203,6 +205,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         body: Bytes,
+        trace_id: TraceId,
     ) -> Result<(), DataVgError> {
         let start = Instant::now();
         histogram!("blob_size", "operation" => "put").record(body.len() as f64);
@@ -239,6 +242,7 @@ impl DataVgProxy {
                 body.clone(),
                 body_checksum,
                 rpc_timeout,
+                trace_id,
             ));
         }
 
@@ -307,6 +311,7 @@ impl DataVgProxy {
         blob_guid: DataBlobGuid,
         block_number: u32,
         chunks: Vec<Bytes>,
+        trace_id: TraceId,
     ) -> Result<(), DataVgError> {
         let start = Instant::now();
         let total_size: usize = chunks.iter().map(|c| c.len()).sum();
@@ -350,6 +355,7 @@ impl DataVgProxy {
                 chunks.clone(),
                 body_checksum,
                 rpc_timeout,
+                trace_id,
             ));
         }
 
@@ -420,6 +426,7 @@ impl DataVgProxy {
         body: Bytes,
         body_checksum: u64,
         rpc_timeout: Duration,
+        trace_id: TraceId,
     ) -> (String, Result<(), RpcError>) {
         let start_node = Instant::now();
         let address = bss_node.address.clone();
@@ -432,7 +439,7 @@ impl DataVgProxy {
                 body,
                 body_checksum,
                 Some(rpc_timeout),
-                None,
+                trace_id,
                 0,
             )
             .await;
@@ -451,6 +458,7 @@ impl DataVgProxy {
         chunks: Vec<Bytes>,
         body_checksum: u64,
         rpc_timeout: Duration,
+        trace_id: TraceId,
     ) -> (String, Result<(), RpcError>) {
         let start_node = Instant::now();
         let address = bss_node.address.clone();
@@ -463,7 +471,7 @@ impl DataVgProxy {
                 chunks,
                 body_checksum,
                 Some(rpc_timeout),
-                None,
+                trace_id,
                 0,
             )
             .await;
@@ -483,6 +491,7 @@ impl DataVgProxy {
         block_number: u32,
         content_len: usize,
         body: &mut Bytes,
+        trace_id: TraceId,
     ) -> Result<(), DataVgError> {
         let start = Instant::now();
 
@@ -508,7 +517,7 @@ impl DataVgProxy {
                 selected_node.address
             );
             match self
-                .get_blob_from_node_instance(selected_node, blob_guid, block_number, content_len)
+                .get_blob_from_node_instance(selected_node, blob_guid, block_number, content_len, trace_id)
                 .await
             {
                 Ok(blob_data) => {
@@ -543,6 +552,7 @@ impl DataVgProxy {
                 blob_guid,
                 block_number,
                 content_len,
+                trace_id,
             );
             let address = bss_node.address.clone();
             read_futures.push(async move {
@@ -603,6 +613,7 @@ impl DataVgProxy {
         &self,
         blob_guid: DataBlobGuid,
         block_number: u32,
+        trace_id: TraceId,
     ) -> Result<(), DataVgError> {
         let start = Instant::now();
 
@@ -627,6 +638,7 @@ impl DataVgProxy {
                 blob_guid,
                 block_number,
                 rpc_timeout,
+                trace_id,
             ));
         }
 

@@ -182,13 +182,8 @@ pub async fn complete_multipart_upload_handler(
     let mut valid_part_numbers: HashSet<u32> =
         req_body.part.iter().map(|part| part.part_number).collect();
 
-    let mut object = get_raw_object(
-        &ctx.app,
-        &bucket.root_blob_name,
-        &ctx.key,
-        Some(ctx.trace_id),
-    )
-    .await?;
+    let mut object =
+        get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key, ctx.trace_id).await?;
     if object.version_id.simple().to_string() != upload_id {
         return Err(S3Error::NoSuchVersion);
     }
@@ -206,7 +201,7 @@ pub async fn complete_multipart_upload_handler(
         "",
         "",
         false,
-        None,
+        ctx.trace_id,
     )
     .await?;
 
@@ -293,7 +288,7 @@ pub async fn complete_multipart_upload_handler(
             &ctx.key,
             new_object_bytes.clone(),
             Some(ctx.app.config.rpc_timeout()),
-            Some(ctx.trace_id)
+            ctx.trace_id
         )
     )
     .await?;

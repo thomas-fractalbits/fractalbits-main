@@ -15,7 +15,7 @@ use crate::{
         },
     },
 };
-use data_types::Bucket;
+use data_types::{Bucket, TraceId};
 use rkyv::{self, rancor::Error};
 use serde::{Deserialize, Serialize};
 
@@ -287,7 +287,7 @@ pub async fn list_objects(
     prefix: String,
     delimiter: String,
     start_after: String,
-    trace_id: u128,
+    trace_id: TraceId,
 ) -> Result<(Vec<Object>, Vec<Prefix>, Option<String>), S3Error> {
     tracing::debug!(
         "NSS list_inodes call with root_blob_name='{}', max_keys={}, prefix='{}', delimiter='{}', start_after='{}'",
@@ -309,7 +309,7 @@ pub async fn list_objects(
             &start_after,
             true,
             Some(app.config.rpc_timeout()),
-            Some(trace_id)
+            trace_id
         )
     )
     .await?;

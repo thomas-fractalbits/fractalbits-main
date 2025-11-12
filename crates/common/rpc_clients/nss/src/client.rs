@@ -1,3 +1,4 @@
+use data_types::TraceId;
 use rpc_client_common::AutoReconnectRpcClient;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,7 +42,7 @@ impl RpcClient {
         request_id: u32,
         frame: rpc_codec_common::MessageFrame<nss_codec::MessageHeader, bytes::Bytes>,
         timeout: Option<std::time::Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
         operation: crate::stats::NssOperation,
     ) -> Result<rpc_codec_common::MessageFrame<nss_codec::MessageHeader>, rpc_client_common::RpcError>
     {

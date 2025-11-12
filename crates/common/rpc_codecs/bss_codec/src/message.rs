@@ -2,6 +2,7 @@
 //! Note if this file is updated, the corresponding message.zig file also needs to be updated!
 use bytemuck::{Pod, Zeroable};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use data_types::TraceId;
 use rpc_codec_common::MessageHeaderTrait;
 use std::mem::size_of;
 use xxhash_rust::xxh3::Xxh3;
@@ -198,12 +199,12 @@ impl MessageHeaderTrait for MessageHeader {
         self.retry_count = retry_count as u8;
     }
 
-    fn get_trace_id(&self) -> u128 {
-        self.trace_id
+    fn get_trace_id(&self) -> TraceId {
+        TraceId::from(self.trace_id)
     }
 
-    fn set_trace_id(&mut self, trace_id: u128) {
-        self.trace_id = trace_id;
+    fn set_trace_id(&mut self, trace_id: TraceId) {
+        self.trace_id = trace_id.into();
     }
 
     fn set_checksum(&mut self) {

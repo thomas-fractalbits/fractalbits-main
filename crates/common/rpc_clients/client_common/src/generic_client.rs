@@ -1,5 +1,6 @@
 use crate::RpcError;
 use bytes::{Bytes, BytesMut};
+use data_types::TraceId;
 use metrics::{counter, gauge};
 use parking_lot::Mutex;
 use rpc_codec_common::{MessageFrame, MessageHeaderTrait};
@@ -158,7 +159,8 @@ where
             encoded_frames.clear();
             for mut frame in batch.drain(..) {
                 let request_id = frame.header.get_id();
-                debug!(%rpc_type, %socket_fd, %request_id, "sending request");
+                let trace_id = frame.header.get_trace_id();
+                debug!(%rpc_type, %socket_fd, %request_id, %trace_id, "sending request");
 
                 frame.header.set_checksum();
 
@@ -299,7 +301,8 @@ where
         rpc_type: &'static str,
     ) {
         let request_id = frame.header.get_id();
-        debug!(%rpc_type, %socket_fd, %request_id, "receiving response:");
+        let trace_id = frame.header.get_trace_id();
+        debug!(%rpc_type, %socket_fd, %request_id, %trace_id, "receiving response:");
         counter!("rpc_response_received", "type" => rpc_type, "name" => "all").increment(1);
         let tx: oneshot::Sender<MessageFrame<Header>> = match requests.lock().remove(&request_id) {
             Some(tx) => tx,
@@ -340,11 +343,9 @@ where
         request_id: u32,
         mut frame: MessageFrame<Header, Bytes>,
         timeout: Option<std::time::Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
     ) -> Result<MessageFrame<Header>, RpcError> {
-        if let Some(trace_id) = trace_id {
-            frame.header.set_trace_id(trace_id);
-        }
+        frame.header.set_trace_id(trace_id);
         let vectored_frame = MessageFrame::new(frame.header, vec![frame.body]);
         self.send_request_vectored_internal(request_id, vectored_frame, timeout)
             .await
@@ -355,11 +356,9 @@ where
         request_id: u32,
         mut frame: MessageFrame<Header, Vec<Bytes>>,
         timeout: Option<std::time::Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
     ) -> Result<MessageFrame<Header>, RpcError> {
-        if let Some(trace_id) = trace_id {
-            frame.header.set_trace_id(trace_id);
-        }
+        frame.header.set_trace_id(trace_id);
         self.send_request_vectored_internal(request_id, frame, timeout)
             .await
     }

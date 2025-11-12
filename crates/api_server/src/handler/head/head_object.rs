@@ -20,7 +20,7 @@ pub async fn head_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespon
         &ctx.app,
         &bucket.root_blob_name,
         &ctx.key,
-        Some(ctx.trace_id),
+        ctx.trace_id,
     )
     .await?;
 

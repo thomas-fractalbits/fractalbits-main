@@ -1,4 +1,5 @@
 use bytes::{Bytes, BytesMut};
+use data_types::TraceId;
 use prost::Message as PbMessage;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -131,7 +132,7 @@ where
         request_id: u32,
         frame: MessageFrame<Header, Bytes>,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
     ) -> Result<MessageFrame<Header>, RpcError> {
         self.ensure_connected().await?;
         let client = {
@@ -148,7 +149,7 @@ where
         request_id: u32,
         frame: MessageFrame<Header, Vec<bytes::Bytes>>,
         timeout: Option<Duration>,
-        trace_id: Option<u128>,
+        trace_id: TraceId,
     ) -> Result<MessageFrame<Header>, RpcError> {
         self.ensure_connected().await?;
         let client = {
@@ -262,7 +263,7 @@ macro_rules! rss_rpc_retry {
     };
 }
 
-pub fn encode_protobuf<M: PbMessage>(msg: M, _trace_id: Option<u128>) -> Result<Bytes, RpcError> {
+pub fn encode_protobuf<M: PbMessage>(msg: M, _trace_id: TraceId) -> Result<Bytes, RpcError> {
     let mut msg_bytes = BytesMut::with_capacity(1024);
     msg.encode(&mut msg_bytes)
         .map_err(|e| RpcError::EncodeError(e.to_string()))?;

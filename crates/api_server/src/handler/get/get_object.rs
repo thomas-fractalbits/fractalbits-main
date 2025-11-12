@@ -21,8 +21,8 @@ use actix_web::{
     web::Query,
 };
 use bytes::Bytes;
-use data_types::Bucket;
 use data_types::DataBlobGuid;
+use data_types::{Bucket, TraceId};
 use futures::{StreamExt, TryStreamExt, stream};
 use metrics::histogram;
 use serde::Deserialize;
@@ -93,13 +93,7 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
     let checksum_mode_enabled = header_opts.x_amz_checksum_mode_enabled;
 
     // Get the raw object
-    let object = get_raw_object(
-        &ctx.app,
-        &bucket.root_blob_name,
-        &ctx.key,
-        Some(ctx.trace_id),
-    )
-    .await?;
+    let object = get_raw_object(&ctx.app, &bucket.root_blob_name, &ctx.key, ctx.trace_id).await?;
     let total_size = object.size()?;
     histogram!("object_size", "operation" => "get").record(total_size as f64);
 
@@ -109,9 +103,15 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
     match (query_opts.part_number, range) {
         (_, None) => {
             // Full object request with streaming
-            let (body_stream, body_size) =
-                get_object_content(ctx.app, &bucket, &object, ctx.key, query_opts.part_number)
-                    .await?;
+            let (body_stream, body_size) = get_object_content(
+                ctx.app,
+                &bucket,
+                &object,
+                ctx.key,
+                query_opts.part_number,
+                ctx.trace_id,
+            )
+            .await?;
 
             // Build streaming response
             let mut response = HttpResponse::Ok();
@@ -133,7 +133,8 @@ pub async fn get_object_handler(ctx: ObjectRequestContext) -> Result<HttpRespons
         (None, Some(range)) => {
             // Range request with streaming
             let body_stream =
-                get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range).await?;
+                get_object_range_content(ctx.app, &bucket, &object, ctx.key, &range, ctx.trace_id)
+                    .await?;
 
             let range_length = range.end - range.start;
             let content_range = format!("bytes {}-{}/{}", range.start, range.end - 1, total_size);
@@ -198,6 +199,7 @@ pub async fn get_object_content(
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
+    trace_id: TraceId,
 ) -> Result<
     (
         std::pin::Pin<Box<dyn stream::Stream<Item = Result<Bytes, S3Error>> + Send>>,
@@ -223,6 +225,7 @@ pub async fn get_object_content(
                 size,
                 block_size,
                 blob_location,
+                trace_id,
             )
             .await?;
             Ok((Box::pin(body_stream), size))
@@ -246,7 +249,7 @@ pub async fn get_object_content(
                     "",
                     "",
                     false,
-                    None,
+                    trace_id,
                 )
                 .await?;
                 // Do filtering if there is part_number option
@@ -277,6 +280,7 @@ pub async fn get_object_content(
                                 mpu_size,
                                 block_size,
                                 blob_location,
+                                trace_id,
                             )
                             .await
                         }
@@ -295,6 +299,7 @@ async fn get_object_range_content(
     object: &ObjectLayout,
     key: String,
     range: &std::ops::Range<usize>,
+    trace_id: TraceId,
 ) -> Result<std::pin::Pin<Box<dyn stream::Stream<Item = Result<Bytes, S3Error>> + Send>>, S3Error> {
     let blob_client = app
         .get_blob_client()
@@ -316,6 +321,7 @@ async fn get_object_range_content(
                 range.start,
                 range.end,
                 blob_location,
+                trace_id,
             );
             Ok(Box::pin(body_stream))
         }
@@ -338,7 +344,7 @@ async fn get_object_range_content(
                     "",
                     "",
                     false,
-                    None,
+                    trace_id,
                 )
                 .await?;
 
@@ -386,6 +392,7 @@ async fn get_object_range_content(
                                     blob_start,
                                     blob_end,
                                     BlobLocation::S3,
+                                    trace_id,
                                 ))
                             }
                         },
@@ -404,6 +411,7 @@ async fn get_full_blob_stream(
     object_size: u64,
     block_size: usize,
     blob_location: BlobLocation,
+    trace_id: TraceId,
 ) -> Result<impl stream::Stream<Item = Result<Bytes, S3Error>>, S3Error> {
     if num_blocks == 0 {
         return Ok(stream::empty().boxed());
@@ -424,6 +432,7 @@ async fn get_full_blob_stream(
             first_block_len,
             blob_location,
             &mut first_block,
+            trace_id,
         )
         .await
         .map_err(|e| {
@@ -448,7 +457,14 @@ async fn get_full_blob_stream(
             };
             let mut block = Bytes::new();
             match blob_client
-                .get_blob(blob_guid, i as u32, content_len, blob_location, &mut block)
+                .get_blob(
+                    blob_guid,
+                    i as u32,
+                    content_len,
+                    blob_location,
+                    &mut block,
+                    trace_id,
+                )
                 .await
             {
                 Err(e) => {
@@ -474,6 +490,7 @@ fn get_range_blob_stream(
     start: usize,
     end: usize,
     blob_location: BlobLocation,
+    trace_id: TraceId,
 ) -> impl stream::Stream<Item = Result<Bytes, S3Error>> {
     let start_block_i = start / block_size;
     let end_block_i = (end - 1) / block_size;
@@ -493,7 +510,14 @@ fn get_range_blob_stream(
                     block_size
                 };
                 match blob_client
-                    .get_blob(blob_guid, i as u32, content_len, blob_location, &mut block)
+                    .get_blob(
+                        blob_guid,
+                        i as u32,
+                        content_len,
+                        blob_location,
+                        &mut block,
+                        trace_id,
+                    )
                     .await
                 {
                     Err(e) => {
@@ -544,8 +568,10 @@ pub async fn get_object_content_as_bytes(
     object: &ObjectLayout,
     key: String,
     part_number: Option<u32>,
+    trace_id: TraceId,
 ) -> Result<(Bytes, u64), S3Error> {
-    let (stream, size) = get_object_content(app, bucket, object, key, part_number).await?;
+    let (stream, size) =
+        get_object_content(app, bucket, object, key, part_number, trace_id).await?;
 
     // Collect the stream into bytes
     let stream_bytes = stream

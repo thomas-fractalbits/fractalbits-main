@@ -10,14 +10,18 @@ pub use list_buckets::list_buckets_handler;
 
 use super::common::{authorization::Authorization, s3_error::S3Error};
 use crate::AppState;
-use data_types::Bucket;
+use data_types::{Bucket, TraceId};
 use metrics::histogram;
 use rpc_client_common::RpcError;
 use std::{sync::Arc, time::Instant};
 
-pub async fn resolve_bucket(app: Arc<AppState>, bucket_name: String) -> Result<Bucket, S3Error> {
+pub async fn resolve_bucket(
+    app: Arc<AppState>,
+    bucket_name: String,
+    trace_id: TraceId,
+) -> Result<Bucket, S3Error> {
     let start = Instant::now();
-    match app.get_bucket(bucket_name).await {
+    match app.get_bucket(bucket_name, trace_id).await {
         Ok(bucket) => {
             let duration = start.elapsed();
             histogram!("resolve_bucket_nanos", "status" => "Ok").record(duration.as_nanos() as f64);

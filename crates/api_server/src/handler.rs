@@ -9,7 +9,7 @@ mod put;
 
 use crate::{AppState, http_stats::HttpStatsGuard};
 use actix_web::{
-    HttpRequest, HttpResponse, ResponseError,
+    HttpRequest, HttpResponse,
     web::{self, Payload},
 };
 use bucket::BucketEndpoint;
@@ -17,7 +17,7 @@ use common::{
     authorization::Authorization, checksum::ChecksumValue, request::extract::*, s3_error::S3Error,
     signature::check_signature,
 };
-use data_types::{ApiKey, Bucket, Versioned};
+use data_types::{ApiKey, Bucket, TraceId, Versioned};
 use delete::DeleteEndpoint;
 use endpoint::Endpoint;
 use get::GetEndpoint;
@@ -29,7 +29,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use tracing::{debug, error, warn};
+use tracing::{Instrument, debug, error, warn};
 
 pub struct BucketRequestContext {
     pub app: Arc<AppState>,
@@ -37,7 +37,7 @@ pub struct BucketRequestContext {
     pub api_key: Versioned<ApiKey>,
     pub bucket_name: String,
     pub payload: actix_web::dev::Payload,
-    pub trace_id: u128,
+    pub trace_id: TraceId,
 }
 
 impl BucketRequestContext {
@@ -47,7 +47,7 @@ impl BucketRequestContext {
         api_key: Versioned<ApiKey>,
         bucket_name: String,
         payload: actix_web::dev::Payload,
-        trace_id: u128,
+        trace_id: TraceId,
     ) -> Self {
         Self {
             app,
@@ -60,7 +60,7 @@ impl BucketRequestContext {
     }
 
     pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
-        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone()).await
+        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone(), self.trace_id).await
     }
 }
 
@@ -73,7 +73,7 @@ pub struct ObjectRequestContext {
     pub key: String,
     pub checksum_value: Option<ChecksumValue>,
     pub payload: actix_web::dev::Payload,
-    pub trace_id: u128,
+    pub trace_id: TraceId,
 }
 
 impl ObjectRequestContext {
@@ -87,7 +87,7 @@ impl ObjectRequestContext {
         key: String,
         checksum_value: Option<ChecksumValue>,
         payload: actix_web::dev::Payload,
-        trace_id: u128,
+        trace_id: TraceId,
     ) -> Self {
         Self {
             app,
@@ -103,18 +103,19 @@ impl ObjectRequestContext {
     }
 
     pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
-        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone()).await
+        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone(), self.trace_id).await
     }
 }
 
 /// Extracts data from request and returns early with warning log on failure
 macro_rules! extract_or_return {
-    ($extractor_type:ty, $req:expr) => {{
+    ($extractor_type:ty, $req:expr, $trace_id:expr) => {{
         use actix_web::FromRequest;
         match <$extractor_type>::from_request($req, &mut actix_web::dev::Payload::None).await {
             Ok(extracted) => extracted,
             Err(rejection) => {
                 tracing::warn!(
+                    trace_id = %$trace_id,
                     "failed to extract {} at {}:{} {:?} {:?}",
                     stringify!($extractor_type),
                     file!(),
@@ -122,7 +123,7 @@ macro_rules! extract_or_return {
                     rejection,
                     $req.uri()
                 );
-                return Ok(S3Error::InternalError.error_response());
+                return Ok(S3Error::InternalError.error_response_with_resource("", $trace_id));
             }
         }
     }};
@@ -130,14 +131,15 @@ macro_rules! extract_or_return {
 
 pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpResponse, S3Error> {
     let start = Instant::now();
+    let trace_id = TraceId::new();
 
     // Extract all the required data using the macro
-    let ApiCommandFromQuery(api_cmd) = extract_or_return!(ApiCommandFromQuery, &req);
-    let AuthFromHeaders(auth) = extract_or_return!(AuthFromHeaders, &req);
-    let BucketAndKeyName { bucket, key } = extract_or_return!(BucketAndKeyName, &req);
-    let api_sig = extract_or_return!(ApiSignatureExtractor, &req);
+    let ApiCommandFromQuery(api_cmd) = extract_or_return!(ApiCommandFromQuery, &req, trace_id);
+    let AuthFromHeaders(auth) = extract_or_return!(AuthFromHeaders, &req, trace_id);
+    let BucketAndKeyName { bucket, key } = extract_or_return!(BucketAndKeyName, &req, trace_id);
+    let api_sig = extract_or_return!(ApiSignatureExtractor, &req, trace_id);
     let ChecksumValueFromHeaders(checksum_value) =
-        extract_or_return!(ChecksumValueFromHeaders, &req);
+        extract_or_return!(ChecksumValueFromHeaders, &req, trace_id);
 
     let client_addr = req
         .connection_info()
@@ -145,13 +147,12 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
         .unwrap_or("0.0.0.0:0")
         .to_string();
 
-    debug!(%bucket, %key, %client_addr);
+    debug!(%trace_id, %bucket, %key, %client_addr);
 
     let app_data = req
         .app_data::<web::Data<Arc<AppState>>>()
         .ok_or(S3Error::InternalError)?;
     let app = app_data.get_ref().clone();
-    let trace_id = app.generate_trace_id();
 
     let resource = format!("/{bucket}{key}");
     let endpoint = match Endpoint::from_extractors(&req, &bucket, &key, api_cmd, api_sig.0.clone())
@@ -168,6 +169,11 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
     let gauge_guard = InflightRequestGuard::new(endpoint_name);
     let http_stats_guard = HttpStatsGuard::new(endpoint_name);
 
+    let span = tracing::info_span!(
+        "request",
+        trace_id = %trace_id,
+    );
+
     let result = tokio::time::timeout(
         Duration::from_secs(app.config.http_request_timeout_seconds),
         any_handler_inner(
@@ -180,7 +186,8 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
             payload.into_inner(),
             endpoint,
             trace_id,
-        ),
+        )
+        .instrument(span),
     )
     .await;
     let duration = start.elapsed();
@@ -190,7 +197,7 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
     let result = match result {
         Ok(result) => result,
         Err(_) => {
-            error!( endpoint = %endpoint_name, %bucket, %key, %client_addr, "request timed out");
+            error!(%trace_id, endpoint = %endpoint_name, %bucket, %key, %client_addr, "request timed out");
             counter!("request_timeout", "endpoint" => endpoint_name).increment(1);
             return Ok(S3Error::InternalError.error_response_with_resource(&resource, trace_id));
         }
@@ -205,7 +212,7 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
         Err(e) => {
             histogram!("request_duration_nanos", "status" => format!("{endpoint_name}_Err"))
                 .record(duration.as_nanos() as f64);
-            error!(endpoint = %endpoint_name, %bucket, %key, %client_addr, error = ?e, "failed to handle request");
+            error!(%trace_id, endpoint = %endpoint_name, %bucket, %key, %client_addr, error = ?e, "failed to handle request");
             Ok(e.error_response_with_resource(&resource, trace_id))
         }
     }
@@ -221,12 +228,12 @@ async fn any_handler_inner(
     request: &HttpRequest,
     payload: actix_web::dev::Payload,
     endpoint: Endpoint,
-    trace_id: u128,
+    trace_id: TraceId,
 ) -> Result<HttpResponse, S3Error> {
     let start = Instant::now();
     let endpoint_name = endpoint.as_str();
 
-    let api_key = check_signature(app.clone(), request, auth.as_ref()).await?;
+    let api_key = check_signature(app.clone(), request, auth.as_ref(), trace_id).await?;
     histogram!("verify_request_duration_nanos", "endpoint" => endpoint_name)
         .record(start.elapsed().as_nanos() as f64);
 

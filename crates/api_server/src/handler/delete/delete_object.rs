@@ -26,7 +26,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<HttpResp
             &bucket.root_blob_name,
             &ctx.key,
             Some(rpc_timeout),
-            Some(ctx.trace_id)
+            ctx.trace_id
         )
     )
     .await?;
@@ -100,7 +100,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<HttpResp
                         "",
                         "",
                         false,
-                        None,
+                        ctx.trace_id,
                     )
                     .await?;
                     for (mpu_key, mpu_obj) in mpus.iter() {
@@ -110,7 +110,7 @@ pub async fn delete_object_handler(ctx: ObjectRequestContext) -> Result<HttpResp
                                 &bucket.root_blob_name,
                                 &mpu_key,
                                 Some(rpc_timeout),
-                                Some(ctx.trace_id)
+                                ctx.trace_id
                             )
                         )
                         .await?;

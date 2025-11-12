@@ -68,7 +68,7 @@ pub async fn list_buckets_handler(ctx: BucketRequestContext) -> Result<HttpRespo
     // TODO: Extract query parameters for ListBucketsOptions if needed
     let buckets: Vec<Bucket> = ctx
         .app
-        .list_buckets()
+        .list_buckets(ctx.trace_id)
         .await?
         .iter()
         .map(|bucket| Bucket {

@@ -10,6 +10,7 @@ use actix_web::{
         uri::InvalidUri,
     },
 };
+use data_types::TraceId;
 use http_range::HttpRangeParseError;
 use rpc_client_common::RpcError;
 use strum::AsRefStr;
@@ -788,7 +789,7 @@ impl S3Error {
     pub fn error_response_with_resource(
         &self,
         resource: &str,
-        request_id: u128,
+        request_id: TraceId,
     ) -> actix_web::HttpResponse {
         let body = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -796,7 +797,7 @@ impl S3Error {
     <Code>{}</Code>
     <Message>{}</Message>
     <Resource>{}</Resource>
-    <RequestId>{:032x}</RequestId>
+    <RequestId>{}</RequestId>
 </Error>"#,
             self.as_ref(),
             self,
@@ -817,11 +818,11 @@ impl ResponseError for S3Error {
 <Error>
     <Code>{}</Code>
     <Message>{}</Message>
-    <RequestId>{:032x}</RequestId>
+    <RequestId>{}</RequestId>
 </Error>"#,
             self.as_ref(),
             self,
-            0u128,
+            TraceId::new(),
         );
 
         HttpResponse::build(self.http_status_code())

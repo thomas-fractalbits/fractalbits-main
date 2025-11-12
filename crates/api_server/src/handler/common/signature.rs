@@ -12,7 +12,7 @@ use crate::{
     handler::common::{request::extract::Authentication, s3_error::S3Error},
 };
 use actix_web::HttpRequest;
-use data_types::{ApiKey, Versioned};
+use data_types::{ApiKey, TraceId, Versioned};
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 
@@ -20,17 +20,18 @@ pub async fn check_signature(
     app: Arc<AppState>,
     request: &HttpRequest,
     auth: Option<&Authentication>,
+    trace_id: TraceId,
 ) -> Result<Versioned<ApiKey>, S3Error> {
     let allow_missing_or_bad_signature = app.config.allow_missing_or_bad_signature;
     debug!(%allow_missing_or_bad_signature, ?auth, "starting signature verification");
 
     if let Some(auth) = auth {
-        match payload::check_signature_impl(app.clone(), auth, request).await {
+        match payload::check_signature_impl(app.clone(), auth, request, trace_id).await {
             Ok(verified) => Ok(verified),
             Err(e) => {
                 if allow_missing_or_bad_signature {
                     warn!(?auth, error = ?e, "allowed bad signature");
-                    app.get_test_api_key()
+                    app.get_test_api_key(trace_id)
                         .await
                         .map_err(|_| S3Error::InvalidAccessKeyId)
                 } else {
@@ -41,7 +42,7 @@ pub async fn check_signature(
         }
     } else if allow_missing_or_bad_signature {
         warn!("allowing anonymous access");
-        app.get_test_api_key()
+        app.get_test_api_key(trace_id)
             .await
             .map_err(|_| S3Error::InvalidAccessKeyId)
     } else {
