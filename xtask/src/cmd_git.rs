@@ -114,7 +114,7 @@ fn show_repos_status() -> CmdResult {
             let status = if repo_has_changes(path) {
                 "modified"
             } else if repo_has_unpushed_commits(path) {
-                "uncommitted"
+                "committed"
             } else {
                 "clean"
             };
@@ -140,7 +140,7 @@ fn show_repos_status() -> CmdResult {
             let status = if repo_has_changes(path) {
                 "modified"
             } else if repo_has_unpushed_commits(path) {
-                "uncommitted"
+                "committed"
             } else {
                 "clean"
             };
@@ -156,7 +156,7 @@ fn show_repos_status() -> CmdResult {
         let status_cell = match status {
             "clean" => Cell::new(status).fg(Color::Green),
             "modified" => Cell::new(status).fg(Color::Cyan),
-            "uncommitted" => Cell::new(status).fg(Color::Yellow),
+            "committed" => Cell::new(status).fg(Color::Yellow),
             _ => Cell::new(status),
         };
 
