@@ -1,5 +1,6 @@
 use super::common::*;
 use cmd_lib::*;
+use rayon::prelude::*;
 use std::io::Error;
 
 const BLOB_DRAM_MEM_PERCENT: f64 = 0.8;
@@ -203,12 +204,21 @@ pub fn format_nss(ebs_dev: String) -> CmdResult {
 
     run_cmd! {
         info "Creating directories for nss_server";
-        mkdir -p /data/local/stats
+        mkdir -p /data/local/stats;
+        mkdir -p /data/local/meta_cache/blobs;
     }?;
 
-    for i in 0..NSS_META_CACHE_SHARDS {
-        run_cmd!(mkdir -p /data/local/meta_cache/blobs/$i)?;
-    }
+    info!(
+        "Creating {} meta cache shard directories in parallel",
+        NSS_META_CACHE_SHARDS
+    );
+    let shards: Vec<usize> = (0..NSS_META_CACHE_SHARDS).collect();
+    shards.par_iter().try_for_each(|&i| {
+        let shard_dir = format!("/data/local/meta_cache/blobs/{}", i);
+        std::fs::create_dir(&shard_dir)
+            .map_err(|e| Error::other(format!("Failed to create {}: {}", shard_dir, e)))
+    })?;
+
     run_cmd! {
         info "Syncing file system changes";
         sync;

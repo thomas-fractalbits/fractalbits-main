@@ -12,3 +12,4 @@ strum.workspace = true
 xtask_tools.workspace = true
 chrono.workspace = true
 serde_json.workspace = true
+rayon.workspace = true

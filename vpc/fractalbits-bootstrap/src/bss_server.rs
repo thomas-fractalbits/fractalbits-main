@@ -1,6 +1,9 @@
 use super::common::*;
 use cmd_lib::*;
+use rayon::prelude::*;
+use std::fs;
 use std::io::Error;
+use std::thread;
 
 const BSS_DATA_VOLUME_SHARDS: usize = 65536;
 const BSS_METADATA_VOLUME_SHARDS: usize = 256;
@@ -61,13 +64,16 @@ fn setup_volume_directories() -> CmdResult {
     let instance_id = get_instance_id()?;
     info!("BSS instance ID: {}", instance_id);
 
-    match wait_for_volume_configs() {
+    info!("Pre-creating volume directories in parallel");
+    let precreate_handle = thread::spawn(precreate_pending_volume_directories);
+
+    let assignments = match wait_for_volume_configs() {
         Ok(()) => match get_volume_assignments(&instance_id) {
             Ok(assignments) => {
                 info!("Volume assignments for {}: {:?}", instance_id, assignments);
 
                 if assignments.has_assignments() {
-                    create_assigned_volume_directories(&assignments)?;
+                    assignments
                 } else {
                     cmd_die!("No volume assignments found for $instance_id");
                 }
@@ -79,8 +85,13 @@ fn setup_volume_directories() -> CmdResult {
         Err(e) => {
             cmd_die!("Get volume assignments failed: $e");
         }
-    }
+    };
 
+    precreate_handle
+        .join()
+        .map_err(|_| Error::other("Pre-create thread panicked"))??;
+
+    rename_pending_to_actual(&assignments)?;
     Ok(())
 }
 
@@ -196,33 +207,62 @@ fn find_volume_for_instance(config_json: &str, instance_id: &str) -> Result<Opti
     Ok(None)
 }
 
-fn create_assigned_volume_directories(assignments: &VolumeAssignments) -> CmdResult {
-    if let Some(vol_id) = assignments.data_volume {
-        create_volume_directories(VolumeType::Data, vol_id)?;
-    } else {
-        warn!("No data volume assigned");
-    }
+fn precreate_pending_volume_directories() -> CmdResult {
+    let data_handle = thread::spawn(|| create_pending_volume_directories(VolumeType::Data));
+    let metadata_handle = thread::spawn(|| create_pending_volume_directories(VolumeType::Metadata));
 
-    if let Some(vol_id) = assignments.metadata_volume {
-        create_volume_directories(VolumeType::Metadata, vol_id)?;
-    } else {
-        warn!("No metadata volume assigned");
-    }
+    data_handle
+        .join()
+        .map_err(|_| Error::other("Data volume creation thread panicked"))??;
+    metadata_handle
+        .join()
+        .map_err(|_| Error::other("Metadata volume creation thread panicked"))??;
 
     Ok(())
 }
 
-fn create_volume_directories(volume_type: VolumeType, volume_id: usize) -> CmdResult {
+fn create_pending_volume_directories(volume_type: VolumeType) -> CmdResult {
     let type_str = volume_type.as_str();
-    info!("Creating {type_str} volume {volume_id} directories");
+    let base_dir = format!("/data/local/blobs/{}_volume_pending", type_str);
 
-    let base_dir = format!("/data/local/blobs/{type_str}_volume{volume_id}");
-    run_cmd!(mkdir -p $base_dir)?;
+    info!("Creating pending {type_str} volume directories");
+    fs::create_dir_all(&base_dir)
+        .map_err(|e| Error::other(format!("Failed to create {base_dir}: {e}")))?;
 
-    for i in 0..volume_type.shard_count() {
-        run_cmd!(mkdir -p $base_dir/$i)?;
+    let shard_count = volume_type.shard_count();
+    let shards: Vec<usize> = (0..shard_count).collect();
+
+    shards.par_iter().try_for_each(|&i| {
+        let shard_dir = format!("{}/{}", base_dir, i);
+        fs::create_dir(&shard_dir)
+            .map_err(|e| Error::other(format!("Failed to create {shard_dir}: {e}")))
+    })?;
+
+    info!("Created {shard_count} pending {type_str} volume directories");
+    Ok(())
+}
+
+fn rename_pending_to_actual(assignments: &VolumeAssignments) -> CmdResult {
+    if let Some(vol_id) = assignments.data_volume {
+        let pending_dir = "/data/local/blobs/data_volume_pending";
+        let actual_dir = format!("/data/local/blobs/data_volume{}", vol_id);
+        info!("Renaming {pending_dir} to {actual_dir}");
+        fs::rename(pending_dir, &actual_dir)
+            .map_err(|e| Error::other(format!("Failed to rename data volume: {}", e)))?;
     }
 
-    info!("Creating {type_str} volume {volume_id} directories done");
+    if let Some(vol_id) = assignments.metadata_volume {
+        let pending_dir = "/data/local/blobs/metadata_volume_pending";
+        let actual_dir = format!("/data/local/blobs/metadata_volume{}", vol_id);
+        info!("Renaming {pending_dir} to {actual_dir}");
+        fs::rename(pending_dir, &actual_dir)
+            .map_err(|e| Error::other(format!("Failed to rename metadata volume: {}", e)))?;
+    }
+
+    run_cmd! {
+        info "Syncing filesystem";
+        sync;
+    }?;
+
     Ok(())
 }
