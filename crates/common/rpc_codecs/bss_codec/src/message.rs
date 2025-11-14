@@ -5,7 +5,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use data_types::TraceId;
 use rpc_codec_common::MessageHeaderTrait;
 use std::mem::size_of;
-use xxhash_rust::xxh3::Xxh3;
+use xxhash_rust::xxh3::{Xxh3, xxh3_64};
 
 /// XXH3-64 hash of an empty buffer (seed=0)
 /// This is the correct checksum value for empty message bodies
@@ -34,9 +34,6 @@ pub struct MessageHeader {
     /// Every request would be sent with a unique id, so the client can get the right response
     pub id: u32,
 
-    /// Trace ID for distributed tracing
-    pub trace_id: u128,
-
     /// Bucket Id
     pub bucket_id: [u8; 16],
 
@@ -47,15 +44,17 @@ pub struct MessageHeader {
     pub version: u64,
     /// The bss block number
     pub block_number: u32,
+    /// Content (body) length
+    pub content_len: u32,
+
+    /// Trace ID for distributed tracing
+    pub trace_id: u64,
     /// Errno which can be converted into `std::io::Error`(`from_raw_os_error()`)
     pub errno: i32,
-
-    /// Content length (body)
-    pub content_len: u32,
     /// Flag to indicate if this is a new metadata blob (vs update)
     pub is_new: u8,
     /// Reserved parts for padding
-    reserved: [u8; 27],
+    reserved: [u8; 3],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -104,13 +103,13 @@ impl Default for MessageHeader {
             volume_id: 0,
             retry_count: 0,
             is_new: 0,
-            reserved: [0u8; 27],
+            reserved: [0u8; 3],
         }
     }
 }
 
 impl MessageHeader {
-    const _SIZE_OK: () = assert!(size_of::<Self>() == 128);
+    const _SIZE_OK: () = assert!(size_of::<Self>() == 96);
     pub const SIZE: usize = size_of::<Self>();
     pub const PROTO_VERSION: u32 = 1;
 
@@ -134,7 +133,7 @@ impl MessageHeader {
     /// Calculate and set the body checksum field.
     /// The checksum covers the message body after this header.
     pub fn set_body_checksum(&mut self, body: &[u8]) {
-        self.checksum_body = xxhash_rust::xxh3::xxh3_64(body);
+        self.checksum_body = xxh3_64(body);
     }
 
     /// Calculate and set the body checksum field for vectored I/O.
@@ -151,7 +150,7 @@ impl MessageHeader {
     /// Verify that the body checksum field matches the calculated checksum.
     /// Returns true if valid, false otherwise.
     pub fn verify_body_checksum(&self, body: &[u8]) -> bool {
-        let calculated = xxhash_rust::xxh3::xxh3_64(body);
+        let calculated = xxh3_64(body);
         self.checksum_body == calculated
     }
 }
@@ -209,7 +208,7 @@ impl MessageHeaderTrait for MessageHeader {
         let checksum_offset = std::mem::offset_of!(MessageHeader, checksum);
         let bytes_to_hash = &header_bytes[checksum_offset + size_of::<u64>()..Self::SIZE];
 
-        self.checksum = xxhash_rust::xxh3::xxh3_64(bytes_to_hash);
+        self.checksum = xxh3_64(bytes_to_hash);
     }
 
     fn set_body_checksum(&mut self, body: &[u8]) {

@@ -28,7 +28,7 @@ where
     /// Number of retry attempts for this request (0 = first attempt)
     pub retry_count: u8,
     /// Reserved for future use
-    reserved: u16,
+    _reserved0: u16,
     /// The size of the Header structure, plus any associated body.
     pub size: u32,
 
@@ -41,7 +41,8 @@ where
     pub command: Command,
 
     /// Trace ID for distributed tracing
-    pub trace_id: u128,
+    pub trace_id: u64,
+    pub _reserved1: u64,
 }
 
 // Safety: ProtobufMessageHeader has the same layout requirements as its fields.

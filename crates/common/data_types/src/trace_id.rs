@@ -1,38 +1,43 @@
 use std::fmt;
-use uuid::Uuid;
+use rand::Rng;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TraceId(pub u128);
+pub struct TraceId(pub u64);
 
 impl TraceId {
     pub fn new() -> Self {
-        Self(Uuid::now_v7().as_u128())
+        Self::new_with_worker_id(0xff)
     }
 
-    pub fn as_u128(&self) -> u128 {
+    pub fn new_with_worker_id(worker_id: u8) -> Self {
+        let mut rng = rand::thread_rng();
+        let random_value: u64 = rng.r#gen();
+        let trace_id = (random_value & 0xFFFFFFFFFFFFFF00) | (worker_id as u64);
+        Self(trace_id)
+    }
+
+    pub fn as_u64(&self) -> u64 {
         self.0
     }
-}
 
-impl Default for TraceId {
-    fn default() -> Self {
-        Self::new()
+    pub fn worker_id(&self) -> u8 {
+        (self.0 & 0xFF) as u8
     }
 }
 
 impl fmt::Display for TraceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:032x}", self.0)
+        write!(f, "{:016x}", self.0)
     }
 }
 
-impl From<u128> for TraceId {
-    fn from(id: u128) -> Self {
+impl From<u64> for TraceId {
+    fn from(id: u64) -> Self {
         Self(id)
     }
 }
 
-impl From<TraceId> for u128 {
+impl From<TraceId> for u64 {
     fn from(trace_id: TraceId) -> Self {
         trace_id.0
     }

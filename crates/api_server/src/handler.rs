@@ -131,7 +131,13 @@ macro_rules! extract_or_return {
 
 pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpResponse, S3Error> {
     let start = Instant::now();
-    let trace_id = TraceId::new();
+
+    let app_data = req
+        .app_data::<web::Data<Arc<AppState>>>()
+        .ok_or(S3Error::InternalError)?;
+    let app = app_data.get_ref().clone();
+
+    let trace_id = TraceId::new_with_worker_id(app_data.worker_id as u8);
 
     // Extract all the required data using the macro
     let ApiCommandFromQuery(api_cmd) = extract_or_return!(ApiCommandFromQuery, &req, trace_id);
@@ -149,11 +155,6 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
 
     debug!(%trace_id, %bucket, %key, %client_addr);
 
-    let app_data = req
-        .app_data::<web::Data<Arc<AppState>>>()
-        .ok_or(S3Error::InternalError)?;
-    let app = app_data.get_ref().clone();
-
     let resource = format!("/{bucket}{key}");
     let endpoint = match Endpoint::from_extractors(&req, &bucket, &key, api_cmd, api_sig.0.clone())
     {
@@ -169,11 +170,7 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
     let gauge_guard = InflightRequestGuard::new(endpoint_name);
     let http_stats_guard = HttpStatsGuard::new(endpoint_name);
 
-    let span = tracing::info_span!(
-        "request",
-        trace_id = %trace_id,
-        worker_id = %app_data.worker_id,
-    );
+    let span = tracing::info_span!("", trace_id = %trace_id);
 
     let result = tokio::time::timeout(
         Duration::from_secs(app.config.http_request_timeout_seconds),
