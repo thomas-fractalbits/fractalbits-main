@@ -162,7 +162,7 @@ pub async fn any_handler(req: HttpRequest, payload: Payload) -> Result<HttpRespo
     {
         Err(e) => {
             let api_cmd = api_cmd.map_or("".into(), |cmd| cmd.to_string());
-            warn!(%api_cmd, %api_sig, %bucket, %key, %client_addr, error = ?e, "failed to create endpoint");
+            warn!(%trace_id, %api_cmd, %api_sig, %bucket, %key, %client_addr, error = ?e, "failed to create endpoint");
             return Ok(e.error_response_with_resource(&resource, trace_id));
         }
         Ok(endpoint) => endpoint,
