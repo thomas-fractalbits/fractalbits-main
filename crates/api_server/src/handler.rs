@@ -62,7 +62,7 @@ impl BucketRequestContext {
     }
 
     pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
-        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone(), &self.trace_id).await
+        bucket::resolve_bucket(&self.app, &self.bucket_name, &self.trace_id).await
     }
 }
 
@@ -105,7 +105,7 @@ impl ObjectRequestContext {
     }
 
     pub async fn resolve_bucket(&self) -> Result<Bucket, S3Error> {
-        bucket::resolve_bucket(self.app.clone(), self.bucket_name.clone(), &self.trace_id).await
+        bucket::resolve_bucket(&self.app, &self.bucket_name, &self.trace_id).await
     }
 }
 

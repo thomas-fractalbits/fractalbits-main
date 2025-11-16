@@ -267,8 +267,7 @@ async fn get_copy_source_object(
         return Err(S3Error::AccessDenied);
     }
 
-    let source_bucket =
-        bucket::resolve_bucket(app.clone(), source_bucket_name.clone(), &trace_id).await?;
+    let source_bucket = bucket::resolve_bucket(&app, &source_bucket_name, &trace_id).await?;
     let source_obj =
         get_raw_object(&app, &source_bucket.root_blob_name, &source_key, &trace_id).await?;
     let (source_obj_content, _) = get_object_content_as_bytes(

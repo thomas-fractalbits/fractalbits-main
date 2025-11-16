@@ -13,11 +13,11 @@ use crate::AppState;
 use data_types::{Bucket, TraceId};
 use metrics_wrapper::histogram;
 use rpc_client_common::RpcError;
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 pub async fn resolve_bucket(
-    app: Arc<AppState>,
-    bucket_name: String,
+    app: &AppState,
+    bucket_name: &str,
     trace_id: &TraceId,
 ) -> Result<Bucket, S3Error> {
     let start = Instant::now();

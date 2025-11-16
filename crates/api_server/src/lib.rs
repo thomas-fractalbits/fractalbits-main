@@ -257,7 +257,7 @@ impl AppState {
 impl AppState {
     pub async fn get_bucket(
         &self,
-        bucket_name: String,
+        bucket_name: &str,
         trace_id: &TraceId,
     ) -> Result<Versioned<Bucket>, RpcError> {
         let full_key = format!("bucket:{bucket_name}");
