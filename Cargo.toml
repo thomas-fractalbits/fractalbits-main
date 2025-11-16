@@ -14,6 +14,7 @@ exclude = [
     "crates/common/aws_signature/src",
     "crates/common/data_blob_tracking/src",
     "crates/common/data_types/src",
+    "crates/common/metrics_wrapper/src",
     "crates/common/rpc_clients/bss/src",
     "crates/common/rpc_clients/bss/tests",
     "crates/common/rpc_clients/client_common/src",
@@ -41,6 +42,7 @@ aws_signature = { path = "crates/common/aws_signature" }
 data_types = { path = "crates/common/data_types" }
 data_blob_tracking = { path = "crates/common/data_blob_tracking" }
 volume_group_proxy = { path = "crates/common/volume_group_proxy" }
+metrics_wrapper = { path = "crates/common/metrics_wrapper" }
 rpc_client_common = { path = "crates/common/rpc_clients/client_common" }
 rpc_client_bss = { path = "crates/common/rpc_clients/bss" }
 rpc_client_nss = { path = "crates/common/rpc_clients/nss" }

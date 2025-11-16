@@ -1,0 +1,11 @@
+[package]
+name = "metrics_wrapper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+metrics = { version = "0.24", optional = true }
+
+[features]
+default = []
+metrics = ["dep:metrics"]

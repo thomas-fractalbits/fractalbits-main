@@ -22,7 +22,9 @@ use delete::DeleteEndpoint;
 use endpoint::Endpoint;
 use get::GetEndpoint;
 use head::HeadEndpoint;
-use metrics::{Gauge, counter, gauge, histogram};
+#[cfg(any(feature = "metrics_statsd", feature = "metrics_prometheus"))]
+use metrics_wrapper::{Gauge, gauge};
+use metrics_wrapper::{counter, histogram};
 use post::PostEndpoint;
 use put::PutEndpoint;
 use std::{
@@ -364,10 +366,20 @@ async fn delete_handler(
     }
 }
 
+#[cfg(feature = "metrics_statsd")]
 struct InflightRequestGuard {
     gauge: Gauge,
 }
 
+#[cfg(feature = "metrics_prometheus")]
+struct InflightRequestGuard {
+    gauge: Gauge,
+}
+
+#[cfg(not(any(feature = "metrics_statsd", feature = "metrics_prometheus")))]
+struct InflightRequestGuard;
+
+#[cfg(any(feature = "metrics_statsd", feature = "metrics_prometheus"))]
 impl InflightRequestGuard {
     fn new(endpoint_name: &'static str) -> Self {
         let gauge = gauge!("inflight_request", "endpoint" => endpoint_name);
@@ -376,8 +388,23 @@ impl InflightRequestGuard {
     }
 }
 
+#[cfg(not(any(feature = "metrics_statsd", feature = "metrics_prometheus")))]
+impl InflightRequestGuard {
+    #[inline(always)]
+    fn new(_endpoint_name: &'static str) -> Self {
+        Self
+    }
+}
+
+#[cfg(any(feature = "metrics_statsd", feature = "metrics_prometheus"))]
 impl Drop for InflightRequestGuard {
     fn drop(&mut self) {
         self.gauge.decrement(1.0);
     }
+}
+
+#[cfg(not(any(feature = "metrics_statsd", feature = "metrics_prometheus")))]
+impl Drop for InflightRequestGuard {
+    #[inline(always)]
+    fn drop(&mut self) {}
 }

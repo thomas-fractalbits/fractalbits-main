@@ -1,6 +1,6 @@
 use crate::RpcError;
 use bytes::Bytes;
-use metrics::{counter, gauge};
+use metrics_wrapper::{counter, gauge};
 use parking_lot::Mutex;
 use rpc_codec_common::{MessageFrame, MessageHeaderTrait};
 use socket2::{Socket, TcpKeepalive};
