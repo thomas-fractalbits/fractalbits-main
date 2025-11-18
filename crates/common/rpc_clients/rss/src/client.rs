@@ -5,8 +5,8 @@ pub struct RpcClient {
 }
 
 impl RpcClient {
-    pub fn new_from_address(address: String) -> Self {
-        let inner = AutoReconnectRpcClient::new_from_address(address);
+    pub fn new_from_addresses(addresses: Vec<String>) -> Self {
+        let inner = AutoReconnectRpcClient::new_from_addresses(addresses);
         Self { inner }
     }
 

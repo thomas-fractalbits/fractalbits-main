@@ -30,7 +30,7 @@ pub fn bootstrap(
     meta_stack_testing: bool,
     for_bench: bool,
     mirrord_endpoint: Option<&str>,
-    rss_endpoint: &str,
+    rss_ha_enabled: bool,
 ) -> CmdResult {
     install_rpms(&["nvme-cli", "mdadm"])?;
     if meta_stack_testing || for_bench {
@@ -38,7 +38,7 @@ pub fn bootstrap(
     }
     format_local_nvme_disks(false)?;
     download_binaries(&["nss_server", "nss_role_agent"])?;
-    setup_configs(volume_id, "nss", mirrord_endpoint, rss_endpoint)?;
+    setup_configs(volume_id, "nss", mirrord_endpoint, rss_ha_enabled)?;
 
     // Note for normal deployment, the nss_server service is not started
     // until EBS/nss formatted from root_server
@@ -53,7 +53,7 @@ fn setup_configs(
     volume_id: &str,
     service_name: &str,
     mirrord_endpoint: Option<&str>,
-    rss_endpoint: &str,
+    rss_ha_enabled: bool,
 ) -> CmdResult {
     let volume_dev = get_volume_dev(volume_id);
     create_nss_config(&volume_dev)?;
@@ -61,7 +61,7 @@ fn setup_configs(
     create_mount_unit(&volume_dev, "/data/ebs", "ext4")?;
     create_ebs_udev_rule(volume_id, "nss_role_agent")?;
     create_coredump_config()?;
-    create_nss_role_agent_config(mirrord_endpoint, rss_endpoint)?;
+    create_nss_role_agent_config(mirrord_endpoint, rss_ha_enabled)?;
     create_systemd_unit_file("nss_role_agent", false)?;
     create_systemd_unit_file("mirrord", false)?;
     create_systemd_unit_file(service_name, false)?;
@@ -131,8 +131,17 @@ art_journal_segment_size = {art_journal_segment_size}
     Ok(())
 }
 
-fn create_nss_role_agent_config(mirrord_endpoint: Option<&str>, rss_endpoint: &str) -> CmdResult {
+fn create_nss_role_agent_config(mirrord_endpoint: Option<&str>, rss_ha_enabled: bool) -> CmdResult {
     let instance_id = get_instance_id()?;
+
+    // Query DDB for RSS instance IPs
+    let expected_rss_count = if rss_ha_enabled { 2 } else { 1 };
+    let rss_ips = get_service_ips("root-server", expected_rss_count);
+    let rss_addrs_toml = rss_ips
+        .iter()
+        .map(|ip| format!("\"{}:8088\"", ip))
+        .collect::<Vec<_>>()
+        .join(", ");
 
     let mirrord_configs = if let Some(mirrord_endpoint) = mirrord_endpoint {
         format!(
@@ -145,7 +154,7 @@ mirrord_port = 9999
         "".to_string()
     };
     let config_content = format!(
-        r##"rss_addr = "{rss_endpoint}:8088"
+        r##"rss_addrs = [{rss_addrs_toml}]
 rpc_timeout_seconds = 4
 heartbeat_interval_seconds = 10
 state_check_interval_seconds = 1

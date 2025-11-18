@@ -29,7 +29,6 @@ const WORKLOAD_CONFIGS: &[WorkloadConfig] = &[
 ];
 
 pub fn bootstrap(
-    rss_endpoint: String,
     api_server_endpoint: String,
     bench_client_num: usize,
 ) -> CmdResult {
@@ -72,16 +71,11 @@ pub fn bootstrap(
         )?;
     }
 
-    for (role, endpoint, port) in [
-        ("rss", rss_endpoint.as_str(), "8088"),
-        ("api_server", api_server_endpoint.as_str(), "80"),
-    ] {
-        info!("Waiting for {role} endpoint {endpoint} to be ready");
-        while run_cmd!(nc -z $endpoint $port &>/dev/null).is_err() {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-        info!("{role} endpoint can be reached (`nc -z {endpoint} {port}` is ok)");
+    info!("Waiting for api_server endpoint {} to be ready", api_server_endpoint);
+    while run_cmd!(nc -z $api_server_endpoint 80 &>/dev/null).is_err() {
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
+    info!("api_server endpoint can be reached (`nc -z {} 80` is ok)", api_server_endpoint);
 
     create_bench_start_script(&region, &api_server_endpoint)?;
 

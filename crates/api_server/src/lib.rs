@@ -76,7 +76,7 @@ impl AppState {
         debug!("Per-core AppState initialized with lazy BlobClient initialization");
 
         let rpc_client_nss = RpcClientNss::new_from_address(config.nss_addr.clone());
-        let rpc_client_rss = RpcClientRss::new_from_address(config.rss_addr.clone());
+        let rpc_client_rss = RpcClientRss::new_from_addresses(config.rss_addrs.clone());
 
         Self {
             config,
@@ -114,7 +114,7 @@ impl AppState {
                     .take()
                     .ok_or_else(|| "BlobClient already initialized".to_string())?;
 
-                debug!("Fetching DataVgInfo from RSS at {}", self.config.rss_addr);
+                debug!("Fetching DataVgInfo from RSS at {:?}", self.config.rss_addrs);
                 let rss_client = self.get_rss_rpc_client();
 
                 let data_vg_info = rss_client

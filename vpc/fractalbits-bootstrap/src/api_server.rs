@@ -3,12 +3,12 @@ use crate::*;
 pub fn bootstrap(
     bucket: Option<&str>,
     nss_endpoint: &str,
-    rss_endpoint: &str,
     remote_az: Option<&str>,
+    rss_ha_enabled: bool,
     for_bench: bool,
 ) -> CmdResult {
     download_binaries(&["api_server"])?;
-    create_config(bucket, nss_endpoint, rss_endpoint, remote_az)?;
+    create_config(bucket, nss_endpoint, remote_az, rss_ha_enabled)?;
 
     info!("Creating directories for api_server");
     run_cmd!(mkdir -p "/data/local/stats")?;
@@ -30,11 +30,21 @@ pub fn bootstrap(
 pub fn create_config(
     bucket: Option<&str>,
     nss_endpoint: &str,
-    rss_endpoint: &str,
     remote_az: Option<&str>,
+    rss_ha_enabled: bool,
 ) -> CmdResult {
     let aws_region = get_current_aws_region()?;
     let num_cores = num_cpus()?;
+
+    // Query DDB for RSS instance IPs
+    let expected_rss_count = if rss_ha_enabled { 2 } else { 1 };
+    let rss_ips = get_service_ips("root-server", expected_rss_count);
+    let rss_addrs_toml = rss_ips
+        .iter()
+        .map(|ip| format!("\"{}:8088\"", ip))
+        .collect::<Vec<_>>()
+        .join(", ");
+
     let config_content = if let Some(remote_az) = remote_az {
         // S3 Express Multi-AZ configuration
         let local_az = get_current_aws_az_id()?;
@@ -43,7 +53,7 @@ pub fn create_config(
 
         format!(
             r##"nss_addr = "{nss_endpoint}:8088"
-rss_addr = "{rss_endpoint}:8088"
+rss_addrs = [{rss_addrs_toml}]
 region = "{aws_region}"
 port = 80
 mgmt_port = 18088
@@ -99,7 +109,7 @@ backoff_multiplier = 1.0
             bucket.ok_or_else(|| std::io::Error::other("Bucket name required for hybrid mode"))?;
         format!(
             r##"nss_addr = "{nss_endpoint}:8088"
-rss_addr = "{rss_endpoint}:8088"
+rss_addrs = [{rss_addrs_toml}]
 region = "{aws_region}"
 port = 80
 mgmt_port = 18088

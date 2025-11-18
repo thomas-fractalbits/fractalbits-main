@@ -32,7 +32,7 @@ impl Default for DataBlobTracker {
 
 impl DataBlobTracker {
     pub fn new() -> Self {
-        let rss_client = RpcClientRss::new_from_address("localhost:9000".to_string());
+        let rss_client = RpcClientRss::new_from_addresses(vec!["localhost:9000".to_string()]);
         let nss_client = RpcClientNss::new_from_address("localhost:8000".to_string());
         Self {
             rss_client,
@@ -41,7 +41,7 @@ impl DataBlobTracker {
     }
 
     pub fn with_endpoints(rss_endpoint: String, nss_endpoint: String) -> Self {
-        let rss_client = RpcClientRss::new_from_address(rss_endpoint);
+        let rss_client = RpcClientRss::new_from_addresses(vec![rss_endpoint]);
         let nss_client = RpcClientNss::new_from_address(nss_endpoint);
         Self {
             rss_client,

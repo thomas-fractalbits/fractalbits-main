@@ -39,6 +39,7 @@ pub fn bootstrap(
     create_rss_config(nss_endpoint, ha_enabled)?;
     // setup_cloudwatch_agent()?;
     create_systemd_unit_file("rss", !ha_enabled || follower_id.is_some())?;
+    create_ddb_register_and_deregister_service("root-server")?;
 
     // Initialize NSS formatting and root server startup
     // Create S3 Express buckets if remote_az is provided

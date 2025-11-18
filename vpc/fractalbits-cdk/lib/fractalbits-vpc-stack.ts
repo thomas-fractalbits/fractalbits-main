@@ -331,36 +331,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
       );
     }
 
-    // NLB for RSS - always create (even in non-HA mode)
-    // In HA mode: use both rss-A and rss-B as targets
-    // In non-HA mode: use only rss-A as target
-    const rssNlb = new elbv2.NetworkLoadBalancer(this, "RssNlb", {
-      vpc: this.vpc,
-      internetFacing: false,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-      crossZoneEnabled: props.rootServerHa,
-    });
-    const rssListener = rssNlb.addListener("RssListener", {
-      port: servicePort,
-    });
-    const rssTargets = props.rootServerHa
-      ? [
-          new elbv2_targets.InstanceTarget(instances["rss-A"]),
-          new elbv2_targets.InstanceTarget(instances["rss-B"]),
-        ]
-      : [new elbv2_targets.InstanceTarget(instances["rss-A"])];
-    rssListener.addTargets("RssTargets", {
-      port: servicePort,
-      targets: rssTargets,
-      healthCheck: {
-        enabled: true,
-        healthyThresholdCount: 2,
-        unhealthyThresholdCount: 2,
-        interval: cdk.Duration.seconds(5),
-        timeout: cdk.Duration.seconds(2),
-      },
-    });
-
     // Only create mirrord for s3ExpressMultiAz mode
     let mirrordPrivateLink: any;
     if (dataBlobStorage === "s3ExpressMultiAz") {
@@ -379,24 +349,21 @@ export class FractalbitsVpcStack extends cdk.Stack {
         ? nssPrivateLink.endpointDns
         : `${instances["nss-A"].instancePrivateIp}`;
 
-    const rssEndpoint = rssNlb.loadBalancerDnsName;
-
     // Reusable function to create bootstrap options for api_server and gui_server
     const createApiServerBootstrapOptions = (serviceName: string) => {
+      const rssHaFlag = props.rootServerHa ? " --rss_ha_enabled" : "";
       if (dataBlobStorage === "s3ExpressMultiAz") {
         return (
           `${forBenchFlag} ${serviceName} ` +
           `--remote_az=${azPair[1]} ` +
-          `--nss_endpoint=${nssEndpoint} ` +
-          `--rss_endpoint=${rssEndpoint} `
+          `--nss_endpoint=${nssEndpoint}${rssHaFlag}`
         );
       } else {
         // Single-AZ: use direct NSS IP to avoid VPC endpoint latency
         return (
           `${forBenchFlag} ${serviceName} ` +
           `--bucket=${bucketName} ` +
-          `--nss_endpoint=${nssEndpoint} ` +
-          `--rss_endpoint=${rssEndpoint} `
+          `--nss_endpoint=${nssEndpoint}${rssHaFlag}`
         );
       }
     };
@@ -480,11 +447,13 @@ export class FractalbitsVpcStack extends cdk.Stack {
         `--bucket=${bucketName}`,
         `--volume_id=${volumeId}`,
         `--iam_role=${ec2Role.roleName}`,
-        `--rss_endpoint=${rssEndpoint}`,
       ];
       // Only add mirrord_endpoint for s3ExpressMultiAz mode
       if (dataBlobStorage === "s3ExpressMultiAz" && mirrordPrivateLink) {
         params.push(`--mirrord_endpoint=${mirrordPrivateLink.endpointDns}`);
+      }
+      if (props.rootServerHa) {
+        params.push("--rss_ha_enabled");
       }
       return params.filter((p) => p).join(" ");
     };
@@ -534,7 +503,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     if (props.benchType === "external") {
       instanceBootstrapOptions.push({
         id: "bench_server",
-        bootstrapOptions: `bench_server --rss_endpoint=${rssEndpoint} --api_server_endpoint=${nlb.loadBalancerDnsName} --bench_client_num=${props.numBenchClients} `,
+        bootstrapOptions: `bench_server --api_server_endpoint=${nlb.loadBalancerDnsName} --bench_client_num=${props.numBenchClients} `,
       });
     }
     if (props.browserIp) {
@@ -564,11 +533,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ApiNLBDnsName", {
       value: nlb.loadBalancerDnsName,
       description: "DNS name of the API NLB",
-    });
-
-    new cdk.CfnOutput(this, "RssEndpointDns", {
-      value: rssNlb.loadBalancerDnsName,
-      description: "NLB DNS for RSS service",
     });
 
     // Only output mirrord endpoint for s3ExpressMultiAz mode

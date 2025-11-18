@@ -66,7 +66,7 @@ where
     Header: MessageHeaderTrait + Clone + Send + Sync + 'static,
 {
     inner: RwLock<Option<Arc<GenericRpcClient<Codec, Header>>>>,
-    address: String,
+    addresses: Vec<String>,
     next_id: Arc<AtomicU32>,
 }
 
@@ -78,7 +78,15 @@ where
     pub fn new_from_address(address: String) -> Self {
         Self {
             inner: RwLock::new(None),
-            address,
+            addresses: vec![address],
+            next_id: Arc::new(AtomicU32::new(1)),
+        }
+    }
+
+    pub fn new_from_addresses(addresses: Vec<String>) -> Self {
+        Self {
+            inner: RwLock::new(None),
+            addresses,
             next_id: Arc::new(AtomicU32::new(1)),
         }
     }
@@ -101,30 +109,28 @@ where
             return Ok(());
         }
 
-        debug!(%rpc_type, address=%self.address, "Reconnecting to RPC server");
-        let new_client =
-            GenericRpcClient::<Codec, Header>::establish_connection(self.address.clone())
-                .await
-                .map_err(|e| {
-                    error!(
-                        rpc_type = Codec::RPC_TYPE,
-                        address = %self.address,
-                        error = %e,
-                        "Failed to establish RPC connection"
-                    );
-                    RpcError::ConnectionClosed
-                })?;
+        // Try all addresses
+        for address in &self.addresses {
+            debug!(%rpc_type, %address, "Trying to connect to RPC server");
+            match GenericRpcClient::<Codec, Header>::establish_connection(address.clone()).await {
+                Ok(new_client) => {
+                    debug!(%rpc_type, %address, "Successfully connected to RPC server");
+                    *write = Some(Arc::new(new_client));
+                    return Ok(());
+                }
+                Err(e) => {
+                    debug!(%rpc_type, %address, error=%e, "Failed to connect, trying next address");
+                    continue;
+                }
+            }
+        }
 
-        *write = Some(Arc::new(new_client));
-        Ok(())
+        error!(%rpc_type, addresses=?self.addresses, "Failed to establish RPC connection to any address");
+        Err(RpcError::ConnectionClosed)
     }
 
     pub fn gen_request_id(&self) -> u32 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
-    }
-
-    pub fn address(&self) -> &str {
-        &self.address
     }
 
     pub async fn send_request(
