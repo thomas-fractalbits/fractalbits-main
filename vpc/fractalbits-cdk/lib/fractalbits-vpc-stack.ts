@@ -3,6 +3,7 @@ import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
+import * as elbv2_targets from "aws-cdk-lib/aws-elasticloadbalancingv2-targets";
 import * as autoscaling from "aws-cdk-lib/aws-autoscaling";
 
 import {
@@ -330,19 +331,28 @@ export class FractalbitsVpcStack extends cdk.Stack {
       );
     }
 
-    // Create RSS PrivateLink (always, even in non-HA mode to avoid circular dependencies)
+    // NLB for RSS - always create (even in non-HA mode)
     // In HA mode: use both rss-A and rss-B as targets
     // In non-HA mode: use only rss-A as target
+    const rssNlb = new elbv2.NetworkLoadBalancer(this, "RssNlb", {
+      vpc: this.vpc,
+      internetFacing: false,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      crossZoneEnabled: props.rootServerHa,
+    });
+    const rssListener = rssNlb.addListener("RssListener", {
+      port: servicePort,
+    });
     const rssTargets = props.rootServerHa
-      ? [instances["rss-A"], instances["rss-B"]]
-      : [instances["rss-A"]];
-    const rssPrivateLink = createPrivateLinkNlb(
-      this,
-      "Rss",
-      this.vpc,
-      rssTargets,
-      servicePort,
-    );
+      ? [
+          new elbv2_targets.InstanceTarget(instances["rss-A"]),
+          new elbv2_targets.InstanceTarget(instances["rss-B"]),
+        ]
+      : [new elbv2_targets.InstanceTarget(instances["rss-A"])];
+    rssListener.addTargets("RssTargets", {
+      port: servicePort,
+      targets: rssTargets,
+    });
 
     // Only create mirrord for s3ExpressMultiAz mode
     let mirrordPrivateLink: any;
@@ -362,8 +372,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
         ? nssPrivateLink.endpointDns
         : `${instances["nss-A"].instancePrivateIp}`;
 
-    // Always use RSS PrivateLink endpoint (avoids circular dependency)
-    const rssEndpoint = rssPrivateLink.endpointDns;
+    const rssEndpoint = rssNlb.loadBalancerDnsName;
 
     // Reusable function to create bootstrap options for api_server and gui_server
     const createApiServerBootstrapOptions = (serviceName: string) => {
@@ -371,7 +380,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
         return (
           `${forBenchFlag} ${serviceName} ` +
           `--remote_az=${azPair[1]} ` +
-          `--nss_endpoint=${nssPrivateLink.endpointDns} ` +
+          `--nss_endpoint=${nssEndpoint} ` +
           `--rss_endpoint=${rssEndpoint} `
         );
       } else {
@@ -417,9 +426,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       crossZoneEnabled: dataBlobStorage === "s3ExpressMultiAz", // Only enable cross-zone for multi-AZ
     });
-
     const listener = nlb.addListener("ApiListener", { port: 80 });
-
     listener.addTargets("ApiTargets", {
       port: 80,
       targets: [apiServerAsg],
@@ -545,10 +552,9 @@ export class FractalbitsVpcStack extends cdk.Stack {
       description: "DNS name of the API NLB",
     });
 
-    // RSS endpoint output - always use PrivateLink
     new cdk.CfnOutput(this, "RssEndpointDns", {
-      value: rssPrivateLink.endpointDns,
-      description: "VPC Endpoint DNS for RSS service",
+      value: rssNlb.loadBalancerDnsName,
+      description: "NLB DNS for RSS service",
     });
 
     // Only output mirrord endpoint for s3ExpressMultiAz mode
@@ -556,19 +562,6 @@ export class FractalbitsVpcStack extends cdk.Stack {
       new cdk.CfnOutput(this, "MirrordEndpointDns", {
         value: mirrordPrivateLink.endpointDns,
         description: "VPC Endpoint DNS for Mirrord service",
-      });
-    }
-
-    // NSS endpoint output - conditional based on mode
-    if (dataBlobStorage === "s3ExpressMultiAz") {
-      new cdk.CfnOutput(this, "NssEndpointDns", {
-        value: nssPrivateLink.endpointDns,
-        description: "VPC Endpoint DNS for NSS service",
-      });
-    } else {
-      new cdk.CfnOutput(this, "NssPrivateIp", {
-        value: instances["nss-A"].instancePrivateIp,
-        description: "Private IP of NSS-A instance (direct connection)",
       });
     }
 

@@ -184,8 +184,8 @@ pub fn format_nss(ebs_dev: String) -> CmdResult {
         info "Disabling udev rules for EBS";
         ln -sf /dev/null /etc/udev/rules.d/99-ebs.rules;
 
-        info "Formatting $ebs_dev to ext4 file system (${EXT4_MKFS_OPTS:?})";
-        mkfs.ext4 $[EXT4_MKFS_OPTS] $ebs_dev;
+        info "Formatting $ebs_dev to ext4 file system";
+        mkfs.ext4 -O bigalloc -C 16384 $ebs_dev &>/dev/null;
 
         info "Mounting $ebs_dev to /data/ebs";
         mkdir -p /data/ebs;

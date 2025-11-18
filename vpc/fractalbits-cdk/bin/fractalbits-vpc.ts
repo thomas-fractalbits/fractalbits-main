@@ -3,9 +3,6 @@ import * as cdk from "aws-cdk-lib";
 import { FractalbitsVpcStack } from "../lib/fractalbits-vpc-stack";
 import { FractalbitsBenchVpcStack } from "../lib/fractalbits-bench-vpc-stack";
 import { PeeringStack } from "../lib/fractalbits-peering-stack";
-import { FractalbitsMetaStack } from "../lib/fractalbits-meta-stack";
-import { VpcWithPrivateLinkStack } from "../lib/vpc-with-private-link-stack";
-import { S3ExpressCrossAzTestStack } from "../lib/s3express-cross-az-test-stack";
 
 const app = new cdk.App();
 
@@ -75,32 +72,3 @@ if (benchType === "service_endpoint") {
     env: env,
   });
 }
-
-// === meta stack ===
-const nssInstanceType = app.node.tryGetContext("nssInstanceType") ?? null;
-new FractalbitsMetaStack(app, "FractalbitsMetaStack-Nss", {
-  serviceName: "nss",
-  nssInstanceType: nssInstanceType,
-});
-
-new FractalbitsMetaStack(app, "FractalbitsMetaStack-Bss", {
-  serviceName: "bss",
-  bssInstanceTypes: bssInstanceTypes,
-});
-
-// === VpcWithPrivateLinkStack ===
-new VpcWithPrivateLinkStack(app, "VpcWithPrivateLinkStack", {
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: "us-east-2",
-  },
-});
-
-// === S3ExpressCrossAzTestStack ===
-new S3ExpressCrossAzTestStack(app, "S3ExpressCrossAzTestStack", {
-  env: {
-    account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: "us-east-2",
-  },
-  targetAz: "use2-az1",
-});

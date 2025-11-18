@@ -13,7 +13,6 @@ pub const ROOT_SERVER_CONFIG: &str = "root_server_cloud_config.toml";
 pub const NSS_ROLE_AGENT_CONFIG: &str = "nss_role_agent_cloud_config.toml";
 pub const BENCH_SERVER_BENCH_START_SCRIPT: &str = "bench_start.sh";
 pub const BOOTSTRAP_DONE_FILE: &str = "/opt/fractalbits/.bootstrap_done";
-pub const STATS_LOGROTATE_CONFIG: &str = "/etc/logrotate.d/stats_logs";
 pub const DDB_SERVICE_DISCOVERY_TABLE: &str = "fractalbits-service-discovery";
 pub const NETWORK_TUNING_SYS_CONFIG: &str = "99-network-tuning.conf";
 pub const STORAGE_TUNING_SYS_CONFIG: &str = "99-storage-tuning.conf";
@@ -27,7 +26,6 @@ pub const AZ_STATUS_KEY: &str = "az_status";
 #[allow(dead_code)]
 pub const CLOUDWATCH_AGENT_CONFIG: &str = "cloudwatch_agent_config.json";
 pub const CLOUD_INIT_LOG: &str = "/var/log/cloud-init-output.log";
-pub const EXT4_MKFS_OPTS: [&str; 4] = ["-O", "bigalloc", "-C", "16384"];
 pub const S3EXPRESS_LOCAL_BUCKET_CONFIG: &str = "s3express-local-bucket-config.json";
 pub const S3EXPRESS_REMOTE_BUCKET_CONFIG: &str = "s3express-remote-bucket-config.json";
 
@@ -35,7 +33,7 @@ pub fn common_setup() -> CmdResult {
     create_network_tuning_sysctl_file()?;
     create_storage_tuning_sysctl_file()?;
     install_rpms(&["amazon-cloudwatch-agent", "nmap-ncat", "perf", "lldb"])?;
-    setup_serial_console_password()?;
+    // setup_serial_console_password()?;
     Ok(())
 }
 
@@ -194,6 +192,7 @@ WantedBy=multi-user.target
 }
 
 pub fn create_logrotate_for_stats() -> CmdResult {
+    let file = "stats_logs";
     let rotate_config_content = r##"/data/local/stats/*.stats {
     size 50M
     rotate 10
@@ -206,7 +205,9 @@ pub fn create_logrotate_for_stats() -> CmdResult {
 
     run_cmd! {
         info "Enabling stats log rotate";
-        echo $rotate_config_content > ${STATS_LOGROTATE_CONFIG};
+        mkdir -p $ETC_PATH;
+        echo $rotate_config_content > ${ETC_PATH}${file};
+        ln -sf ${ETC_PATH}${file} /etc/logrotate.d;
     }?;
 
     Ok(())
@@ -348,13 +349,18 @@ pub fn format_local_nvme_disks(support_storage_twp: bool) -> CmdResult {
             "ext4" => {
                 run_cmd! {
                     info "Creating ext4 on local nvme disks: ${nvme_disks:?}";
-                    mkfs.ext4 -q -I 128 -m 0 -i 8192 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0 -O dir_index,extent,flex_bg,fast_commit $[nvme_disks];
+                    mkfs.ext4 -I 128 -m 0 -i 8192 -J size=4096
+                        -E lazy_itable_init=0,lazy_journal_init=0
+                        -O dir_index,extent,flex_bg,fast_commit $[nvme_disks] &>/dev/null;
                 }?;
             }
             "xfs" => {
                 run_cmd! {
                     info "Creating XFS on local nvme disks: ${nvme_disks:?} with metadata optimizations";
-                    mkfs.xfs -f -q -b size=8192 -d agcount=64 -i size=512,sparse=1 -l size=1024m,lazy-count=1 -n size=8192 $[nvme_disks];
+                    mkfs.xfs -f -q -b size=8192 -d agcount=64
+                        -i size=512,sparse=1
+                        -l size=1024m,lazy-count=1
+                        -n size=8192 $[nvme_disks];
                 }?;
             }
             _ => {
@@ -400,13 +406,18 @@ pub fn format_local_nvme_disks(support_storage_twp: bool) -> CmdResult {
             let stripe_width = num_nvme_disks * 128;
             run_cmd! {
                 info "Creating ext4 on /dev/md0";
-                mkfs.ext4 -q -I 128 -m 0 -i 8192 -J size=4096 -E lazy_itable_init=0,lazy_journal_init=0,stride=128,stripe_width=${stripe_width} -O dir_index,extent,flex_bg,fast_commit /dev/md0;
+                mkfs.ext4 -I 128 -m 0 -i 8192 -J size=4096
+                    -E lazy_itable_init=0,lazy_journal_init=0,stride=128,stripe_width=${stripe_width}
+                    -O dir_index,extent,flex_bg,fast_commit /dev/md0 &>/dev/null;
             }?;
         }
         "xfs" => {
             run_cmd! {
                 info "Creating XFS on /dev/md0 with metadata optimizations";
-                mkfs.xfs -q -b size=8192 -d agcount=64,su=1m,sw=1 -i size=512,sparse=1 -l size=1024m,lazy-count=1 -n size=8192 /dev/md0;
+                mkfs.xfs -q -b size=8192 -d agcount=64,su=1m,sw=1
+                    -i size=512,sparse=1
+                    -l size=1024m,lazy-count=1
+                    -n size=8192 /dev/md0;
             }?;
         }
         _ => {
@@ -480,9 +491,10 @@ pub fn create_coredump_config() -> CmdResult {
     run_cmd! {
         info "Setting up coredump location ($cores_location)";
         mkdir -p $cores_location;
+        mkdir -p $ETC_PATH;
         echo $content > ${ETC_PATH}${file};
         ln -sf ${ETC_PATH}${file} /etc/sysctl.d;
-        sysctl -p /etc/sysctl.d/${file};
+        sysctl -p /etc/sysctl.d/${file} >/dev/null;
     }
 }
 

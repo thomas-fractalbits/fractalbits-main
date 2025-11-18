@@ -8,15 +8,6 @@ pub fn bootstrap(
     for_bench: bool,
 ) -> CmdResult {
     download_binaries(&["api_server"])?;
-
-    for (role, endpoint) in [("rss", rss_endpoint), ("nss", nss_endpoint)] {
-        info!("Waiting for {role} node {endpoint} to be ready");
-        while run_cmd!(nc -z $endpoint 8088 &>/dev/null).is_err() {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-        info!("{role} node can be reached (`nc -z {endpoint} 8088` is ok)");
-    }
-
     create_config(bucket, nss_endpoint, rss_endpoint, remote_az)?;
 
     info!("Creating directories for api_server");
