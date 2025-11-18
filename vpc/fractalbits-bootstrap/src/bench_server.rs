@@ -6,6 +6,28 @@ use super::common::*;
 use cmd_lib::*;
 use {yaml_get::*, yaml_mixed::*, yaml_put::*};
 
+struct WorkloadConfig {
+    size_kb: usize,
+    put_concurrent_ops: usize,
+    get_concurrent_ops: usize,
+    mixed_concurrent_ops: usize,
+}
+
+const WORKLOAD_CONFIGS: &[WorkloadConfig] = &[
+    WorkloadConfig {
+        size_kb: 4,
+        put_concurrent_ops: 48,
+        get_concurrent_ops: 96,
+        mixed_concurrent_ops: 72,
+    },
+    WorkloadConfig {
+        size_kb: 64,
+        put_concurrent_ops: 12,
+        get_concurrent_ops: 12,
+        mixed_concurrent_ops: 12,
+    },
+];
+
 pub fn bootstrap(api_server_endpoint: String, bench_client_num: usize) -> CmdResult {
     install_rpms(&["nmap-ncat"])?;
     download_binaries(&["warp"])?;
@@ -19,30 +41,30 @@ pub fn bootstrap(api_server_endpoint: String, bench_client_num: usize) -> CmdRes
         warp_client_ips.push_str(&format!("  - {ip}:7761\n"));
     }
 
-    for (size_kb, concurrent_ops) in [(4, 96), (64, 12)] {
+    for config in WORKLOAD_CONFIGS {
         create_put_workload_config(
             &warp_client_ips,
             &region,
             &api_server_endpoint,
             "2m",
-            size_kb,
-            concurrent_ops / 2,
+            config.size_kb,
+            config.put_concurrent_ops,
         )?;
         create_get_workload_config(
             &warp_client_ips,
             &region,
             &api_server_endpoint,
             "2m",
-            size_kb,
-            concurrent_ops,
+            config.size_kb,
+            config.get_concurrent_ops,
         )?;
         create_mixed_workload_config(
             &warp_client_ips,
             &region,
             &api_server_endpoint,
             "2m",
-            size_kb,
-            2 * concurrent_ops / 3,
+            config.size_kb,
+            config.mixed_concurrent_ops,
         )?;
     }
 
