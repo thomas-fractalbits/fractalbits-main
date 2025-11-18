@@ -145,6 +145,9 @@ enum Command {
 
     #[clap(about = "Run on bench_server instance to benchmark fractalbits service(s)")]
     BenchServer {
+        #[clap(long, long_help = "root_server endpoint")]
+        rss_endpoint: String,
+
         #[clap(long, long_help = "Service endpoint for benchmark")]
         api_server_endpoint: String,
 
@@ -285,9 +288,10 @@ fn main() -> CmdResult {
         )?,
         Command::FormatNss { ebs_dev } => nss_server::format_nss(ebs_dev)?,
         Command::BenchServer {
+            rss_endpoint,
             api_server_endpoint,
             bench_client_num,
-        } => bench_server::bootstrap(api_server_endpoint, bench_client_num)?,
+        } => bench_server::bootstrap(rss_endpoint, api_server_endpoint, bench_client_num)?,
         Command::BenchClient => bench_client::bootstrap()?,
         Command::Tools(tool_kind) => match tool_kind {
             ToolKind::GenUuids { num, file } => {

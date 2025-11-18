@@ -534,7 +534,7 @@ export class FractalbitsVpcStack extends cdk.Stack {
     if (props.benchType === "external") {
       instanceBootstrapOptions.push({
         id: "bench_server",
-        bootstrapOptions: `bench_server --api_server_endpoint=${nlb.loadBalancerDnsName} --bench_client_num=${props.numBenchClients} `,
+        bootstrapOptions: `bench_server --rss_endpoint=${rssEndpoint} --api_server_endpoint=${nlb.loadBalancerDnsName} --bench_client_num=${props.numBenchClients} `,
       });
     }
     if (props.browserIp) {
