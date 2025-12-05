@@ -22,8 +22,16 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
+    - name: Free disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+
     - name: Load Rust cache
       uses: Swatinem/rust-cache@v2
+      with:
+        cache-on-failure: false
 
     - name: Run repo init
       run: cargo xtask repo init
